@@ -1,6 +1,7 @@
-// Foundation surface (Milestone 1). The full public API is defined in
-// later milestones; for now the library exposes the typed errors and the
-// primitive helpers used by every other module.
+// Public surface up through Milestone 3. Higher-level entry points
+// (`createIdentifier`, `verifyKel`, DID resolution) are added by later
+// milestones; what's exported here is the foundation, CESR primitives, and
+// event lifecycle building blocks.
 
 export {
 	KeriError,
@@ -61,3 +62,46 @@ export type {
 	CesrSignature,
 	CesrDigest,
 } from './cesr/qualified';
+
+export { DID_KERI_PREFIX, aidFromSaid, formatDidKeri } from './did/did-keri';
+export type { Aid, DidKeri } from './did/did-keri';
+
+export type {
+	KeriEventType,
+	KeriEventBase,
+	InceptionEvent,
+	RotationEvent,
+	InteractionEvent,
+	KeriEvent,
+	SignedKeriEvent,
+} from './event/types';
+
+export type { KeriState } from './kel/state';
+
+export {
+	KERI_VERSION_STRING_LENGTH,
+	SAID_PLACEHOLDER,
+	computeEventSaid,
+	deriveNextKeyCommitment,
+	formatKeriVersionString,
+} from './event/digest';
+export { serializeEvent, signEvent } from './event/sign';
+export { verifyEventSignature } from './event/verify-signature';
+
+export { createInceptionEvent } from './event/inception';
+export type {
+	CreateInceptionInput,
+	CreateInceptionResult,
+} from './event/inception';
+
+export { createRotationEvent } from './event/rotation';
+export type {
+	CreateRotationInput,
+	CreateRotationResult,
+} from './event/rotation';
+
+export { createInteractionEvent } from './event/interaction';
+export type {
+	CreateInteractionInput,
+	CreateInteractionResult,
+} from './event/interaction';
