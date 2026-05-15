@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.log
+.logs
+TODO
+log/
+logs/
+temp/
+tmp/
+dist/
+dst/
+build/
+node_modules/
+.local/
