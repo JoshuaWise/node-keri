@@ -1,6 +1,10 @@
 import { encodePublicKeyEd25519 } from '../src/cesr/encode';
 import { keyPairFromSeed } from '../src/crypto/keypair';
-import { computeEventSaid, deriveNextKeyCommitment } from '../src/event/digest';
+import {
+	SAID_PLACEHOLDER,
+	computeEventSaid,
+	deriveNextKeyCommitment,
+} from '../src/event/digest';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
@@ -320,6 +324,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		const k3 = keyPairFromSeed(fillSeed(0xc3));
 		const partial = {
 			t: 'rot' as const,
+			d: SAID_PLACEHOLDER,
 			i: icp.state.aid,
 			s: '1',
 			p: icp.state.lastEventDigest,
@@ -332,7 +337,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 			ba: [] as const,
 			a: [] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d']);
+		const { said, versionString } = computeEventSaid(partial);
 		const rotEvent = {
 			v: versionString,
 			t: 'rot',
@@ -395,6 +400,8 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		// the digest check passes and the sequence check is what rejects it.
 		const partial = {
 			t: 'icp' as const,
+			d: SAID_PLACEHOLDER,
+			i: SAID_PLACEHOLDER,
 			s: '1',
 			kt: '1' as const,
 			k: [encodePublicKeyEd25519(k0.publicKey.raw)] as const,
@@ -405,7 +412,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 			c: [] as const,
 			a: [] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d', 'i']);
+		const { said, versionString } = computeEventSaid(partial);
 		const icpEvent = {
 			v: versionString,
 			t: 'icp',
@@ -447,6 +454,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		// next-key commitment check passes; only the signature is wrong.
 		const partial = {
 			t: 'rot' as const,
+			d: SAID_PLACEHOLDER,
 			i: icp.state.aid,
 			s: '1',
 			p: icp.state.lastEventDigest,
@@ -459,7 +467,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 			ba: [] as const,
 			a: [] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d']);
+		const { said, versionString } = computeEventSaid(partial);
 		const rotEvent = {
 			v: versionString,
 			t: 'rot',
@@ -493,12 +501,13 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		// off rot1's state but sign it with the now-retired k0.
 		const partial = {
 			t: 'ixn' as const,
+			d: SAID_PLACEHOLDER,
 			i: aid,
 			s: '3',
 			p: rot1.state.lastEventDigest,
 			a: [{ kind: 'stale' }] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d']);
+		const { said, versionString } = computeEventSaid(partial);
 		const ixnEvent = {
 			v: versionString,
 			t: 'ixn',
@@ -535,6 +544,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const partial = {
 			t: 'rot' as const,
+			d: SAID_PLACEHOLDER,
 			i: foreign.state.aid,
 			s: '1',
 			p: icp.state.lastEventDigest,
@@ -547,7 +557,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 			ba: [] as const,
 			a: [] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d']);
+		const { said, versionString } = computeEventSaid(partial);
 		const rotEvent = {
 			v: versionString,
 			t: 'rot',
@@ -589,12 +599,13 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const partial = {
 			t: 'ixn' as const,
+			d: SAID_PLACEHOLDER,
 			i: foreign.state.aid,
 			s: '1',
 			p: icp.state.lastEventDigest,
 			a: [] as const,
 		};
-		const { said, versionString } = computeEventSaid(partial, ['d']);
+		const { said, versionString } = computeEventSaid(partial);
 		const ixnEvent = {
 			v: versionString,
 			t: 'ixn',

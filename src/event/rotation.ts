@@ -13,7 +13,7 @@ import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { KeriKeyPair, KeriPublicKey, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
-import { computeEventSaid, deriveNextKeyCommitment } from './digest';
+import { SAID_PLACEHOLDER, computeEventSaid, deriveNextKeyCommitment } from './digest';
 import { signEvent } from './sign';
 import { RotationEvent, SignedKeriEvent } from './types';
 
@@ -59,8 +59,11 @@ export function createRotationEvent(
 		throw new InvalidArgumentError('sequence number overflow');
 	}
 
+	// `d` holds the placeholder while the SAID is computed; fields are listed
+	// in KERI canonical order.
 	const partial = {
 		t: 'rot' as const,
+		d: SAID_PLACEHOLDER,
 		i: input.state.aid,
 		s: nextSeq.toString(16),
 		p: input.state.lastEventDigest,
@@ -74,7 +77,7 @@ export function createRotationEvent(
 		a: [] as const,
 	};
 
-	const { said, versionString } = computeEventSaid(partial, ['d']);
+	const { said, versionString } = computeEventSaid(partial);
 
 	const event: RotationEvent = {
 		v: versionString,

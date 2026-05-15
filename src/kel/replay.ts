@@ -23,7 +23,11 @@
 import { decodePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest, CesrPublicKey, CesrSignature } from '../cesr/qualified';
 import { publicKeyFromRaw } from '../crypto/keypair';
-import { computeEventSaid, deriveNextKeyCommitment } from '../event/digest';
+import {
+	SAID_PLACEHOLDER,
+	computeEventSaid,
+	deriveNextKeyCommitment,
+} from '../event/digest';
 import { SignedKeriEvent } from '../event/types';
 import { verifyEventSignature } from '../event/verify-signature';
 import { Aid, formatDidKeri } from '../did/did-keri';
@@ -147,21 +151,20 @@ function applyInception(
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid(
-			{
-				t: 'icp',
-				s: ie.s,
-				kt: ie.kt,
-				k: ie.k,
-				nt: ie.nt,
-				n: ie.n,
-				bt: ie.bt,
-				b: ie.b,
-				c: ie.c,
-				a: ie.a,
-			},
-			['d', 'i']
-		);
+		const computed = computeEventSaid({
+			t: 'icp',
+			d: SAID_PLACEHOLDER,
+			i: SAID_PLACEHOLDER,
+			s: ie.s,
+			kt: ie.kt,
+			k: ie.k,
+			nt: ie.nt,
+			n: ie.n,
+			bt: ie.bt,
+			b: ie.b,
+			c: ie.c,
+			a: ie.a,
+		});
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {
@@ -228,23 +231,21 @@ function applyRotation(
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid(
-			{
-				t: 'rot',
-				i: re.i,
-				s: re.s,
-				p: re.p,
-				kt: re.kt,
-				k: re.k,
-				nt: re.nt,
-				n: re.n,
-				bt: re.bt,
-				br: re.br,
-				ba: re.ba,
-				a: re.a,
-			},
-			['d']
-		);
+		const computed = computeEventSaid({
+			t: 'rot',
+			d: SAID_PLACEHOLDER,
+			i: re.i,
+			s: re.s,
+			p: re.p,
+			kt: re.kt,
+			k: re.k,
+			nt: re.nt,
+			n: re.n,
+			bt: re.bt,
+			br: re.br,
+			ba: re.ba,
+			a: re.a,
+		});
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {
@@ -314,10 +315,14 @@ function applyInteraction(
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid(
-			{ t: 'ixn', i: xe.i, s: xe.s, p: xe.p, a: xe.a },
-			['d']
-		);
+		const computed = computeEventSaid({
+			t: 'ixn',
+			d: SAID_PLACEHOLDER,
+			i: xe.i,
+			s: xe.s,
+			p: xe.p,
+			a: xe.a,
+		});
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {

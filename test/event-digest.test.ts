@@ -7,6 +7,7 @@ import {
 	deriveNextKeyCommitment,
 	formatKeriVersionString,
 } from '../src/event/digest';
+import { toCanonicalEvent } from '../src/event/field-order';
 import { decodeDigestSha256 } from '../src/cesr/decode';
 import { sha256 } from '../src/crypto/hash';
 import { encodePublicKeyEd25519 } from '../src/cesr/encode';
@@ -53,15 +54,15 @@ describe('SAID_PLACEHOLDER', () => {
 
 describe('computeEventSaid', () => {
 	test('produces a SAID whose embedded version-string size matches the bytes', () => {
-		const partial = {
+		// SAID-bearing fields are passed already holding the placeholder.
+		const fields = {
 			t: 'icp' as const,
+			d: SAID_PLACEHOLDER,
+			i: SAID_PLACEHOLDER,
 			s: '0',
 			kt: '1',
 		};
-		const { said, versionString, digestedBytes } = computeEventSaid(
-			partial,
-			['d', 'i']
-		);
+		const { said, versionString, digestedBytes } = computeEventSaid(fields);
 
 		// The size encoded in v must equal the byte length of the digested bytes.
 		const sizeHex = versionString.slice(
@@ -76,68 +77,83 @@ describe('computeEventSaid', () => {
 	});
 
 	test('is deterministic for equal inputs', () => {
-		const partial = {
+		const fields = {
 			t: 'icp' as const,
+			d: SAID_PLACEHOLDER,
+			i: SAID_PLACEHOLDER,
 			s: '0',
 			kt: '1',
-			extra: { z: 1, a: 2 },
 		};
-		const a = computeEventSaid(partial, ['d', 'i']);
-		const b = computeEventSaid(partial, ['d', 'i']);
+		const a = computeEventSaid(fields);
+		const b = computeEventSaid(fields);
 		expect(a.said).toBe(b.said);
 		expect(a.versionString).toBe(b.versionString);
 		expect(Array.from(a.digestedBytes)).toEqual(Array.from(b.digestedBytes));
 	});
 
+	test('serializes fields in canonical order regardless of input order', () => {
+		// Same fields, scrambled construction order, must yield the same SAID.
+		const ordered = computeEventSaid({
+			t: 'ixn' as const,
+			d: SAID_PLACEHOLDER,
+			i: 'I' + 'A'.repeat(43),
+			s: '1',
+			p: 'E' + 'B'.repeat(43),
+			a: [],
+		});
+		const scrambled = computeEventSaid({
+			a: [],
+			p: 'E' + 'B'.repeat(43),
+			s: '1',
+			i: 'I' + 'A'.repeat(43),
+			d: SAID_PLACEHOLDER,
+			t: 'ixn' as const,
+		});
+		expect(scrambled.said).toBe(ordered.said);
+		expect(Array.from(scrambled.digestedBytes)).toEqual(
+			Array.from(ordered.digestedBytes)
+		);
+	});
+
 	test('digested bytes contain placeholder, not the SAID itself', () => {
-		const partial = { t: 'ixn' as const, s: '1' };
-		const { said, digestedBytes } = computeEventSaid(partial, ['d']);
+		const fields = { t: 'ixn' as const, d: SAID_PLACEHOLDER, s: '1' };
+		const { said, digestedBytes } = computeEventSaid(fields);
 		const json = utf8Decode(digestedBytes);
 		expect(json).toContain('"d":"' + SAID_PLACEHOLDER + '"');
 		expect(json).not.toContain(said);
 	});
 
-	test('rejects empty saidFields', () => {
-		expect(() => computeEventSaid({ t: 'ixn' }, [])).toThrow(
+	test('rejects an event of unknown type', () => {
+		expect(() => computeEventSaid({ t: 'xyz' })).toThrow(
 			InvalidArgumentError
 		);
-	});
-
-	test('rejects partial event containing v or a SAID field', () => {
-		expect(() =>
-			computeEventSaid({ v: 'KERI10JSON000000_' }, ['d'])
-		).toThrow(InvalidArgumentError);
-		expect(() =>
-			computeEventSaid({ d: SAID_PLACEHOLDER }, ['d'])
-		).toThrow(InvalidArgumentError);
-		expect(() =>
-			computeEventSaid({ t: 'icp', i: 'placeholder' }, ['d', 'i'])
-		).toThrow(InvalidArgumentError);
-	});
-
-	test('rejects "v" listed as a SAID field', () => {
-		expect(() => computeEventSaid({ t: 'icp' }, ['v'])).toThrow(
+		expect(() => computeEventSaid({ s: '0' })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('different inputs produce different SAIDs', () => {
-		const a = computeEventSaid({ t: 'ixn', s: '1' }, ['d']);
-		const b = computeEventSaid({ t: 'ixn', s: '2' }, ['d']);
+		const a = computeEventSaid({ t: 'ixn', d: SAID_PLACEHOLDER, s: '1' });
+		const b = computeEventSaid({ t: 'ixn', d: SAID_PLACEHOLDER, s: '2' });
 		expect(a.said).not.toBe(b.said);
 	});
 
-	test('digested bytes round-trip through canonicalizeJson', () => {
-		// Verifying that the function emits exactly canonicalizeJson output:
-		// reconstructing the same object and canonicalizing should reproduce
-		// the same bytes the SAID was computed over.
-		const partial = { t: 'ixn' as const, i: 'I' + 'A'.repeat(43), s: '1' };
-		const { versionString, digestedBytes } = computeEventSaid(partial, ['d']);
-		const reconstructed = canonicalizeJson({
-			...partial,
+	test('digested bytes round-trip through the canonical serialization', () => {
+		// Verifying that the function emits exactly canonicalizeJson output
+		// over the canonically-ordered event: reconstructing the same event
+		// should reproduce the bytes the SAID was computed over.
+		const fields = {
+			t: 'ixn' as const,
 			d: SAID_PLACEHOLDER,
-			v: versionString,
-		});
+			i: 'I' + 'A'.repeat(43),
+			s: '1',
+			p: 'E' + 'B'.repeat(43),
+			a: [],
+		};
+		const { versionString, digestedBytes } = computeEventSaid(fields);
+		const reconstructed = canonicalizeJson(
+			toCanonicalEvent({ ...fields, v: versionString })
+		);
 		expect(Array.from(reconstructed)).toEqual(Array.from(digestedBytes));
 	});
 });

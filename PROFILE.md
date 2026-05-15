@@ -61,11 +61,19 @@ Each signed event carries **exactly one** Ed25519 signature. Zero or multiple si
 
 Events are serialized for digesting and signing with a single deterministic canonicalization:
 
-- Object keys sorted by code-unit (UTF-16) order.
+- Object keys emitted in the object's own property (insertion) order, never sorted.
 - No insignificant whitespace.
 - UTF-8 byte output.
 - Array order preserved.
 - `NaN`, `Infinity`, `-0`, `undefined`, functions, and symbols are rejected.
+
+Event top-level fields follow KERI's fixed, type-specific **canonical field order** — not alphabetical order. Every event is reordered into that canonical order (`toCanonicalEvent`) before serialization, so the digested and signed bytes never depend on the order in which the event object was constructed in code or parsed from JSON:
+
+| Event | Canonical field order              |
+| ----- | ---------------------------------- |
+| `icp` | `v t d i s kt k nt n bt b c a`     |
+| `rot` | `v t d i s p kt k nt n bt br ba a` |
+| `ixn` | `v t d i s p a`                    |
 
 The event digest (`d`) is a SHA-256 self-addressing identifier (SAID) computed over the canonical event with the digest field(s) replaced by a fixed-length placeholder. For inception, the AID _is_ the SAID — `d` and `i` are identical.
 

@@ -11,11 +11,18 @@ import { encodeSignatureEd25519 } from '../cesr/encode';
 import { sign } from '../crypto/ed25519';
 import { KeriPrivateKey } from '../crypto/keypair';
 import { canonicalizeJson } from './canonical-json';
+import { toCanonicalEvent } from './field-order';
 import { KeriEvent, SignedKeriEvent } from './types';
 
-/** Canonical bytes of `event`, suitable for digesting or signing. */
+/**
+ * Canonical bytes of `event`, suitable for digesting or signing.
+ *
+ * The event's fields are reordered into KERI canonical field order first, so
+ * the bytes are independent of the order in which `event` was constructed or
+ * parsed — a signer and a verifier reach the same serialization either way.
+ */
 export function serializeEvent(event: KeriEvent): Uint8Array {
-	return canonicalizeJson(event);
+	return canonicalizeJson(toCanonicalEvent(event));
 }
 
 /**

@@ -13,7 +13,7 @@ import { KeriKeyPair, assertPrivateKey, assertPublicKey } from '../crypto/keypai
 import { KeriState } from '../kel/state';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
-import { computeEventSaid } from './digest';
+import { SAID_PLACEHOLDER, computeEventSaid } from './digest';
 import { signEvent } from './sign';
 import { InteractionEvent, SignedKeriEvent } from './types';
 
@@ -75,15 +75,18 @@ export function createInteractionEvent(
 		throw new InvalidArgumentError('sequence number overflow');
 	}
 
+	// `d` holds the placeholder while the SAID is computed; fields are listed
+	// in KERI canonical order.
 	const partial = {
 		t: 'ixn' as const,
+		d: SAID_PLACEHOLDER,
 		i: input.state.aid,
 		s: nextSeq.toString(16),
 		p: input.state.lastEventDigest,
 		a: anchors,
 	};
 
-	const { said, versionString } = computeEventSaid(partial, ['d']);
+	const { said, versionString } = computeEventSaid(partial);
 
 	const event: InteractionEvent = {
 		v: versionString,

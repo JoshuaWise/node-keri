@@ -29,10 +29,11 @@ describe('canonicalizeJson', () => {
 		expect(canon([null, true, 'x'])).toBe('[null,true,"x"]');
 	});
 
-	test('sorts object keys by codepoint order', () => {
-		expect(canon({ b: 1, a: 2, c: 3 })).toBe('{"a":2,"b":1,"c":3}');
-		// Insertion order should not affect output.
-		expect(canon({ c: 3, a: 2, b: 1 })).toBe('{"a":2,"b":1,"c":3}');
+	test('preserves object key insertion order', () => {
+		// Keys are emitted in property order, never sorted — KERI uses a
+		// fixed canonical field order, applied by toCanonicalEvent upstream.
+		expect(canon({ b: 1, a: 2, c: 3 })).toBe('{"b":1,"a":2,"c":3}');
+		expect(canon({ c: 3, a: 2, b: 1 })).toBe('{"c":3,"a":2,"b":1}');
 	});
 
 	test('produces no whitespace', () => {
@@ -41,9 +42,9 @@ describe('canonicalizeJson', () => {
 		expect(/\s/.test(out)).toBe(false);
 	});
 
-	test('is deterministic for equivalent inputs', () => {
+	test('is deterministic for equal inputs', () => {
 		const a = canonicalizeJson({ x: 1, y: [2, 3], z: { q: 'r', p: null } });
-		const b = canonicalizeJson({ z: { p: null, q: 'r' }, y: [2, 3], x: 1 });
+		const b = canonicalizeJson({ x: 1, y: [2, 3], z: { q: 'r', p: null } });
 		expect(Array.from(a)).toEqual(Array.from(b));
 	});
 

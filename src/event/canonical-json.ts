@@ -6,10 +6,12 @@ import { CanonicalJsonError } from '../profile/errors';
  * digesting and signing.
  *
  * Rules:
- *   - Object keys are sorted by JavaScript string comparison, which orders
- *     by UTF-16 code units. This is deterministic for any input that is
- *     itself deterministic; KERI event objects use ASCII keys, so this
- *     coincides with bytewise UTF-8 order in practice.
+ *   - Object keys are emitted in the object's own property order (insertion
+ *     order for string keys), never sorted. KERI serializes event fields in a
+ *     fixed canonical order rather than alphabetically, so a caller that needs
+ *     a canonically-ordered event must build it that way — see
+ *     `toCanonicalEvent` in `field-order.ts`. Values nested inside an event
+ *     (interaction anchors) are likewise emitted in insertion order.
  *   - No insignificant whitespace is emitted.
  *   - Numbers must be finite. `NaN`, `Infinity`, `-Infinity`, and `-0`
  *     are rejected because their JSON representations are either invalid
@@ -72,7 +74,7 @@ function canonicalize(value: unknown): string {
 			);
 		}
 		const obj = value as Record<string, unknown>;
-		const keys = Object.keys(obj).sort();
+		const keys = Object.keys(obj);
 		const parts: string[] = [];
 		for (const k of keys) {
 			const v = obj[k];

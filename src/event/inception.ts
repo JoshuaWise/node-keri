@@ -44,10 +44,13 @@ export function createInceptionEvent(
 	);
 	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey);
 
-	// `d` and `i` are the SAID-bearing fields for inception and are filled
-	// in by computeEventSaid; everything else is final at this point.
+	// `d` and `i` are the SAID-bearing fields for inception: they hold the
+	// fixed-length placeholder while the SAID is computed, then take the SAID
+	// itself in the final event. Fields are listed in KERI canonical order.
 	const partial = {
 		t: 'icp' as const,
+		d: SAID_PLACEHOLDER,
+		i: SAID_PLACEHOLDER,
 		s: '0',
 		kt: '1' as const,
 		k: [currentKeyQb64] as const,
@@ -59,7 +62,7 @@ export function createInceptionEvent(
 		a: [] as const,
 	};
 
-	const { said, versionString } = computeEventSaid(partial, ['d', 'i']);
+	const { said, versionString } = computeEventSaid(partial);
 	const aid = aidFromSaid(said);
 
 	const event: InceptionEvent = {

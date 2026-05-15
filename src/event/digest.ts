@@ -27,6 +27,7 @@ import { sha256 } from '../crypto/hash';
 import { KeriPublicKey, assertPublicKey } from '../crypto/keypair';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
+import { toCanonicalEvent } from './field-order';
 
 /** Length of the qb64 form of a SHA-256 digest under code `I` (44 chars). */
 const SAID_LENGTH = CESR_DIGEST_SHA256.fs;
@@ -85,50 +86,33 @@ export interface SaidComputation {
 }
 
 /**
- * Compute the SAID for `partialEvent`, a plain object representing the event
- * with `v` and the SAID-bearing fields *omitted* (they are filled in by this
- * function). The caller passes the names of the SAID-bearing fields:
- *   - `['d']` for rotation and interaction events
- *   - `['d', 'i']` for inception (the AID is itself the SAID)
+ * Compute the SAID for an event from its `fields`.
+ *
+ * `fields` carries the event body — `t`, the SAID-bearing fields already
+ * present as `SAID_PLACEHOLDER` (`d`, plus `i` for inception, whose AID *is*
+ * the SAID), and the remaining fields — in any order; `toCanonicalEvent`
+ * reorders it into KERI canonical field order before serialization. `v` is
+ * omitted by the caller and filled in here.
+ *
+ * The two-pass version-string sizing is unchanged: both passes differ only in
+ * the value of `v`, which is a fixed-length string, so the byte size is stable
+ * across them.
  */
 export function computeEventSaid(
-	partialEvent: Readonly<Record<string, unknown>>,
-	saidFields: readonly string[]
+	fields: Readonly<Record<string, unknown>>
 ): SaidComputation {
-	if (saidFields.length === 0) {
-		throw new InvalidArgumentError('saidFields must be non-empty');
-	}
-	for (const f of saidFields) {
-		if (f === 'v') {
-			throw new InvalidArgumentError(
-				'`v` is filled in automatically and cannot be a SAID field'
-			);
-		}
-		if (Object.prototype.hasOwnProperty.call(partialEvent, f)) {
-			throw new InvalidArgumentError(
-				`partial event must not contain SAID field '${f}'`
-			);
-		}
-	}
-	if (Object.prototype.hasOwnProperty.call(partialEvent, 'v')) {
-		throw new InvalidArgumentError(
-			'partial event must not contain a `v` field'
-		);
-	}
-
-	const placeholders: Record<string, string> = {};
-	for (const f of saidFields) placeholders[f] = SAID_PLACEHOLDER;
-
-	// Pass 1 — placeholder size, placeholder SAIDs. We only need the byte
-	// length here; the bytes themselves are discarded.
-	const draft = { ...partialEvent, ...placeholders, v: PLACEHOLDER_VERSION_STRING };
-	const draftBytes = canonicalizeJson(draft);
+	// Pass 1 — placeholder version string. We only need the byte length here;
+	// the bytes themselves are discarded.
+	const draftBytes = canonicalizeJson(
+		toCanonicalEvent({ ...fields, v: PLACEHOLDER_VERSION_STRING })
+	);
 	const versionString = formatKeriVersionString(draftBytes.length);
 
-	// Pass 2 — real size in v, still placeholder SAIDs. These are the bytes
-	// that the SAID is computed over.
-	const sized = { ...partialEvent, ...placeholders, v: versionString };
-	const digestedBytes = canonicalizeJson(sized);
+	// Pass 2 — real size in `v`, still placeholder SAIDs. These are the bytes
+	// the SAID is computed over.
+	const digestedBytes = canonicalizeJson(
+		toCanonicalEvent({ ...fields, v: versionString })
+	);
 	if (digestedBytes.length !== draftBytes.length) {
 		// Both passes use fixed-width substitutions, so the byte size cannot
 		// change between them. If it did, our placeholder accounting is wrong

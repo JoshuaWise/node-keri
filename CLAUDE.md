@@ -317,6 +317,7 @@ src/
   event/
     types.ts
     canonical-json.ts
+    field-order.ts
     inception.ts
     rotation.ts
     interaction.ts
@@ -456,7 +457,7 @@ function canonicalizeJson(value: unknown): Uint8Array;
 Rules:
 
 ```txt
-objects sorted by UTF-16 or bytewise key order, explicitly documented
+objects emit keys in property (insertion) order, never sorted
 no insignificant whitespace
 stable number policy
 reject NaN, Infinity, -0
@@ -464,6 +465,14 @@ reject undefined, functions, symbols
 UTF-8 output
 arrays preserve order
 ```
+
+Events are **not** serialized with sorted keys. KERI orders an event's
+top-level fields in a fixed, type-specific canonical order — `icp`, `rot`,
+and `ixn` each have their own field sequence. `toCanonicalEvent`
+(`event/field-order.ts`) rebuilds an event with its fields in that order, and
+every digest/signature path serializes through it, so the bytes never depend
+on how the event object was constructed or parsed. `canonicalizeJson` itself
+preserves the property order it is handed.
 
 For KERI compatibility, this must match the selected KERI JSON serialization rules as closely as possible. If this diverges, digests diverge, and external verification breaks.
 
