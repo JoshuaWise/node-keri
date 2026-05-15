@@ -140,6 +140,25 @@ describe('tamper — single-field mutation of each event', () => {
 		expectRejected(aid, withReplaced(i, patchEvent(events[i], { s: 'ff' })).events);
 	});
 
+	test.each(indices)('event %d: mutated event type `t`', (i) => {
+		const { aid, events } = buildKel();
+		expectRejected(
+			aid,
+			withReplaced(i, patchEvent(events[i], { t: mutateChar(events[i].event.t) }))
+				.events
+		);
+	});
+
+	// `p` (previous-event digest) exists on every non-inception event.
+	test.each([1, 2, 3, 4])('event %d: mutated previous-event digest `p`', (i) => {
+		const { aid, events } = buildKel();
+		const event = events[i].event as { p: string };
+		expectRejected(
+			aid,
+			withReplaced(i, patchEvent(events[i], { p: mutateChar(event.p) })).events
+		);
+	});
+
 	test.each(indices)('event %d: mutated signature', (i) => {
 		const { aid, events } = buildKel();
 		const tampered = patchEvent(events[i], {});

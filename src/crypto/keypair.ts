@@ -113,8 +113,8 @@ export interface PublicKeyJwk {
 
 /**
  * Export a public key as a JWK — the portable, JSON-safe form a caller
- * shares for agent-to-agent verification. It is the same representation
- * embedded in a `did:keri` DID document's verification method.
+ * shares for signed verification. It is the same representation embedded
+ * in a `did:keri` DID document's verification method.
  */
 export function exportPublicKey(publicKey: KeriPublicKey): PublicKeyJwk {
 	assertPublicKey(publicKey);

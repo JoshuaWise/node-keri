@@ -2,7 +2,7 @@
  * `verifySignatureWithDid` — verify that a payload was signed by the key
  * currently authoritative for a `did:keri` identifier.
  *
- * This is the agent-to-agent verification primitive. The caller already has
+ * This is the signed verification primitive. The caller already has
  * (or just received) a sender DID, the sender's KEL, a payload, and a
  * detached signature. This function answers a single boolean question:
  * "does this signature verify under the latest key the KEL establishes for

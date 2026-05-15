@@ -339,7 +339,7 @@ src/
   api/
     create-identifier.ts
     rotate-identifier.ts
-    interact.ts
+    interact-identifier.ts
     verify-kel.ts
 
   test-vectors/

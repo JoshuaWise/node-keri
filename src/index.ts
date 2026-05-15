@@ -3,8 +3,8 @@
 // Three layers are exported: the foundation (bytes, crypto, CESR, canonical
 // JSON), the event lifecycle building blocks plus the KEL replay verifier,
 // and the high-level identifier API — `createIdentifier`, `rotateIdentifier`,
-// `createInteractionEvent`, `verifyKel`, the `did:keri` surface, and
-// `verifySignatureWithDid` for agent-to-agent message verification.
+// `interactIdentifier`, `verifyKel`, the `did:keri` surface, and
+// `verifySignatureWithDid` for signed message verification.
 //
 // See PROFILE.md for the conformance boundary and SECURITY.md for the trust
 // model and security invariants this surface enforces.
@@ -121,6 +121,12 @@ export type {
 	RotateIdentifierInput,
 	RotateIdentifierResult,
 } from './api/rotate-identifier';
+
+export { interactIdentifier } from './api/interact-identifier';
+export type {
+	InteractIdentifierInput,
+	InteractIdentifierResult,
+} from './api/interact-identifier';
 
 export { verifyKel } from './api/verify-kel';
 export type { VerifyKelInput, VerifyKelResult } from './api/verify-kel';
