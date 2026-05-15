@@ -1,7 +1,7 @@
-// Public surface up through Milestone 3. Higher-level entry points
-// (`createIdentifier`, `verifyKel`, DID resolution) are added by later
-// milestones; what's exported here is the foundation, CESR primitives, and
-// event lifecycle building blocks.
+// Public surface up through Milestone 4. Higher-level entry points
+// (`createIdentifier`, DID resolution) are added by later milestones; what's
+// exported here is the foundation, CESR primitives, the event lifecycle
+// building blocks, and the KEL replay verifier.
 
 export {
 	KeriError,
@@ -105,3 +105,6 @@ export type {
 	CreateInteractionInput,
 	CreateInteractionResult,
 } from './event/interaction';
+
+export { verifyKel } from './api/verify-kel';
+export type { VerifyKelInput, VerifyKelResult } from './api/verify-kel';

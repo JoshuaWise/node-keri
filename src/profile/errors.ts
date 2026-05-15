@@ -32,6 +32,7 @@ export class CanonicalJsonError extends KeriError {}
  * code can already reference it without circular dependencies.
  */
 export type KeriVerificationError =
+	| { code: 'EMPTY_KEL' }
 	| { code: 'INVALID_DID'; message: string }
 	| { code: 'UNSUPPORTED_FEATURE'; feature: string }
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
