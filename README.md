@@ -48,8 +48,9 @@ const currentPublicJwk = exportPublicKey(id.nextKeyPair.publicKey);
 const currentPublicRaw = exportPublicKeyRaw(id.nextKeyPair.publicKey);
 
 // Persist the key event log; keep the private keypairs in your own secure
-// store — the library never serializes private keys.
-const kel = [id.inceptionEvent, rotation.rotationEvent];
+// store — the library never serializes private keys. Each event is a CESR
+// stream frame, so the KEL is just its events concatenated, in order.
+const kel = id.inceptionEvent + rotation.rotationEvent;
 ```
 
 ### Sign a message
@@ -73,7 +74,7 @@ import { verifySignatureWithDid } from 'node-keri';
 // `did`, `kel`, `payload`, and `signature` are supplied by the signer.
 const ok = verifySignatureWithDid({
 	did: id.did,
-	kel: [id.inceptionEvent], // the signer's full key event log
+	kel: id.inceptionEvent, // the signer's full key event log (a CESR stream)
 	payload,
 	signature,
 });
@@ -83,6 +84,41 @@ const ok = verifySignatureWithDid({
 `verifySignatureWithDid` replays the KEL, extracts the latest authoritative
 key, and checks the signature in one step. It returns `false` for any
 data-level failure — a malformed DID, a non-verifying KEL, or a bad signature.
+
+## Wire format
+
+Events and KELs are exchanged as **CESR streams** — the form the reference
+KERI implementation (keripy) uses on the wire. Each event is one frame: the
+event's canonical JSON, followed immediately by an attachment group — a `-A`
+counter naming how many controller signatures follow, then the indexed
+signatures themselves (a "Siger", CESR code `A`):
+
+```text
+{"v":"KERI10JSON0000fb_","t":"icp",...}-AABAA<86 base64 chars>
+└──────────── event JSON (size from `v`) ──────────┘└┬─┘└────┬────┘
+                                  counter (-A, count 1) ┘     │
+                                       one indexed signature ─┘
+```
+
+A KEL is simply the frames of its events **concatenated, in order** — there
+are no separators. So `createIdentifier`, `rotateIdentifier`, and
+`interactIdentifier` each return their event as a frame string, and a KEL is
+built with `+`:
+
+```ts
+const kel = id.inceptionEvent + rotation.rotationEvent + interaction.interactionEvent;
+```
+
+`verifyKel`, `resolveDid`, and `verifySignatureWithDid` all take the KEL in
+this string form. To inspect an event's structured shape, parse a frame with
+`parseSignedEvent` (or a whole stream with `parseKel`) into a `SignedKeriEvent`;
+`encodeEventFrame` is the inverse. The indexed-signature primitives —
+`encodeIndexedSignatureEd25519`, `decodeIndexedSignatureEd25519`,
+`signatureIndex` — are exported for low-level use.
+
+Detached signatures over arbitrary payloads (as in `verifySignatureWithDid`)
+are *not* indexed: they use the non-indexed `0B` "Cigar" form produced by
+`encodeSignatureEd25519`.
 
 ## API reference
 
@@ -110,12 +146,14 @@ function createIdentifier(input?: {
 	aid: Aid;
 	currentKeyPair: KeriKeyPair;
 	nextKeyPair: KeriKeyPair;
-	inceptionEvent: SignedKeriEvent;
+	inceptionEvent: string;
 	state: KeriState;
 };
 ```
 
 Mint a new transferable `did:keri` identifier. Generates fresh current and next (pre-rotation) keypairs when they are not supplied, builds and signs the inception event, and returns the DID, both keypairs, the signed event, and the replay-derived sequence-0 state. Throws `InvalidArgumentError` if the two keypairs are the same key. **The caller must store the returned key material.**
+
+`inceptionEvent` is the signed event in its **CESR stream** wire form — see [Wire format](#wire-format). A KEL is built by concatenating these event strings in order.
 
 `digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to SHA-256 (`I`). See [Digest algorithms](#digest-algorithms).
 
@@ -128,7 +166,7 @@ function rotateIdentifier(input: {
 	nextKeyPair: KeriKeyPair;
 	digestCode?: string;
 }): {
-	rotationEvent: SignedKeriEvent;
+	rotationEvent: string;
 	state: KeriState;
 };
 ```
@@ -146,7 +184,7 @@ function interactIdentifier(input: {
 	data?: readonly unknown[];
 	digestCode?: string;
 }): {
-	interactionEvent: SignedKeriEvent;
+	interactionEvent: string;
 	state: KeriState;
 };
 ```
@@ -158,24 +196,24 @@ Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKe
 ```ts
 function verifyKel(input: {
 	aid: Aid;
-	events: readonly SignedKeriEvent[];
+	kel: string;
 }): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
 ```
 
-Replay a key event log from inception and reconstruct the latest authoritative state. Every event's structure, self-addressing digest, version string, sequence number, previous-event link, rotation commitment, and signature is recomputed and checked; the inception event must derive exactly `aid`. **The returned `state` is the only `KeriState` a caller may treat as verified.** Never throws for a malformed or hostile KEL — that is returned as `{ ok: false }`.
+Replay a key event log — a CESR stream — from inception and reconstruct the latest authoritative state. The stream is first parsed into its events (a framing defect is reported as `MALFORMED_STREAM`); then every event's structure, self-addressing digest, version string, sequence number, previous-event link, rotation commitment, and signature is recomputed and checked, and the inception event must derive exactly `aid`. **The returned `state` is the only `KeriState` a caller may treat as verified.** Never throws for a malformed or hostile KEL — that is returned as `{ ok: false }`.
 
 #### `verifySignatureWithDid`
 
 ```ts
 function verifySignatureWithDid(input: {
 	did: DidKeri;
-	kel: readonly SignedKeriEvent[];
+	kel: string;
 	payload: Uint8Array;
 	signature: CesrSignature;
 }): boolean;
 ```
 
-The message verification primitive. Verifies that `kel` is valid and belongs to `did`, extracts the latest authoritative key, and checks `signature` over `payload` against it — all in one call. Returns `false` for every data-level failure: a malformed DID, a non-verifying KEL, a KEL for a different identifier, or a malformed or mismatched signature.
+The message verification primitive. Verifies that `kel` (a CESR stream) is valid and belongs to `did`, extracts the latest authoritative key, and checks `signature` over `payload` against it — all in one call. Returns `false` for every data-level failure: a malformed DID, a non-verifying KEL, a KEL for a different identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads.
 
 ### DID surface
 
@@ -184,7 +222,7 @@ The message verification primitive. Verifies that `kel` is valid and belongs to 
 ```ts
 function resolveDid(input: {
 	did: DidKeri;
-	kel: readonly SignedKeriEvent[];
+	kel: string;
 	options?: { includeKel?: boolean };
 }):
 	| { ok: true; didDocument: DidDocument; metadata: DidResolutionMetadata }
@@ -322,7 +360,8 @@ type KeriVerificationError =
 	| { code: 'INVALID_SIGNATURE' }
 	| { code: 'INVALID_NEXT_KEY_COMMITMENT' }
 	| { code: 'INVALID_CESR_CODE'; value: string }
-	| { code: 'NON_CANONICAL_EVENT' };
+	| { code: 'NON_CANONICAL_EVENT' }
+	| { code: 'MALFORMED_STREAM'; message: string };
 ```
 
 `verifySignatureWithDid` collapses every data-level failure to a plain `false`.
@@ -332,10 +371,10 @@ type KeriVerificationError =
 Alongside the functions above, the package exports the full type surface:
 
 - **Keys** — `KeriKeyPair`, `KeriPublicKey`, `KeriPrivateKey`, `PublicKeyJwk`.
-- **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrDigest` (compile-time branded strings).
+- **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrIndexedSignature`, `CesrDigest` (compile-time branded strings).
 - **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
-- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent`.
+- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
 - **State** — `KeriState`, the replay-derived, trusted summary of an identifier.
 - **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`, `DidResolutionMetadata`.
 - **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyKelResult`, and so on).

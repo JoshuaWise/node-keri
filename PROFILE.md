@@ -38,7 +38,8 @@ Every capability below is **outside the profile**. An event that uses one is rej
 | Delegation                       | Excluded |
 | TEL / credential registries      | Excluded |
 | Configuration traits             | Excluded |
-| Binary CESR, counters, groups    | Excluded |
+| Binary CESR                      | Excluded |
+| CESR counters / groups           | Excluded except the `-A` controller-signature counter (see [Wire format](#wire-format)) |
 | CBOR / MessagePack serialization | Excluded |
 | Non-Ed25519 keys                 | Excluded |
 | Non-transferable AIDs            | Excluded |
@@ -56,7 +57,7 @@ Three event types are supported: `icp`, `rot`, `ixn`. Excluded-feature fields ar
 - Inception `a` (seals) — must be empty. To anchor data, use an interaction event, whose `a` is an unconstrained JSON array.
 - An event carrying **any field not named by its type** is rejected.
 
-Each signed event carries **exactly one** Ed25519 signature. Zero or multiple signatures are rejected.
+Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 
 ## Canonical JSON
 
@@ -82,16 +83,35 @@ The event digest (`d`) is a self-addressing identifier (SAID) computed over the 
 
 Qualified text primitives — keys and signatures are Ed25519-only; digests are algorithm-agile:
 
-| Primitive          | Code         | Qualified length |
-| ------------------ | ------------ | ---------------- |
-| Ed25519 public key | `D`          | 44 chars         |
-| Ed25519 signature  | `0B`         | 88 chars         |
-| 256-bit digest     | one char     | 44 chars         |
-| 512-bit digest     | `0`-prefixed | 88 chars         |
+| Primitive                 | Code         | Qualified length |
+| ------------------------- | ------------ | ---------------- |
+| Ed25519 public key        | `D`          | 44 chars         |
+| Ed25519 signature         | `0B`         | 88 chars         |
+| Ed25519 indexed signature | `A`          | 88 chars         |
+| 256-bit digest            | one char     | 44 chars         |
+| 512-bit digest            | `0`-prefixed | 88 chars         |
+
+The non-indexed signature (`0B`, a "Cigar") is used for detached signatures over arbitrary payloads. The indexed signature (`A`, a "Siger") carries the index of the signing key within the establishment event's key list, encoded in a 1-character "soft" field after the code — it is the form attached to events in the wire stream. In this single-key profile that index is always 0.
 
 Decoders enforce the derivation code, the fixed length, the base64url alphabet, and **pad-bit canonicality** (the leading pad bits must be zero, so no malleable alternate encoding decodes to the same bytes). Unknown codes, wrong lengths, and non-canonical encodings are rejected.
 
 A digest code is accepted only when an implementation is registered for it (see [Digest algorithms](#digest-algorithms)); a digest under an unregistered code is rejected with `INVALID_CESR_CODE`.
+
+## Wire format
+
+An event and its signature(s) are exchanged as a **CESR stream frame**, not as a JSON wrapper object:
+
+```text
+<event canonical JSON><-A counter><indexed signature ...>
+```
+
+- The event's canonical JSON comes first. Its version string `v` declares the event's exact byte length, so a reader always knows where the JSON ends.
+- The attachment group follows immediately: a `-A` "ControllerIdxSigs" counter (the code `-A` plus a 2-character base64 count) and then that many indexed signatures (`A`, 88 chars each).
+- A KEL is the frames of its events **concatenated in order**, with no separators or envelope.
+
+The profile accepts exactly one counter — `-A` — and exactly one signature under it. Any other counter (witness signatures, receipt couples, CESR version/genus groups) names an excluded feature and is rejected; a stream that is not well-framed is rejected with `MALFORMED_STREAM`. Binary CESR is not accepted — the stream is text (base64 / UTF-8 JSON) only.
+
+`SignedKeriEvent` is the in-memory shape of one event; the stream is its serialization. The library converts between them with `encodeEventFrame` / `parseSignedEvent` / `parseKel`, and every high-level function takes or returns the stream form.
 
 ## Digest algorithms
 

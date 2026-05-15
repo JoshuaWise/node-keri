@@ -121,7 +121,7 @@ function createIdentifier(input?: {
     aid: Aid;
     currentKeyPair: KeriKeyPair;
     nextKeyPair: KeriKeyPair;
-    inceptionEvent: SignedKeriEvent;
+    inceptionEvent: string; // CESR stream frame — see "Wire format" below
     state: KeriState;
 };
 ```
@@ -148,7 +148,7 @@ function rotateIdentifier(input: {
     currentPrivateKey: KeriPrivateKey;
     nextKeyPair: KeriKeyPair;
 }): {
-    rotationEvent: SignedKeriEvent;
+    rotationEvent: string; // CESR stream frame
     state: KeriState;
 };
 ```
@@ -174,7 +174,7 @@ function createInteractionEvent(input: {
     currentPrivateKey: KeriPrivateKey;
     data?: unknown;
 }): {
-    interactionEvent: SignedKeriEvent;
+    interactionEvent: string; // CESR stream frame
     state: KeriState;
 };
 ```
@@ -196,7 +196,7 @@ public metadata version
 ### KEL verification
 
 ```ts
-function verifyKel(input: { aid: Aid; events: SignedKeriEvent[] }):
+function verifyKel(input: { aid: Aid; kel: string }):
     | {
           ok: true;
           state: KeriState;
@@ -235,7 +235,7 @@ function parseDidKeri(did: string): ParsedDidKeri;
 
 function resolveDid(input: {
     did: DidKeri;
-    kel: SignedKeriEvent[];
+    kel: string;
     options?: {
         includeKel?: boolean;
     };
@@ -312,6 +312,7 @@ src/
     codes.ts
     encode.ts
     decode.ts
+    counter.ts
     qualified.ts
 
   event/
@@ -323,6 +324,7 @@ src/
     interaction.ts
     digest.ts
     sign.ts
+    stream.ts
     verify-signature.ts
 
   kel/
@@ -414,14 +416,38 @@ interface InteractionEvent extends KeriEventBase {
 }
 ```
 
-### Signed wrapper
+### Signed event (in-memory shape)
 
 ```ts
 interface SignedKeriEvent {
     event: KeriEvent;
-    signatures: [CesrSignature]; // MVP exactly one
+    signatures: [CesrIndexedSignature]; // MVP exactly one, at key index 0
 }
 ```
+
+`SignedKeriEvent` is the in-memory representation. On the wire an event is a
+**CESR stream frame** — its canonical JSON followed by a `-A` counter and the
+indexed signature(s). The high-level API (`createIdentifier`, `verifyKel`, …)
+takes and returns the stream form (`string`); `encodeEventFrame` /
+`parseSignedEvent` / `parseKel` convert. See "Wire format" below.
+
+---
+
+## 5b. Wire format
+
+A KEL is exchanged as a CESR stream, not a JSON `{ event, signatures }`
+wrapper. Each event frame is:
+
+```txt
+<event canonical JSON><-A counter><indexed signature>
+```
+
+The event's version string `v` declares its byte length, so frames are
+self-delimiting; a KEL is its frames concatenated in order, with no separators.
+Controller signatures are CESR *indexed* signatures ("Siger", code `A`) carrying
+a key index — always 0 in this single-key profile. Detached payload signatures
+(`verifySignatureWithDid`) stay non-indexed (`0B`, "Cigar"). A stream that is
+not well-framed is rejected by `verifyKel` with `MALFORMED_STREAM`.
 
 ---
 
@@ -496,8 +522,13 @@ You still need CESR text primitives, but only a narrow table.
 encodePublicKeyEd25519(raw32: Uint8Array): CesrPublicKey
 decodePublicKeyEd25519(qb64: string): Uint8Array
 
+// Non-indexed signature ("Cigar", 0B) — for detached payload signatures.
 encodeSignatureEd25519(raw64: Uint8Array): CesrSignature
 decodeSignatureEd25519(qb64: string): Uint8Array
+
+// Indexed signature ("Siger", A) — the form attached to KEL events.
+encodeIndexedSignatureEd25519(raw64: Uint8Array, index: number): CesrIndexedSignature
+decodeIndexedSignatureEd25519(qb64: string): { raw: Uint8Array; index: number }
 
 // Digests are algorithm-agile. SHA-256 has dedicated helpers; the generic
 // pair works for any registered digest code.
@@ -506,6 +537,10 @@ decodeDigestSha256(qb64: string): Uint8Array
 encodeDigest(code: string, raw: Uint8Array): CesrDigest
 decodeDigest(qb64: string): { raw: Uint8Array; code: string }
 ```
+
+The `-A` "ControllerIdxSigs" counter is also implemented (`src/cesr/counter.ts`)
+— it is the one CESR counter the profile needs, to frame an event's controller
+signatures in the wire stream.
 
 ### Digest algorithm registry
 
@@ -532,7 +567,7 @@ unknown derivation codes
 digest codes with no registered implementation
 digest widths other than 256-bit and 512-bit
 variable-length groups
-counters
+counters other than the `-A` controller-signature counter
 binary CESR
 attached receipts
 non-Ed25519 keys
@@ -657,7 +692,8 @@ type KeriVerificationError =
     | { code: 'INVALID_SIGNATURE' }
     | { code: 'INVALID_NEXT_KEY_COMMITMENT' }
     | { code: 'INVALID_CESR_CODE'; value: string }
-    | { code: 'NON_CANONICAL_EVENT' };
+    | { code: 'NON_CANONICAL_EVENT' }
+    | { code: 'MALFORMED_STREAM'; message: string };
 ```
 
 Prefer result objects for verification:
@@ -933,7 +969,7 @@ Where `verifySignatureWithDid` is useful for agent-to-agent communication:
 ```ts
 function verifySignatureWithDid(input: {
     did: DidKeri;
-    kel: SignedKeriEvent[];
+    kel: string; // CESR stream
     payload: Uint8Array;
     signature: CesrSignature;
 }): boolean;

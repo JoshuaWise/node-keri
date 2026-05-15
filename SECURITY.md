@@ -27,7 +27,7 @@ Inception and every rotation commit to the _digest_ of the next signing key, not
 
 ## Error policy
 
-Throwing is reserved for **programmer errors**: malformed arguments, a bad key object, an unsupported algorithm requested directly. Anything that can legitimately arrive from an untrusted source — a malformed DID, a tampered, reordered, truncated, or hostile KEL, a bad signature — is returned as a typed result (`{ ok: false, error }`) or, for `verifySignatureWithDid`, as `false`. `verifyKel` never throws on hostile input. A caller must therefore check the result discriminant rather than relying on exceptions.
+Throwing is reserved for **programmer errors**: malformed arguments, a bad key object, an unsupported algorithm requested directly. Anything that can legitimately arrive from an untrusted source — a malformed DID, a tampered, reordered, truncated, mis-framed, or hostile KEL, a bad signature — is returned as a typed result (`{ ok: false, error }`) or, for `verifySignatureWithDid`, as `false`. `verifyKel` never throws on hostile input: a KEL is supplied as a CESR stream, and even a stream that is not well-framed is reported as a `MALFORMED_STREAM` result rather than an exception. A caller must therefore check the result discriminant rather than relying on exceptions.
 
 ## Key handling
 
