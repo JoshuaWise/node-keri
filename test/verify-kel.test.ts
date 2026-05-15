@@ -9,6 +9,7 @@ import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
 import { signEvent } from '../src/event/sign';
+import { parseSignedEvent } from '../src/event/stream';
 import {
 	InceptionEvent,
 	InteractionEvent,
@@ -16,11 +17,23 @@ import {
 	SignedKeriEvent,
 } from '../src/event/types';
 import { aidFromSaid } from '../src/did/did-keri';
+import { KeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { verifyKel } from '../src/api/verify-kel';
+import { frameKel } from './kel-stream';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
+}
+
+/** Concatenate signed events into a single KEL CESR stream. */
+function kel(...signed: SignedKeriEvent[]): string {
+	return frameKel(signed);
+}
+
+/** A constructor result, with its event parsed back into a `SignedKeriEvent`. */
+function asSigned(result: { event: string; state: KeriState }) {
+	return { signedEvent: parseSignedEvent(result.event), state: result.state };
 }
 
 /** Build the canonical exercise KEL: icp, ixn, rot, ixn, rot (seq 0..4). */
@@ -30,30 +43,37 @@ function buildKel() {
 	const k2 = keyPairFromSeed(fillSeed(0xa2));
 	const k3 = keyPairFromSeed(fillSeed(0xa3));
 
-	const icp = createInceptionEvent({
-		currentKeyPair: k0,
-		nextPublicKey: k1.publicKey,
-	});
-	const ixn1 = createInteractionEvent({
-		state: icp.state,
-		currentKeyPair: k0,
-		data: [{ kind: 'announce' }],
-	});
-	const rot1 = createRotationEvent({
-		state: ixn1.state,
-		newCurrentKeyPair: k1,
-		nextPublicKey: k2.publicKey,
-	});
-	const ixn2 = createInteractionEvent({
-		state: rot1.state,
-		currentKeyPair: k1,
-		data: [{ kind: 'attest' }],
-	});
-	const rot2 = createRotationEvent({
-		state: ixn2.state,
-		newCurrentKeyPair: k2,
-		nextPublicKey: k3.publicKey,
-	});
+	const icp = asSigned(
+		createInceptionEvent({ currentKeyPair: k0, nextPublicKey: k1.publicKey })
+	);
+	const ixn1 = asSigned(
+		createInteractionEvent({
+			state: icp.state,
+			currentKeyPair: k0,
+			data: [{ kind: 'announce' }],
+		})
+	);
+	const rot1 = asSigned(
+		createRotationEvent({
+			state: ixn1.state,
+			newCurrentKeyPair: k1,
+			nextPublicKey: k2.publicKey,
+		})
+	);
+	const ixn2 = asSigned(
+		createInteractionEvent({
+			state: rot1.state,
+			currentKeyPair: k1,
+			data: [{ kind: 'attest' }],
+		})
+	);
+	const rot2 = asSigned(
+		createRotationEvent({
+			state: ixn2.state,
+			newCurrentKeyPair: k2,
+			nextPublicKey: k3.publicKey,
+		})
+	);
 
 	const events: SignedKeriEvent[] = [
 		icp.signedEvent,
@@ -62,7 +82,16 @@ function buildKel() {
 		ixn2.signedEvent,
 		rot2.signedEvent,
 	];
-	return { aid: icp.state.aid, events, icp, ixn1, rot1, ixn2, rot2, keys: { k0, k1, k2, k3 } };
+	return {
+		aid: icp.state.aid,
+		events,
+		icp,
+		ixn1,
+		rot1,
+		ixn2,
+		rot2,
+		keys: { k0, k1, k2, k3 },
+	};
 }
 
 /** Clone a signed event, patching fields of the inner event object. */
@@ -79,7 +108,7 @@ function patchEvent(
 describe('verifyKel — successful replay', () => {
 	test('verifies a valid 5-event KEL and reconstructs the latest state', () => {
 		const { aid, events, rot2, keys } = buildKel();
-		const result = verifyKel({ aid, events });
+		const result = verifyKel({ aid, kel: kel(...events) });
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -95,7 +124,7 @@ describe('verifyKel — successful replay', () => {
 
 	test('verifies an inception-only KEL', () => {
 		const { aid, icp } = buildKel();
-		const result = verifyKel({ aid, events: [icp.signedEvent] });
+		const result = verifyKel({ aid, kel: kel(icp.signedEvent) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.sequenceNumber).toBe(0);
@@ -104,32 +133,66 @@ describe('verifyKel — successful replay', () => {
 
 	test('is deterministic — repeated verification yields an identical state', () => {
 		const { aid, events } = buildKel();
-		const first = verifyKel({ aid, events });
-		const second = verifyKel({ aid, events });
+		const stream = kel(...events);
+		const first = verifyKel({ aid, kel: stream });
+		const second = verifyKel({ aid, kel: stream });
 		expect(first.ok && second.ok).toBe(true);
 		if (!first.ok || !second.ok) return;
 		expect(second.state).toEqual(first.state);
+	});
+
+	test('accepts a KEL straight from the wire-form constructors', () => {
+		// The high-level API returns each event already framed, so a KEL is
+		// just those wire-form strings concatenated — no helper needed.
+		const k0 = keyPairFromSeed(fillSeed(0x70));
+		const k1 = keyPairFromSeed(fillSeed(0x71));
+		const k2 = keyPairFromSeed(fillSeed(0x72));
+		const icp = createInceptionEvent({
+			currentKeyPair: k0,
+			nextPublicKey: k1.publicKey,
+		});
+		const rot = createRotationEvent({
+			state: icp.state,
+			newCurrentKeyPair: k1,
+			nextPublicKey: k2.publicKey,
+		});
+		const result = verifyKel({
+			aid: icp.state.aid,
+			kel: icp.event + rot.event,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.state.sequenceNumber).toBe(1);
 	});
 });
 
 describe('verifyKel — structural rejection', () => {
 	test('rejects an empty KEL', () => {
 		const { aid } = buildKel();
-		const result = verifyKel({ aid, events: [] });
+		const result = verifyKel({ aid, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({ code: 'EMPTY_KEL' });
 	});
 
-	test('rejects an event with a mis-declared version string', () => {
-		const { aid, events, icp } = buildKel();
-		const tampered = [...events];
-		// Content is untouched, so the SAID still matches; only `v` is wrong.
-		tampered[0] = patchEvent(icp.signedEvent, { v: 'KERI10JSON000000_' });
-		const result = verifyKel({ aid, events: tampered });
+	test('rejects a stream whose version string mis-declares the event size', () => {
+		const { aid, events } = buildKel();
+		const frame = kel(events[0]!);
+		// Overwrite the 6 hex size digits of the version string with `000000`:
+		// the frame can no longer be located, so the stream is malformed.
+		const broken = frame.slice(0, 16) + '000000' + frame.slice(22);
+		const result = verifyKel({ aid, kel: broken });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
-		expect(result.error).toEqual({ code: 'NON_CANONICAL_EVENT' });
+		expect(result.error.code).toBe('MALFORMED_STREAM');
+	});
+
+	test('rejects a stream with trailing bytes after the last frame', () => {
+		const { aid, events } = buildKel();
+		const result = verifyKel({ aid, kel: kel(events[0]!) + 'garbage' });
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error.code).toBe('MALFORMED_STREAM');
 	});
 
 	test('rejects an event with a non-canonical sequence number', () => {
@@ -137,7 +200,7 @@ describe('verifyKel — structural rejection', () => {
 		const tampered = [...events];
 		// `01` has a leading zero — not the canonical hex form of seq 1.
 		tampered[1] = patchEvent(ixn1.signedEvent, { s: '01' });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({ code: 'NON_CANONICAL_EVENT' });
@@ -145,7 +208,7 @@ describe('verifyKel — structural rejection', () => {
 
 	test('rejects a KEL whose first event is not an inception', () => {
 		const { aid, rot1 } = buildKel();
-		const result = verifyKel({ aid, events: [rot1.signedEvent] });
+		const result = verifyKel({ aid, kel: kel(rot1.signedEvent) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({
@@ -158,7 +221,7 @@ describe('verifyKel — structural rejection', () => {
 		const { aid, icp } = buildKel();
 		const result = verifyKel({
 			aid,
-			events: [icp.signedEvent, icp.signedEvent],
+			kel: kel(icp.signedEvent, icp.signedEvent),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -172,7 +235,7 @@ describe('verifyKel — structural rejection', () => {
 		const { aid, events, icp } = buildKel();
 		const tampered = [...events];
 		tampered[0] = patchEvent(icp.signedEvent, { b: ['Dwitnesskey'] });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -182,7 +245,7 @@ describe('verifyKel — structural rejection', () => {
 		const { aid, events, icp } = buildKel();
 		const tampered = [...events];
 		tampered[0] = patchEvent(icp.signedEvent, { kt: '2' });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -192,7 +255,7 @@ describe('verifyKel — structural rejection', () => {
 		const { aid, events, icp } = buildKel();
 		const tampered = [...events];
 		tampered[0] = patchEvent(icp.signedEvent, { surprise: 1 });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({
@@ -205,10 +268,20 @@ describe('verifyKel — structural rejection', () => {
 		const { aid, events, icp } = buildKel();
 		const tampered = [...events];
 		tampered[0] = patchEvent(icp.signedEvent, { d: 'Z'.repeat(44) });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_CESR_CODE');
+	});
+
+	test('rejects a frame whose controller signature is the wrong length', () => {
+		const { aid, events } = buildKel();
+		const frame = kel(events[0]!);
+		// Drop the last character of the attached Siger.
+		const result = verifyKel({ aid, kel: frame.slice(0, -1) });
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error.code).toBe('MALFORMED_STREAM');
 	});
 });
 
@@ -219,7 +292,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 			currentKeyPair: keyPairFromSeed(fillSeed(0x11)),
 			nextPublicKey: keyPairFromSeed(fillSeed(0x22)).publicKey,
 		});
-		const result = verifyKel({ aid: other.state.aid, events });
+		const result = verifyKel({ aid: other.state.aid, kel: kel(...events) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_DID');
@@ -229,7 +302,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		const { aid, events, ixn1 } = buildKel();
 		const tampered = [...events];
 		tampered[1] = patchEvent(ixn1.signedEvent, { a: [{ kind: 'forged' }] });
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
@@ -238,12 +311,12 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 	test('rejects a tampered signature', () => {
 		const { aid, events, icp, ixn1 } = buildKel();
 		const tampered = [...events];
-		// Swap in the inception's signature: well-formed CESR, wrong key.
+		// Swap in the inception's signature: well-formed indexed CESR, wrong key.
 		tampered[1] = {
 			event: ixn1.signedEvent.event,
 			signatures: [icp.signedEvent.signatures[0]],
 		};
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_SIGNATURE');
@@ -253,7 +326,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		const { aid, events } = buildKel();
 		const reordered = [...events];
 		[reordered[1], reordered[2]] = [reordered[2]!, reordered[1]!];
-		const result = verifyKel({ aid, events: reordered });
+		const result = verifyKel({ aid, kel: kel(...reordered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({
@@ -267,7 +340,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		const { aid, events } = buildKel();
 		// Drop the seq-1 interaction; the seq-2 rotation now follows inception.
 		const withGap = [events[0]!, events[2]!, events[3]!, events[4]!];
-		const result = verifyKel({ aid, events: withGap });
+		const result = verifyKel({ aid, kel: kel(...withGap) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({
@@ -304,7 +377,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		});
 		const result = verifyKel({
 			aid: icp.state.aid,
-			events: [icp.signedEvent, ixn1alt.signedEvent, ixn2.signedEvent],
+			kel: icp.event + ixn1alt.event + ixn2.event,
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -358,7 +431,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid: icp.state.aid,
-			events: [icp.signedEvent, forgedRotation],
+			kel: icp.event + kel(forgedRotation),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -374,7 +447,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		tampered[0] = patchEvent(icp.signedEvent, {
 			k: [encodePublicKeyEd25519(other.publicKey.raw)],
 		});
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
@@ -387,7 +460,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		tampered[2] = patchEvent(rot1.signedEvent, {
 			n: [deriveNextKeyCommitment(other.publicKey)],
 		});
-		const result = verifyKel({ aid, events: tampered });
+		const result = verifyKel({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
@@ -430,7 +503,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 		} as unknown as InceptionEvent;
 		const signed = signEvent(icpEvent, k0.privateKey);
 
-		const result = verifyKel({ aid: aidFromSaid(said), events: [signed] });
+		const result = verifyKel({ aid: aidFromSaid(said), kel: kel(signed) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({
@@ -488,7 +561,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid: icp.state.aid,
-			events: [icp.signedEvent, signed],
+			kel: icp.event + kel(signed),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -521,7 +594,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid,
-			events: [events[0]!, events[1]!, events[2]!, staleIxn],
+			kel: kel(events[0]!, events[1]!, events[2]!, staleIxn),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -578,7 +651,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid: icp.state.aid,
-			events: [icp.signedEvent, signed],
+			kel: icp.event + kel(signed),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -619,7 +692,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid: icp.state.aid,
-			events: [icp.signedEvent, signed],
+			kel: icp.event + kel(signed),
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -628,17 +701,15 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 });
 
 describe('verifyKel — argument contract', () => {
-	test('throws on a non-array events argument', () => {
+	test('throws on a non-string kel argument', () => {
 		const { aid } = buildKel();
-		expect(() =>
-			verifyKel({ aid, events: 'not an array' as never })
-		).toThrow(InvalidArgumentError);
+		expect(() => verifyKel({ aid, kel: 123 as never })).toThrow(InvalidArgumentError);
 	});
 
 	test('throws on a missing aid', () => {
 		const { events } = buildKel();
-		expect(() =>
-			verifyKel({ aid: '' as never, events })
-		).toThrow(InvalidArgumentError);
+		expect(() => verifyKel({ aid: '' as never, kel: kel(...events) })).toThrow(
+			InvalidArgumentError
+		);
 	});
 });

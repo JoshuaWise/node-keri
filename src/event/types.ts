@@ -9,7 +9,7 @@
  * system as well as by runtime validators.
  */
 
-import { CesrDigest, CesrPublicKey, CesrSignature } from '../cesr/qualified';
+import { CesrDigest, CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
 import { Aid } from '../did/did-keri';
 
 /**
@@ -73,10 +73,18 @@ export interface InteractionEvent extends KeriEventBase {
 export type KeriEvent = InceptionEvent | RotationEvent | InteractionEvent;
 
 /**
- * An event paired with the signature(s) authorizing it. The MVP profile
- * uses a single Ed25519 signature per event (single-controller, threshold 1).
+ * An event paired with the signature(s) authorizing it.
+ *
+ * The signature is a CESR *indexed* signature (a "Siger", code `A`): its qb64
+ * form embeds the index of the signing key within the establishment event's
+ * key list. This profile is single-controller, threshold 1, so there is
+ * exactly one signature and its index is always 0.
+ *
+ * `SignedKeriEvent` is the in-memory shape of an event. Its wire form is the
+ * CESR stream frame produced by `encodeEventFrame` — that, not this object, is
+ * what the high-level API and KEL transport use.
  */
 export interface SignedKeriEvent {
 	event: KeriEvent;
-	signatures: readonly [CesrSignature];
+	signatures: readonly [CesrIndexedSignature];
 }

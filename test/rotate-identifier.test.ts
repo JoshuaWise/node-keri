@@ -2,6 +2,7 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { keyPairFromSeed } from '../src/crypto/keypair';
+import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
 
 function fillSeed(byte: number): Uint8Array {
@@ -26,8 +27,9 @@ describe('rotateIdentifier', () => {
 			nextKeyPair: K2(),
 		});
 
-		expect(rotation.rotationEvent.event.t).toBe('rot');
-		expect(rotation.rotationEvent.event.s).toBe('1');
+		const rotEvent = parseSignedEvent(rotation.rotationEvent).event;
+		expect(rotEvent.t).toBe('rot');
+		expect(rotEvent.s).toBe('1');
 		expect(rotation.state.sequenceNumber).toBe(1);
 		expect(rotation.state.aid).toBe(id.aid);
 	});
@@ -41,7 +43,7 @@ describe('rotateIdentifier', () => {
 		});
 		const verified = verifyKel({
 			aid: id.aid,
-			events: [id.inceptionEvent, rotation.rotationEvent],
+			kel: id.inceptionEvent + rotation.rotationEvent,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -60,10 +62,10 @@ describe('rotateIdentifier', () => {
 			currentPrivateKey: K2().privateKey,
 			nextKeyPair: K3(),
 		});
-		expect(rot2.rotationEvent.event.s).toBe('2');
+		expect(parseSignedEvent(rot2.rotationEvent).event.s).toBe('2');
 		const verified = verifyKel({
 			aid: id.aid,
-			events: [id.inceptionEvent, rot1.rotationEvent, rot2.rotationEvent],
+			kel: id.inceptionEvent + rot1.rotationEvent + rot2.rotationEvent,
 		});
 		expect(verified.ok).toBe(true);
 	});

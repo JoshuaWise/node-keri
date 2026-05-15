@@ -6,10 +6,10 @@ JSON request body is read from stdin, and a JSON response is written to stdout.
 
 It uses the reference KERI implementation (keripy, the `keri` PyPI package) to:
 
-  * `gen-kel`    - build a KEL (icp, rot, ixn, rot) with keripy and emit it in
-                   node-keri's `SignedKeriEvent` JSON shape.
-  * `verify-kel` - replay a node-keri-produced KEL through keripy's `Kevery`
-                   and report whether keripy's verifier accepts it.
+  * `gen-kel`    - build a KEL (icp, rot, ixn, rot) with keripy and emit it as
+                   a CESR stream (the wire form node-keri's `verifyKel` reads).
+  * `verify-kel` - replay a node-keri-produced CESR stream through keripy's
+                   `Kevery` and report whether keripy's verifier accepts it.
   * `sign`       - sign a payload with keripy's Ed25519 signer.
   * `verify-sig` - verify a detached Ed25519 signature with keripy.
 
@@ -26,11 +26,13 @@ SHA2-256 via the `saids=` argument of `SerderKERI`, and builds next-key digests
 with `Diger(..., code=SHA2_256)`. With that pinning the two implementations
 produce identical event bytes for identical key material.
 
-node-keri carries a single non-indexed Ed25519 signature (`Cigar`, CESR code
-`0B`) per event. keripy's `Kevery` expects controller signatures to be CESR
-*indexed* signatures (`Siger`, code `A...`). The raw 64 signature bytes are the
-same in both forms; this bridge converts between them when crossing the
-boundary.
+Wire form
+---------
+A KEL is exchanged as a CESR stream: each event's serialized JSON followed by
+its attachment group — a `-A` controller-signature counter and the controller's
+indexed signature(s) ("Siger", code `A`). keripy's `eventing.messagize` builds
+exactly that frame, and its `parsing.Parser` consumes it, so the bridge speaks
+the stream form directly with no per-event JSON wrapper.
 """
 
 import base64
@@ -41,7 +43,6 @@ from keri.core import serdering
 from keri.core import eventing, parsing
 from keri.core.coring import Cigar, Diger, MtrDex, Verfer, versify
 from keri.core.eventing import Ilks, Kevery
-from keri.core.indexing import IdxSigDex, Siger
 from keri.core.signing import Signer
 from keri.db import basing
 from keri.kering import Kinds, Version
@@ -96,10 +97,11 @@ def _cmd_gen_kel(req):
     """Build a 4-event KEL (icp, rot, ixn, rot) entirely with keripy.
 
     Request : {"seeds": [s0, s1, s2, s3], "anchor": <json value, optional>}
-    Response: {"aid", "did", "kel": [{"event", "signatures"}, ...]}
+    Response: {"aid", "did", "kel": "<CESR stream>"}
 
-    The KEL is emitted in node-keri's `SignedKeriEvent` JSON shape, with each
-    event's controller signature as a non-indexed `0B` Ed25519 signature.
+    The KEL is emitted as a CESR stream — each event's JSON followed by a `-A`
+    counter and the controller's indexed signature ("Siger", code `A`) — which
+    is exactly the wire form node-keri's `verifyKel` consumes.
     """
     seeds = req.get("seeds", [0, 32, 64, 96])
     if len(seeds) != 4:
@@ -131,33 +133,29 @@ def _cmd_gen_kel(req):
                 bt="0", br=[], ba=[], a=[])
     rot2_s = _said_keri(rot2)
 
-    def entry(serder, signer):
-        # Sign the exact serialized event bytes; emit the non-indexed 0B form.
-        cigar = signer.sign(ser=serder.raw)
-        return {
-            "event": json.loads(serder.raw.decode("utf-8")),
-            "signatures": [cigar.qb64],
-        }
+    def frame(serder, signer):
+        # Sign the exact serialized event bytes at key index 0, then frame the
+        # event with its `-A` counter + indexed Siger via keripy's `messagize`.
+        siger = signer.sign(ser=serder.raw, index=0)
+        return eventing.messagize(serder, sigers=[siger])
 
-    kel = [
-        entry(icp_s, s0),
-        entry(rot_s, s1),
-        entry(ixn_s, s1),
-        entry(rot2_s, s2),
-    ]
-    return {"aid": pre, "did": f"did:keri:{pre}", "kel": kel}
-
-
-def _to_siger(qb64_0b, index):
-    """Convert a non-indexed `0B` Ed25519 signature to an indexed `Siger`."""
-    raw = Cigar(qb64=qb64_0b).raw
-    return Siger(raw=raw, code=IdxSigDex.Ed25519_Sig, index=index, ondex=index)
+    stream = b"".join([
+        frame(icp_s, s0),
+        frame(rot_s, s1),
+        frame(ixn_s, s1),
+        frame(rot2_s, s2),
+    ])
+    return {
+        "aid": pre,
+        "did": f"did:keri:{pre}",
+        "kel": bytes(stream).decode("utf-8"),
+    }
 
 
 def _cmd_verify_kel(req):
-    """Replay a node-keri KEL through keripy's `Kevery` verifier.
+    """Replay a node-keri CESR-stream KEL through keripy's `Kevery` verifier.
 
-    Request : {"aid": "<expected prefix>", "kel": [{"event", "signatures"}, ...]}
+    Request : {"aid": "<expected prefix>", "kel": "<CESR stream>"}
     Response: {"ok", "aid", "sn", "said", "currentKeys"} on acceptance, or
               {"ok": false, "error"} when keripy rejects the log.
 
@@ -171,12 +169,8 @@ def _cmd_verify_kel(req):
     db = basing.Baser(name="interop", temp=True, reopen=True)
     try:
         kvy = Kevery(db=db, lax=False, local=True)
-        for entry in kel:
-            serder = serdering.SerderKERI(sad=entry["event"])
-            sigers = [_to_siger(sig, i)
-                      for i, sig in enumerate(entry["signatures"])]
-            msg = eventing.messagize(serder, sigers=sigers)
-            parsing.Parser(kvy=kvy).parse(ims=bytearray(msg))
+        # node-keri's stream is exactly the frame form keripy's Parser expects.
+        parsing.Parser(kvy=kvy).parse(ims=bytearray(kel.encode("utf-8")))
 
         kever = kvy.kevers.get(aid)
         if kever is None:

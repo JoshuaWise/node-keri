@@ -5,8 +5,8 @@
  * just answers "did this exact key sign this exact event".
  */
 
-import { decodePublicKeyEd25519, decodeSignatureEd25519 } from '../cesr/decode';
-import { CesrPublicKey, CesrSignature } from '../cesr/qualified';
+import { decodeIndexedSignatureEd25519, decodePublicKeyEd25519 } from '../cesr/decode';
+import { CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
 import { verify } from '../crypto/ed25519';
 import { publicKeyFromRaw } from '../crypto/keypair';
 import { MalformedInputError } from '../profile/errors';
@@ -14,7 +14,13 @@ import { KeriEvent } from './types';
 import { serializeEvent } from './sign';
 
 /**
- * Verify `signature` over the canonical bytes of `event` under `publicKey`.
+ * Verify indexed `signature` over the canonical bytes of `event` under
+ * `publicKey`.
+ *
+ * `signature` is a CESR indexed signature (a "Siger"); only its raw 64 bytes
+ * matter here, since the caller has already chosen which key to check against.
+ * The index it carries is the replay verifier's concern — `verifyKel` checks
+ * it points at key 0, the only key this single-key profile permits.
  *
  * Returns `false` (not throws) for cryptographic failure. A malformed CESR
  * code or length is a structural error and is thrown as MalformedInputError
@@ -24,7 +30,7 @@ import { serializeEvent } from './sign';
 export function verifyEventSignature(
 	event: KeriEvent,
 	publicKey: CesrPublicKey,
-	signature: CesrSignature
+	signature: CesrIndexedSignature
 ): boolean {
 	if (typeof publicKey !== 'string') {
 		throw new MalformedInputError('publicKey must be a CESR-qualified string');
@@ -33,7 +39,7 @@ export function verifyEventSignature(
 		throw new MalformedInputError('signature must be a CESR-qualified string');
 	}
 	const pkRaw = decodePublicKeyEd25519(publicKey);
-	const sigRaw = decodeSignatureEd25519(signature);
+	const sigRaw = decodeIndexedSignatureEd25519(signature).raw;
 	const wrappedKey = publicKeyFromRaw(pkRaw);
 	return verify(wrappedKey, serializeEvent(event), sigRaw);
 }

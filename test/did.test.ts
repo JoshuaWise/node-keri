@@ -3,16 +3,14 @@ import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
+import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
-import {
-	DID_KERI_PREFIX,
-	formatDidKeri,
-	parseDidKeri,
-} from '../src/did/did-keri';
+import { DID_KERI_PREFIX, formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { createDidDocument } from '../src/did/document';
 import { resolveDid } from '../src/did/resolver';
 import { verifyKel } from '../src/api/verify-kel';
 import { InvalidArgumentError } from '../src/profile/errors';
+import { frameKel } from './kel-stream';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
@@ -39,12 +37,16 @@ function buildKel() {
 		nextPublicKey: k2.publicKey,
 	});
 
-	const events: SignedKeriEvent[] = [
-		icp.signedEvent,
-		ixn.signedEvent,
-		rot.signedEvent,
-	];
-	return { aid: icp.state.aid, did: icp.state.did, events, icp, ixn, rot, keys: { k0, k1, k2 } };
+	// The constructors return wire-form frames; a KEL is those concatenated.
+	const frames = [icp.event, ixn.event, rot.event];
+	const events: SignedKeriEvent[] = frames.map(parseSignedEvent);
+	return {
+		aid: icp.state.aid,
+		did: icp.state.did,
+		events,
+		kel: frames.join(''),
+		keys: { k0, k1, k2 },
+	};
 }
 
 describe('parseDidKeri', () => {
@@ -62,31 +64,23 @@ describe('parseDidKeri', () => {
 	});
 
 	test('rejects a non-string argument', () => {
-		expect(() => parseDidKeri(undefined as never)).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => parseDidKeri(undefined as never)).toThrow(InvalidArgumentError);
 	});
 
 	test('rejects a DID without the did:keri prefix', () => {
 		const { aid } = buildKel();
-		expect(() => parseDidKeri(`did:web:${aid}`)).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => parseDidKeri(`did:web:${aid}`)).toThrow(InvalidArgumentError);
 	});
 
 	test('rejects a DID missing its method-specific identifier', () => {
-		expect(() => parseDidKeri(DID_KERI_PREFIX)).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => parseDidKeri(DID_KERI_PREFIX)).toThrow(InvalidArgumentError);
 	});
 
 	test('rejects DID-URL path, query, and fragment components', () => {
 		const { did } = buildKel();
 		expect(() => parseDidKeri(`${did}/path`)).toThrow(InvalidArgumentError);
 		expect(() => parseDidKeri(`${did}?q=1`)).toThrow(InvalidArgumentError);
-		expect(() => parseDidKeri(`${did}#key-0`)).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => parseDidKeri(`${did}#key-0`)).toThrow(InvalidArgumentError);
 	});
 
 	test('rejects an identifier that is not a valid CESR AID', () => {
@@ -94,16 +88,16 @@ describe('parseDidKeri', () => {
 			InvalidArgumentError
 		);
 		// Right length, wrong derivation code.
-		expect(() =>
-			parseDidKeri(`${DID_KERI_PREFIX}${'Z'.repeat(44)}`)
-		).toThrow(InvalidArgumentError);
+		expect(() => parseDidKeri(`${DID_KERI_PREFIX}${'Z'.repeat(44)}`)).toThrow(
+			InvalidArgumentError
+		);
 	});
 });
 
 describe('createDidDocument', () => {
 	test('projects a verified state into a minimal DID document', () => {
-		const { aid, did, events } = buildKel();
-		const result = verifyKel({ aid, events });
+		const { aid, did, kel } = buildKel();
+		const result = verifyKel({ aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 
@@ -134,8 +128,8 @@ describe('createDidDocument', () => {
 	});
 
 	test('reflects the latest signing key after rotation', () => {
-		const { aid, events, keys } = buildKel();
-		const result = verifyKel({ aid, events });
+		const { aid, kel, keys } = buildKel();
+		const result = verifyKel({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		const doc = createDidDocument({ state: result.state });
@@ -149,8 +143,8 @@ describe('createDidDocument', () => {
 	});
 
 	test('includes and normalizes caller-supplied services', () => {
-		const { aid, did, events } = buildKel();
-		const result = verifyKel({ aid, events });
+		const { aid, did, kel } = buildKel();
+		const result = verifyKel({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		const doc = createDidDocument({
@@ -173,8 +167,8 @@ describe('createDidDocument', () => {
 	});
 
 	test('accepts a matching `did` and rejects a mismatched one', () => {
-		const { aid, did, events } = buildKel();
-		const result = verifyKel({ aid, events });
+		const { aid, did, kel } = buildKel();
+		const result = verifyKel({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		expect(() => createDidDocument({ state: result.state, did })).not.toThrow();
@@ -187,16 +181,14 @@ describe('createDidDocument', () => {
 	});
 
 	test('rejects a malformed service entry', () => {
-		const { aid, events } = buildKel();
-		const result = verifyKel({ aid, events });
+		const { aid, kel } = buildKel();
+		const result = verifyKel({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		expect(() =>
 			createDidDocument({
 				state: result.state,
-				services: [
-					{ id: '', type: 'X', serviceEndpoint: 'x' } as never,
-				],
+				services: [{ id: '', type: 'X', serviceEndpoint: 'x' } as never],
 			})
 		).toThrow(InvalidArgumentError);
 	});
@@ -210,8 +202,8 @@ describe('createDidDocument', () => {
 
 describe('resolveDid', () => {
 	test('resolves a valid DID + KEL to a DID document and verified state', () => {
-		const { did, events } = buildKel();
-		const result = resolveDid({ did, kel: events });
+		const { did, kel } = buildKel();
+		const result = resolveDid({ did, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.didDocument.id).toBe(did);
@@ -221,21 +213,21 @@ describe('resolveDid', () => {
 	});
 
 	test('echoes the KEL back only when includeKel is set', () => {
-		const { did, events } = buildKel();
+		const { did, kel } = buildKel();
 		const result = resolveDid({
 			did,
-			kel: events,
+			kel,
 			options: { includeKel: true },
 		});
 		if (!result.ok) throw new Error('expected resolution to succeed');
-		expect(result.metadata.kel).toEqual(events);
+		expect(result.metadata.kel).toBe(kel);
 	});
 
 	test('returns INVALID_DID for a malformed DID rather than throwing', () => {
-		const { events } = buildKel();
+		const { kel } = buildKel();
 		const result = resolveDid({
 			did: 'did:keri:not-a-real-aid' as never,
-			kel: events,
+			kel,
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -243,28 +235,28 @@ describe('resolveDid', () => {
 	});
 
 	test('propagates a verification error for a tampered KEL', () => {
-		const { did, events, ixn } = buildKel();
+		const { did, events } = buildKel();
 		const tampered: SignedKeriEvent[] = [...events];
 		tampered[1] = {
 			event: {
-				...ixn.signedEvent.event,
+				...events[1]!.event,
 				a: [{ kind: 'forged' }],
 			} as SignedKeriEvent['event'],
-			signatures: ixn.signedEvent.signatures,
+			signatures: events[1]!.signatures,
 		};
-		const result = resolveDid({ did, kel: tampered });
+		const result = resolveDid({ did, kel: frameKel(tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
 	});
 
 	test('returns a verification error when the KEL is for another identifier', () => {
-		const { events } = buildKel();
+		const { kel } = buildKel();
 		const other = createInceptionEvent({
 			currentKeyPair: keyPairFromSeed(fillSeed(0x90)),
 			nextPublicKey: keyPairFromSeed(fillSeed(0x91)).publicKey,
 		});
-		const result = resolveDid({ did: other.state.did, kel: events });
+		const result = resolveDid({ did: other.state.did, kel });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_DID');
@@ -272,7 +264,7 @@ describe('resolveDid', () => {
 
 	test('rejects an empty KEL', () => {
 		const { did } = buildKel();
-		const result = resolveDid({ did, kel: [] });
+		const result = resolveDid({ did, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({ code: 'EMPTY_KEL' });
@@ -280,8 +272,8 @@ describe('resolveDid', () => {
 
 	test('throws on an argument-contract violation', () => {
 		const { did } = buildKel();
-		expect(() =>
-			resolveDid({ did, kel: 'nope' as never })
-		).toThrow(InvalidArgumentError);
+		expect(() => resolveDid({ did, kel: 123 as never })).toThrow(
+			InvalidArgumentError
+		);
 	});
 });

@@ -1,13 +1,23 @@
 import { encodePublicKeyEd25519 } from '../src/cesr/encode';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
-import { createInteractionEvent } from '../src/event/interaction';
-import { serializeEvent } from '../src/event/sign';
+import { createInteractionEvent, CreateInteractionInput } from '../src/event/interaction';
+import { serializeEvent, signEvent } from '../src/event/sign';
+import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
+}
+
+/**
+ * `createInteractionEvent` returns the event in CESR stream wire form; parse
+ * the frame back so these tests can inspect the in-memory `SignedKeriEvent`.
+ */
+function interactSigned(input: CreateInteractionInput) {
+	const { event, state } = createInteractionEvent(input);
+	return { signedEvent: parseSignedEvent(event), state };
 }
 
 const SEED_K0 = fillSeed(0x60);
@@ -27,7 +37,7 @@ describe('createInteractionEvent', () => {
 	test('produces an event with the expected shape', () => {
 		const { k0, inception } = freshIdentity();
 
-		const { signedEvent, state } = createInteractionEvent({
+		const { signedEvent, state } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 		});
@@ -59,7 +69,7 @@ describe('createInteractionEvent', () => {
 			42,
 		];
 
-		const { signedEvent } = createInteractionEvent({
+		const { signedEvent } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 			data: anchors,
@@ -71,7 +81,7 @@ describe('createInteractionEvent', () => {
 
 	test('signature verifies under the unchanged current key', () => {
 		const { k0, inception } = freshIdentity();
-		const { signedEvent } = createInteractionEvent({
+		const { signedEvent } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 			data: [{ note: 'hello' }],
@@ -91,7 +101,7 @@ describe('createInteractionEvent', () => {
 		const stranger = keyPairFromSeed(fillSeed(0x99));
 
 		expect(() =>
-			createInteractionEvent({
+			interactSigned({
 				state: inception.state,
 				currentKeyPair: stranger,
 			})
@@ -101,7 +111,7 @@ describe('createInteractionEvent', () => {
 	test('rejects non-canonical-JSON anchors with a clear error', () => {
 		const { k0, inception } = freshIdentity();
 		expect(() =>
-			createInteractionEvent({
+			interactSigned({
 				state: inception.state,
 				currentKeyPair: k0,
 				data: [Number.NaN],
@@ -109,7 +119,7 @@ describe('createInteractionEvent', () => {
 		).toThrow(/canonical-JSON/);
 
 		expect(() =>
-			createInteractionEvent({
+			interactSigned({
 				state: inception.state,
 				currentKeyPair: k0,
 				data: [() => 1],
@@ -119,38 +129,37 @@ describe('createInteractionEvent', () => {
 
 	test("v field encodes the event's serialized byte length", () => {
 		const { k0, inception } = freshIdentity();
-		const { signedEvent } = createInteractionEvent({
+		const { signedEvent } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 			data: [{ note: 'sized' }, 'and-more', 7],
 		});
 		const sizeHex = signedEvent.event.v.slice(10, 16);
-		expect(serializeEvent(signedEvent.event).length).toBe(
-			parseInt(sizeHex, 16)
-		);
+		expect(serializeEvent(signedEvent.event).length).toBe(parseInt(sizeHex, 16));
 	});
 
-	test('signed interaction is frozen and resists post-construction mutation', () => {
+	test('signEvent freezes the signed interaction against post-construction mutation', () => {
 		const { k0, inception } = freshIdentity();
-		const { signedEvent } = createInteractionEvent({
+		const { signedEvent } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 		});
-		expect(Object.isFrozen(signedEvent)).toBe(true);
-		expect(Object.isFrozen(signedEvent.event)).toBe(true);
-		expect(Object.isFrozen(signedEvent.signatures)).toBe(true);
+		const reSigned = signEvent(signedEvent.event, k0.privateKey);
+		expect(Object.isFrozen(reSigned)).toBe(true);
+		expect(Object.isFrozen(reSigned.event)).toBe(true);
+		expect(Object.isFrozen(reSigned.signatures)).toBe(true);
 		expect(() => {
-			(signedEvent.event as { s: string }).s = '2';
+			(reSigned.event as { s: string }).s = '2';
 		}).toThrow(TypeError);
 	});
 
 	test('successive interactions chain by previous-event digest', () => {
 		const { k0, inception } = freshIdentity();
-		const i1 = createInteractionEvent({
+		const i1 = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
 		});
-		const i2 = createInteractionEvent({
+		const i2 = interactSigned({
 			state: i1.state,
 			currentKeyPair: k0,
 			data: [{ tick: 2 }],

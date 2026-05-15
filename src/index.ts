@@ -67,17 +67,25 @@ export { canonicalizeJson } from './event/canonical-json';
 export {
 	encodePublicKeyEd25519,
 	encodeSignatureEd25519,
+	encodeIndexedSignatureEd25519,
 	encodeDigestSha256,
 	encodeDigest,
 } from './cesr/encode';
 export {
 	decodePublicKeyEd25519,
 	decodeSignatureEd25519,
+	decodeIndexedSignatureEd25519,
+	signatureIndex,
 	decodeDigestSha256,
 	decodeDigest,
 } from './cesr/decode';
 export { digestCodeOf, digestSpecForCode } from './cesr/codes';
-export type { CesrPublicKey, CesrSignature, CesrDigest } from './cesr/qualified';
+export type {
+	CesrPublicKey,
+	CesrSignature,
+	CesrIndexedSignature,
+	CesrDigest,
+} from './cesr/qualified';
 
 export {
 	DID_KERI_PREFIX,
@@ -109,6 +117,7 @@ export {
 } from './event/digest';
 export { serializeEvent, signEvent } from './event/sign';
 export { verifyEventSignature } from './event/verify-signature';
+export { encodeEventFrame, parseSignedEvent, parseKel } from './event/stream';
 
 export { createInceptionEvent } from './event/inception';
 export type { CreateInceptionInput, CreateInceptionResult } from './event/inception';

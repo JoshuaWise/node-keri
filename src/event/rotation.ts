@@ -22,7 +22,8 @@ import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
-import { RotationEvent, SignedKeriEvent } from './types';
+import { encodeEventFrame } from './stream';
+import { RotationEvent } from './types';
 
 export interface CreateRotationInput {
 	/** Trusted state from the prior event (output of inception/rotation/ixn). */
@@ -41,7 +42,8 @@ export interface CreateRotationInput {
 }
 
 export interface CreateRotationResult {
-	readonly signedEvent: SignedKeriEvent;
+	/** The signed rotation event, as a CESR stream frame (the wire form). */
+	readonly event: string;
 	readonly state: KeriState;
 }
 
@@ -112,7 +114,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 		a: partial.a,
 	};
 
-	const signed = signEvent(event, input.newCurrentKeyPair.privateKey);
+	const frame = encodeEventFrame(signEvent(event, input.newCurrentKeyPair.privateKey));
 
 	const newState: KeriState = {
 		aid: input.state.aid,
@@ -125,5 +127,5 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 		eventType: 'rot',
 	};
 
-	return { signedEvent: signed, state: newState };
+	return { event: frame, state: newState };
 }

@@ -14,7 +14,7 @@
  */
 
 import { verifyKel } from '../api/verify-kel';
-import { SignedKeriEvent } from '../event/types';
+import { parseKel } from '../event/stream';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError, KeriVerificationError } from '../profile/errors';
 import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
@@ -23,8 +23,8 @@ import { DidDocument, createDidDocument } from './document';
 export interface ResolveDidInput {
 	/** The `did:keri` DID to resolve. */
 	readonly did: DidKeri;
-	/** The full key event log for the DID's identifier, inception first. */
-	readonly kel: readonly SignedKeriEvent[];
+	/** The full key event log for the DID's identifier, as a CESR stream. */
+	readonly kel: string;
 	readonly options?: {
 		/** When true, the verified KEL is echoed back in the metadata. */
 		readonly includeKel?: boolean;
@@ -37,8 +37,8 @@ export interface DidResolutionMetadata {
 	readonly state: KeriState;
 	/** Number of events in the verified KEL. */
 	readonly eventCount: number;
-	/** The verified KEL — present only when `options.includeKel` was set. */
-	readonly kel?: readonly SignedKeriEvent[];
+	/** The verified KEL (CESR stream) — present only when `options.includeKel` was set. */
+	readonly kel?: string;
 }
 
 /** Discriminated result of resolving a `did:keri` DID. */
@@ -62,8 +62,8 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	if (typeof input.did !== 'string') {
 		throw new InvalidArgumentError('resolveDid requires a `did` string');
 	}
-	if (!Array.isArray(input.kel)) {
-		throw new InvalidArgumentError('resolveDid requires a `kel` array');
+	if (typeof input.kel !== 'string') {
+		throw new InvalidArgumentError('resolveDid requires a `kel` string');
 	}
 
 	// A malformed DID is untrusted input, not a programmer error: convert the
@@ -81,7 +81,7 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		throw err;
 	}
 
-	const verification = verifyKel({ aid: parsed.aid, events: input.kel });
+	const verification = verifyKel({ aid: parsed.aid, kel: input.kel });
 	if (!verification.ok) {
 		return { ok: false, error: verification.error };
 	}
@@ -91,10 +91,12 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		state: verification.state,
 	});
 
+	// The KEL verified, so its CESR stream is well-framed: `parseKel` re-parses
+	// it purely to count the events and cannot throw here.
 	const metadata: DidResolutionMetadata = {
 		state: verification.state,
-		eventCount: input.kel.length,
-		...(input.options?.includeKel ? { kel: input.kel.slice() } : {}),
+		eventCount: parseKel(input.kel).length,
+		...(input.options?.includeKel ? { kel: input.kel } : {}),
 	};
 	return { ok: true, didDocument, metadata };
 }

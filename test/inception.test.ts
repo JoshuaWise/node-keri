@@ -4,8 +4,9 @@ import { keyPairFromSeed } from '../src/crypto/keypair';
 import { DID_KERI_PREFIX } from '../src/did/did-keri';
 import { canonicalizeJson } from '../src/event/canonical-json';
 import { deriveNextKeyCommitment } from '../src/event/digest';
-import { createInceptionEvent } from '../src/event/inception';
+import { createInceptionEvent, CreateInceptionInput } from '../src/event/inception';
 import { serializeEvent, signEvent } from '../src/event/sign';
+import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
 
@@ -16,12 +17,22 @@ function fillSeed(byte: number): Uint8Array {
 const SEED_CURRENT = fillSeed(0x21);
 const SEED_NEXT = fillSeed(0x22);
 
+/**
+ * `createInceptionEvent` returns the event in CESR stream wire form. These
+ * tests inspect the in-memory shape, so parse the frame back into a
+ * `SignedKeriEvent` and keep the replay-derived `state` alongside.
+ */
+function inceptSigned(input: CreateInceptionInput) {
+	const { event, state } = createInceptionEvent(input);
+	return { signedEvent: parseSignedEvent(event), state };
+}
+
 describe('createInceptionEvent', () => {
 	test('produces an event with the expected shape', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -46,18 +57,20 @@ describe('createInceptionEvent', () => {
 		expect(event.a).toEqual([]);
 
 		expect(signedEvent.signatures).toHaveLength(1);
-		expect(signedEvent.signatures[0]).toMatch(/^0B[A-Za-z0-9_-]{86}$/);
+		// An indexed Ed25519 signature (Siger): code `A`, then the 1-char index
+		// (`A` = 0 in this single-key profile), then 86 base64 payload chars.
+		expect(signedEvent.signatures[0]).toMatch(/^AA[A-Za-z0-9_-]{86}$/);
 	});
 
 	test('SAID is deterministic for the same inputs', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 
-		const a = createInceptionEvent({
+		const a = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
-		const b = createInceptionEvent({
+		const b = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -73,11 +86,11 @@ describe('createInceptionEvent', () => {
 		const next1 = keyPairFromSeed(fillSeed(0x30));
 		const next2 = keyPairFromSeed(fillSeed(0x31));
 
-		const a = createInceptionEvent({
+		const a = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next1.publicKey,
 		});
-		const b = createInceptionEvent({
+		const b = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next2.publicKey,
 		});
@@ -88,7 +101,7 @@ describe('createInceptionEvent', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 
-		const { signedEvent, state } = createInceptionEvent({
+		const { signedEvent, state } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -100,9 +113,7 @@ describe('createInceptionEvent', () => {
 		expect(state.currentPublicKey).toBe(
 			encodePublicKeyEd25519(current.publicKey.raw)
 		);
-		expect(state.nextKeyCommitment).toBe(
-			deriveNextKeyCommitment(next.publicKey)
-		);
+		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(next.publicKey));
 		expect(state.transferable).toBe(true);
 		expect(state.eventType).toBe('icp');
 	});
@@ -111,7 +122,7 @@ describe('createInceptionEvent', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -130,7 +141,7 @@ describe('createInceptionEvent', () => {
 		const next = keyPairFromSeed(SEED_NEXT);
 		const stranger = keyPairFromSeed(fillSeed(0x99));
 
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -148,7 +159,7 @@ describe('createInceptionEvent', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -169,7 +180,7 @@ describe('createInceptionEvent', () => {
 	test('AID round-trips as a SHA-256 digest', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
-		const { state } = createInceptionEvent({
+		const { state } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -180,7 +191,7 @@ describe('createInceptionEvent', () => {
 	test('disclosed public key in `k` decodes to the correct raw bytes', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
@@ -192,7 +203,7 @@ describe('createInceptionEvent', () => {
 	test('rejects malformed key arguments', () => {
 		const next = keyPairFromSeed(SEED_NEXT);
 		expect(() =>
-			createInceptionEvent({
+			inceptSigned({
 				currentKeyPair: { publicKey: {} as never, privateKey: {} as never },
 				nextPublicKey: next.publicKey,
 			})
@@ -200,7 +211,7 @@ describe('createInceptionEvent', () => {
 
 		const current = keyPairFromSeed(SEED_CURRENT);
 		expect(() =>
-			createInceptionEvent({
+			inceptSigned({
 				currentKeyPair: current,
 				nextPublicKey: {} as never,
 			})
@@ -210,35 +221,37 @@ describe('createInceptionEvent', () => {
 	test("v field encodes the event's serialized byte length", () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
 		const sizeHex = signedEvent.event.v.slice(10, 16);
-		expect(serializeEvent(signedEvent.event).length).toBe(
-			parseInt(sizeHex, 16)
-		);
+		expect(serializeEvent(signedEvent.event).length).toBe(parseInt(sizeHex, 16));
 	});
 
-	test('signed event is frozen and resists post-construction mutation', () => {
+	test('signEvent freezes the signed event against post-construction mutation', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
-		const { signedEvent } = createInceptionEvent({
+		// The wire form is an immutable string; the in-memory `signEvent`
+		// output is frozen so a casual mutation that would invalidate the
+		// signature is rejected at runtime.
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});
-		expect(Object.isFrozen(signedEvent)).toBe(true);
-		expect(Object.isFrozen(signedEvent.event)).toBe(true);
-		expect(Object.isFrozen(signedEvent.signatures)).toBe(true);
+		const reSigned = signEvent(signedEvent.event, current.privateKey);
+		expect(Object.isFrozen(reSigned)).toBe(true);
+		expect(Object.isFrozen(reSigned.event)).toBe(true);
+		expect(Object.isFrozen(reSigned.signatures)).toBe(true);
 		expect(() => {
-			(signedEvent.event as { s: string }).s = '1';
+			(reSigned.event as { s: string }).s = '1';
 		}).toThrow(TypeError);
 	});
 
 	test('signature is over canonical bytes of the FINAL event (with SAID in d/i)', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
-		const { signedEvent } = createInceptionEvent({
+		const { signedEvent } = inceptSigned({
 			currentKeyPair: current,
 			nextPublicKey: next.publicKey,
 		});

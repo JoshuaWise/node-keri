@@ -42,4 +42,5 @@ export type KeriVerificationError =
 	| { code: 'INVALID_SIGNATURE' }
 	| { code: 'INVALID_NEXT_KEY_COMMITMENT' }
 	| { code: 'INVALID_CESR_CODE'; value: string }
-	| { code: 'NON_CANONICAL_EVENT' };
+	| { code: 'NON_CANONICAL_EVENT' }
+	| { code: 'MALFORMED_STREAM'; message: string };

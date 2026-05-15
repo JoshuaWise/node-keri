@@ -2,13 +2,23 @@ import { encodePublicKeyEd25519 } from '../src/cesr/encode';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent } from '../src/event/inception';
-import { createRotationEvent } from '../src/event/rotation';
-import { serializeEvent } from '../src/event/sign';
+import { createRotationEvent, CreateRotationInput } from '../src/event/rotation';
+import { serializeEvent, signEvent } from '../src/event/sign';
+import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
+}
+
+/**
+ * `createRotationEvent` returns the event in CESR stream wire form; parse the
+ * frame back so these tests can inspect the in-memory `SignedKeriEvent`.
+ */
+function rotateSigned(input: CreateRotationInput) {
+	const { event, state } = createRotationEvent(input);
+	return { signedEvent: parseSignedEvent(event), state };
 }
 
 const SEED_K0 = fillSeed(0x40);
@@ -31,7 +41,7 @@ describe('createRotationEvent', () => {
 		const { k1, inception } = freshIdentity();
 		const k2 = keyPairFromSeed(SEED_K2);
 
-		const { signedEvent, state } = createRotationEvent({
+		const { signedEvent, state } = rotateSigned({
 			state: inception.state,
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
@@ -58,12 +68,8 @@ describe('createRotationEvent', () => {
 		expect(state.lastEventDigest).toBe(event.d);
 		expect(state.aid).toBe(inception.state.aid);
 		expect(state.did).toBe(inception.state.did);
-		expect(state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(k1.publicKey.raw)
-		);
-		expect(state.nextKeyCommitment).toBe(
-			deriveNextKeyCommitment(k2.publicKey)
-		);
+		expect(state.currentPublicKey).toBe(encodePublicKeyEd25519(k1.publicKey.raw));
+		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(k2.publicKey));
 		expect(state.eventType).toBe('rot');
 	});
 
@@ -71,7 +77,7 @@ describe('createRotationEvent', () => {
 		const { k1, inception } = freshIdentity();
 		const k2 = keyPairFromSeed(SEED_K2);
 
-		const { signedEvent } = createRotationEvent({
+		const { signedEvent } = rotateSigned({
 			state: inception.state,
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
@@ -104,7 +110,7 @@ describe('createRotationEvent', () => {
 		const k2 = keyPairFromSeed(SEED_K2);
 
 		expect(() =>
-			createRotationEvent({
+			rotateSigned({
 				state: inception.state,
 				newCurrentKeyPair: kOther,
 				nextPublicKey: k2.publicKey,
@@ -117,7 +123,7 @@ describe('createRotationEvent', () => {
 		const k2 = keyPairFromSeed(SEED_K2);
 
 		expect(() =>
-			createRotationEvent({
+			rotateSigned({
 				state: inception.state,
 				newCurrentKeyPair: { publicKey: {} as never, privateKey: {} as never },
 				nextPublicKey: k2.publicKey,
@@ -126,7 +132,7 @@ describe('createRotationEvent', () => {
 
 		const k1 = keyPairFromSeed(SEED_K1);
 		expect(() =>
-			createRotationEvent({
+			rotateSigned({
 				state: inception.state,
 				newCurrentKeyPair: k1,
 				nextPublicKey: {} as never,
@@ -139,12 +145,12 @@ describe('createRotationEvent', () => {
 		const k2 = keyPairFromSeed(SEED_K2);
 		const k3 = keyPairFromSeed(SEED_K3);
 
-		const r1 = createRotationEvent({
+		const r1 = rotateSigned({
 			state: inception.state,
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
 		});
-		const r2 = createRotationEvent({
+		const r2 = rotateSigned({
 			state: r1.state,
 			newCurrentKeyPair: k2,
 			nextPublicKey: k3.publicKey,
@@ -153,12 +159,8 @@ describe('createRotationEvent', () => {
 		expect(r2.signedEvent.event.s).toBe('2');
 		if (r2.signedEvent.event.t !== 'rot') throw new Error('discriminant');
 		expect(r2.signedEvent.event.p).toBe(r1.signedEvent.event.d);
-		expect(r2.state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(k2.publicKey.raw)
-		);
-		expect(r2.state.nextKeyCommitment).toBe(
-			deriveNextKeyCommitment(k3.publicKey)
-		);
+		expect(r2.state.currentPublicKey).toBe(encodePublicKeyEd25519(k2.publicKey.raw));
+		expect(r2.state.nextKeyCommitment).toBe(deriveNextKeyCommitment(k3.publicKey));
 
 		expect(
 			verifyEventSignature(
@@ -172,30 +174,29 @@ describe('createRotationEvent', () => {
 	test("v field encodes the event's serialized byte length", () => {
 		const { k1, inception } = freshIdentity();
 		const k2 = keyPairFromSeed(SEED_K2);
-		const { signedEvent } = createRotationEvent({
+		const { signedEvent } = rotateSigned({
 			state: inception.state,
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
 		});
 		const sizeHex = signedEvent.event.v.slice(10, 16);
-		expect(serializeEvent(signedEvent.event).length).toBe(
-			parseInt(sizeHex, 16)
-		);
+		expect(serializeEvent(signedEvent.event).length).toBe(parseInt(sizeHex, 16));
 	});
 
-	test('signed rotation is frozen and resists post-construction mutation', () => {
+	test('signEvent freezes the signed rotation against post-construction mutation', () => {
 		const { k1, inception } = freshIdentity();
 		const k2 = keyPairFromSeed(SEED_K2);
-		const { signedEvent } = createRotationEvent({
+		const { signedEvent } = rotateSigned({
 			state: inception.state,
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
 		});
-		expect(Object.isFrozen(signedEvent)).toBe(true);
-		expect(Object.isFrozen(signedEvent.event)).toBe(true);
-		expect(Object.isFrozen(signedEvent.signatures)).toBe(true);
+		const reSigned = signEvent(signedEvent.event, k1.privateKey);
+		expect(Object.isFrozen(reSigned)).toBe(true);
+		expect(Object.isFrozen(reSigned.event)).toBe(true);
+		expect(Object.isFrozen(reSigned.signatures)).toBe(true);
 		expect(() => {
-			(signedEvent.event as { s: string }).s = '2';
+			(reSigned.event as { s: string }).s = '2';
 		}).toThrow(TypeError);
 	});
 
@@ -215,7 +216,7 @@ describe('createRotationEvent', () => {
 			const freshNextSeed = fillSeed(0x80 + i);
 			const newCurrent = keyPairFromSeed(newCurrentSeed);
 			const fresh = keyPairFromSeed(freshNextSeed);
-			const r = createRotationEvent({
+			const r = rotateSigned({
 				state,
 				newCurrentKeyPair: newCurrent,
 				nextPublicKey: fresh.publicKey,

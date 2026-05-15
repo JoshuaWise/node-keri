@@ -31,7 +31,7 @@ describe('verifySignatureWithDid — accepts a valid signature', () => {
 		expect(
 			verifySignatureWithDid({
 				did: id.did,
-				kel: [id.inceptionEvent],
+				kel: id.inceptionEvent,
 				payload: PAYLOAD,
 				signature,
 			})
@@ -45,7 +45,7 @@ describe('verifySignatureWithDid — accepts a valid signature', () => {
 			currentPrivateKey: id.nextKeyPair.privateKey,
 			nextKeyPair: K2(),
 		});
-		const kel = [id.inceptionEvent, rotation.rotationEvent];
+		const kel = id.inceptionEvent + rotation.rotationEvent;
 
 		const byNewKey = encodeSignatureEd25519(sign(id.nextKeyPair.privateKey, PAYLOAD));
 		expect(
@@ -80,7 +80,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: id.did,
-				kel: [id.inceptionEvent],
+				kel: id.inceptionEvent,
 				payload: utf8Encode('a different message'),
 				signature,
 			})
@@ -96,7 +96,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: id.did,
-				kel: [id.inceptionEvent],
+				kel: id.inceptionEvent,
 				payload: PAYLOAD,
 				signature: encodeSignatureEd25519(raw),
 			})
@@ -108,7 +108,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: id.did,
-				kel: [id.inceptionEvent],
+				kel: id.inceptionEvent,
 				payload: PAYLOAD,
 				signature: 'not-a-cesr-signature' as never,
 			})
@@ -127,7 +127,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: idB.did,
-				kel: [idA.inceptionEvent],
+				kel: idA.inceptionEvent,
 				payload: PAYLOAD,
 				signature,
 			})
@@ -142,7 +142,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: 'did:web:example.com' as never,
-				kel: [id.inceptionEvent],
+				kel: id.inceptionEvent,
 				payload: PAYLOAD,
 				signature,
 			})
@@ -157,7 +157,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		expect(
 			verifySignatureWithDid({
 				did: id.did,
-				kel: [],
+				kel: '',
 				payload: PAYLOAD,
 				signature,
 			})
@@ -170,7 +170,7 @@ describe('verifySignatureWithDid — argument contract', () => {
 	const signature = encodeSignatureEd25519(sign(id.currentKeyPair.privateKey, PAYLOAD));
 	const base = {
 		did: id.did,
-		kel: [id.inceptionEvent],
+		kel: id.inceptionEvent,
 		payload: PAYLOAD,
 		signature,
 	};
@@ -185,7 +185,7 @@ describe('verifySignatureWithDid — argument contract', () => {
 		);
 	});
 
-	test('throws when kel is not an array', () => {
+	test('throws when kel is not a string', () => {
 		expect(() => verifySignatureWithDid({ ...base, kel: {} as never })).toThrow(
 			InvalidArgumentError
 		);

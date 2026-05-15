@@ -20,7 +20,8 @@ import { aidFromSaid, formatDidKeri } from '../did/did-keri';
 import { KeriState } from '../kel/state';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
-import { InceptionEvent, SignedKeriEvent } from './types';
+import { encodeEventFrame } from './stream';
+import { InceptionEvent } from './types';
 
 export interface CreateInceptionInput {
 	/** Current keypair: its public half is disclosed and its private half signs. */
@@ -36,7 +37,8 @@ export interface CreateInceptionInput {
 }
 
 export interface CreateInceptionResult {
-	readonly signedEvent: SignedKeriEvent;
+	/** The signed inception event, as a CESR stream frame (the wire form). */
+	readonly event: string;
 	readonly state: KeriState;
 }
 
@@ -87,7 +89,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 		a: partial.a,
 	};
 
-	const signed = signEvent(event, input.currentKeyPair.privateKey);
+	const frame = encodeEventFrame(signEvent(event, input.currentKeyPair.privateKey));
 
 	const state: KeriState = {
 		aid,
@@ -100,7 +102,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 		eventType: 'icp',
 	};
 
-	return { signedEvent: signed, state };
+	return { event: frame, state };
 }
 
 // Re-export so that consumers building on top of inception don't have to

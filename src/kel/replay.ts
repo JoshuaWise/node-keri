@@ -22,14 +22,14 @@
 
 import { digestCodeOf } from '../cesr/codes';
 import { decodePublicKeyEd25519 } from '../cesr/decode';
-import { CesrDigest, CesrPublicKey, CesrSignature } from '../cesr/qualified';
+import { CesrDigest, CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
 import { publicKeyFromRaw } from '../crypto/keypair';
 import {
 	computeEventSaid,
 	deriveNextKeyCommitment,
 	saidPlaceholder,
 } from '../event/digest';
-import { SignedKeriEvent } from '../event/types';
+import { parseStreamResult } from '../event/stream';
 import { verifyEventSignature } from '../event/verify-signature';
 import { Aid, formatDidKeri } from '../did/did-keri';
 import {
@@ -59,13 +59,20 @@ function fail(error: KeriVerificationError): StepResult {
 }
 
 /**
- * Replay `events` and verify they form a valid KEL for `aid`.
+ * Replay the CESR stream `kel` and verify it forms a valid KEL for `aid`.
  *
- * `aid` is the identifier the caller expects this KEL to belong to; the
- * inception event must derive exactly that AID, otherwise the KEL — however
- * internally consistent — is for a different identifier.
+ * `kel` is the wire form — event frames concatenated. It is first parsed into
+ * signed events; a framing defect is reported as `MALFORMED_STREAM` before any
+ * semantic check runs. `aid` is the identifier the caller expects this KEL to
+ * belong to; the inception event must derive exactly that AID, otherwise the
+ * KEL — however internally consistent — is for a different identifier.
  */
-export function replayKel(aid: Aid, events: readonly SignedKeriEvent[]): VerifyKelResult {
+export function replayKel(aid: Aid, kel: string): VerifyKelResult {
+	const parsed = parseStreamResult(kel);
+	if (!parsed.ok) {
+		return fail({ code: 'MALFORMED_STREAM', message: parsed.message });
+	}
+	const events = parsed.events;
 	if (events.length === 0) {
 		return fail({ code: 'EMPTY_KEL' });
 	}
@@ -113,7 +120,7 @@ export function replayKel(aid: Aid, events: readonly SignedKeriEvent[]): VerifyK
 function readWrapper(signed: unknown):
 	| {
 			ok: true;
-			value: { event: Record<string, unknown>; signature: CesrSignature };
+			value: { event: Record<string, unknown>; signature: CesrIndexedSignature };
 	  }
 	| { ok: false; error: KeriVerificationError } {
 	if (!isRecord(signed)) {
@@ -145,7 +152,7 @@ function readWrapper(signed: unknown):
 	if (sigError) return { ok: false, error: sigError };
 	return {
 		ok: true,
-		value: { event, signature: signatures[0] as CesrSignature },
+		value: { event, signature: signatures[0] as CesrIndexedSignature },
 	};
 }
 
@@ -153,7 +160,7 @@ function readWrapper(signed: unknown):
 function applyInception(
 	aid: Aid,
 	event: Record<string, unknown>,
-	signature: CesrSignature
+	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInceptionShape(event);
 	if (!shape.ok) return shape;
@@ -247,7 +254,7 @@ function applyInception(
 function applyRotation(
 	state: KeriState,
 	event: Record<string, unknown>,
-	signature: CesrSignature
+	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateRotationShape(event);
 	if (!shape.ok) return shape;
@@ -356,7 +363,7 @@ function applyRotation(
 function applyInteraction(
 	state: KeriState,
 	event: Record<string, unknown>,
-	signature: CesrSignature
+	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInteractionShape(event);
 	if (!shape.ok) return shape;

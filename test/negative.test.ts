@@ -21,12 +21,14 @@ import {
 import { createDidDocument } from '../src/did/document';
 import { formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { resolveDid } from '../src/did/resolver';
+import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
 import {
 	CanonicalJsonError,
 	InvalidArgumentError,
 	MalformedInputError,
 } from '../src/profile/errors';
+import { frameKel } from './kel-stream';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
@@ -38,6 +40,11 @@ function sample() {
 		currentKeyPair: keyPairFromSeed(fillSeed(0x80)),
 		nextKeyPair: keyPairFromSeed(fillSeed(0x81)),
 	});
+}
+
+/** The parsed (in-memory) inception event of a `sample()`-style identifier. */
+function inceptionOf(id: ReturnType<typeof sample>): SignedKeriEvent {
+	return parseSignedEvent(id.inceptionEvent);
 }
 
 /** Clone a signed event, replacing fields of the inner event object. */
@@ -91,17 +98,17 @@ describe('negative — verifyKel argument contract', () => {
 	});
 
 	test('throws when aid is missing', () => {
-		expect(() => verifyKel({ events: [] } as never)).toThrow(InvalidArgumentError);
+		expect(() => verifyKel({ kel: '' } as never)).toThrow(InvalidArgumentError);
 	});
 
-	test('throws when events is not an array', () => {
-		expect(() => verifyKel({ aid: sample().aid, events: {} as never })).toThrow(
+	test('throws when kel is not a string', () => {
+		expect(() => verifyKel({ aid: sample().aid, kel: {} as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('returns EMPTY_KEL (not a throw) for an empty log', () => {
-		const result = verifyKel({ aid: sample().aid, events: [] });
+		const result = verifyKel({ aid: sample().aid, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('EMPTY_KEL');
@@ -113,14 +120,14 @@ describe('negative — resolveDid', () => {
 		expect(() => resolveDid(null as never)).toThrow(InvalidArgumentError);
 	});
 
-	test('throws when kel is not an array', () => {
-		expect(() => resolveDid({ did: sample().did, kel: 'nope' as never })).toThrow(
+	test('throws when kel is not a string', () => {
+		expect(() => resolveDid({ did: sample().did, kel: 123 as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('returns INVALID_DID (not a throw) for a malformed DID', () => {
-		const result = resolveDid({ did: 'did:web:x' as never, kel: [] });
+		const result = resolveDid({ did: 'did:web:x' as never, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('INVALID_DID');
@@ -204,7 +211,7 @@ describe('negative — profile boundary fails closed', () => {
 	// so the diagnosis is the specific UNSUPPORTED_FEATURE — not a generic
 	// digest mismatch.
 	function expectUnsupported(event: SignedKeriEvent, aid = sample().aid) {
-		const result = verifyKel({ aid, events: [event] });
+		const result = verifyKel({ aid, kel: frameKel([event]) });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -212,34 +219,35 @@ describe('negative — profile boundary fails closed', () => {
 
 	test('rejects a non-empty witness list', () => {
 		const id = sample();
-		expectUnsupported(patchEvent(id.inceptionEvent, { b: ['DwitnessAID'] }), id.aid);
+		expectUnsupported(patchEvent(inceptionOf(id), { b: ['DwitnessAID'] }), id.aid);
 	});
 
 	test('rejects a signing threshold other than 1', () => {
 		const id = sample();
-		expectUnsupported(patchEvent(id.inceptionEvent, { kt: '2' }), id.aid);
+		expectUnsupported(patchEvent(inceptionOf(id), { kt: '2' }), id.aid);
 	});
 
 	test('rejects a non-empty configuration trait list', () => {
 		const id = sample();
-		expectUnsupported(patchEvent(id.inceptionEvent, { c: ['EO'] }), id.aid);
+		expectUnsupported(patchEvent(inceptionOf(id), { c: ['EO'] }), id.aid);
 	});
 
 	test('rejects a multisig (two-key) signing list', () => {
 		const id = sample();
-		const key = (id.inceptionEvent.event as { k: readonly string[] }).k[0];
-		expectUnsupported(patchEvent(id.inceptionEvent, { k: [key, key] }), id.aid);
+		const inception = inceptionOf(id);
+		const key = (inception.event as { k: readonly string[] }).k[0];
+		expectUnsupported(patchEvent(inception, { k: [key, key] }), id.aid);
 	});
 
 	test('rejects an unknown event field', () => {
 		const id = sample();
-		expectUnsupported(patchEvent(id.inceptionEvent, { extra: 'x' }), id.aid);
+		expectUnsupported(patchEvent(inceptionOf(id), { extra: 'x' }), id.aid);
 	});
 
 	test('rejects an event with zero signatures', () => {
 		const id = sample();
 		const event: SignedKeriEvent = {
-			event: id.inceptionEvent.event,
+			event: inceptionOf(id).event,
 			signatures: [] as never,
 		};
 		expectUnsupported(event, id.aid);
@@ -247,10 +255,10 @@ describe('negative — profile boundary fails closed', () => {
 
 	test('rejects an event with two signatures', () => {
 		const id = sample();
-		const sig = id.inceptionEvent.signatures[0];
+		const inception = inceptionOf(id);
 		const event: SignedKeriEvent = {
-			event: id.inceptionEvent.event,
-			signatures: [sig, sig] as never,
+			event: inception.event,
+			signatures: [inception.signatures[0], inception.signatures[0]] as never,
 		};
 		expectUnsupported(event, id.aid);
 	});

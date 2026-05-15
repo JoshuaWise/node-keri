@@ -12,6 +12,11 @@
  * to install it into the project-relative `./keripy` virtualenv. When it has
  * not been provisioned this whole suite is skipped.
  *
+ * Wire form: a KEL is a CESR stream — each event's JSON followed by a `-A`
+ * controller-signature counter and an indexed signature ("Siger"). node-keri
+ * and keripy both produce and consume exactly that form, so a KEL crosses the
+ * bridge as a single string with no per-event wrapper.
+ *
  * Profile note: node-keri's "KERI Direct JSON Profile v1" uses SHA2-256 (CESR
  * code `I`) for both the event SAID `d` and the identifier prefix `i`, so an
  * inception event has `d == i`. keripy defaults its SAID to Blake3-256, so the
@@ -29,8 +34,8 @@ import { sign } from '../src/crypto/ed25519';
 import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid } from '../src/did/did-keri';
+import { parseKel } from '../src/event/stream';
 import { utf8Encode } from '../src/bytes/utf8';
-import type { SignedKeriEvent } from '../src/event/types';
 import type { CesrSignature } from '../src/cesr/qualified';
 import {
 	keripyAvailable,
@@ -39,7 +44,6 @@ import {
 	keripyVerifyKel,
 	keripySign,
 	keripyVerifySig,
-	type BridgeKelEntry,
 } from './interop/bridge';
 
 /**
@@ -77,15 +81,11 @@ function seedKeyPair(n: number) {
 /** Anchor payload for the interaction event, identical on both sides. */
 const ANCHOR = { kind: 'announce', ref: 'interop' };
 
-/** A node-keri `SignedKeriEvent` as the plain JSON the bridge consumes. */
-function toBridgeEntry(signed: SignedKeriEvent): BridgeKelEntry {
-	return JSON.parse(JSON.stringify(signed)) as BridgeKelEntry;
-}
-
 /**
  * Build the shared four-event KEL with node-keri: inception, rotation,
  * interaction, rotation — sequence numbers 0..3. keripy's `gen-kel` builds the
- * structurally identical log from the same seeds and anchor.
+ * structurally identical log from the same seeds and anchor. The KEL is the
+ * four wire-form event frames concatenated into one CESR stream.
  */
 function buildNodeKeriKel() {
 	const [k0, k1, k2, k3] = SEEDS.map(seedKeyPair);
@@ -107,22 +107,21 @@ function buildNodeKeriKel() {
 		nextKeyPair: k3!,
 	});
 
-	const events: SignedKeriEvent[] = [
-		icp.inceptionEvent,
-		rot1.rotationEvent,
-		ixn.interactionEvent,
-		rot2.rotationEvent,
-	];
-	return { did: icp.did, aid: icp.aid, events, finalState: rot2.state };
+	const kel =
+		icp.inceptionEvent
+		+ rot1.rotationEvent
+		+ ixn.interactionEvent
+		+ rot2.rotationEvent;
+	return { did: icp.did, aid: icp.aid, kel, finalState: rot2.state };
 }
 
 describeInterop('keripy interop: AIDs', () => {
 	test('an AID minted by node-keri is re-derived by keripy from its KEL', () => {
-		const { aid, events } = buildNodeKeriKel();
+		const { aid, kel } = buildNodeKeriKel();
 
 		// keripy independently derives the prefix from the inception event it
 		// is handed. Re-deriving the same AID is exactly "validating" it.
-		const result = keripyVerifyKel(aid, events.map(toBridgeEntry));
+		const result = keripyVerifyKel(aid, kel);
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -138,10 +137,7 @@ describeInterop('keripy interop: AIDs', () => {
 		expect(parsed.aid).toBe(generated.aid);
 
 		// ...and replaying keripy's KEL re-derives the very same AID.
-		const result = verifyKel({
-			aid: parsed.aid,
-			events: generated.kel as unknown as SignedKeriEvent[],
-		});
+		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.aid).toBe(generated.aid);
@@ -151,9 +147,9 @@ describeInterop('keripy interop: AIDs', () => {
 
 describeInterop('keripy interop: KELs', () => {
 	test('a node-keri KEL (icp, rot, ixn, rot) is accepted by keripy', () => {
-		const { aid, events, finalState } = buildNodeKeriKel();
+		const { aid, kel, finalState } = buildNodeKeriKel();
 
-		const result = keripyVerifyKel(aid, events.map(toBridgeEntry));
+		const result = keripyVerifyKel(aid, kel);
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -167,16 +163,17 @@ describeInterop('keripy interop: KELs', () => {
 
 	test('a keripy KEL (icp, rot, ixn, rot) is accepted by node-keri', () => {
 		const generated = keripyGenKel(SEEDS, ANCHOR);
-		expect(generated.kel).toHaveLength(4);
+		const events = parseKel(generated.kel);
+		expect(events).toHaveLength(4);
 
 		const result = verifyKel({
 			aid: generated.aid as unknown as Aid,
-			events: generated.kel as unknown as SignedKeriEvent[],
+			kel: generated.kel,
 		});
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			const lastEvent = generated.kel[generated.kel.length - 1]!.event;
+			const lastEvent = events[events.length - 1]!.event;
 			expect(result.state.sequenceNumber).toBe(3);
 			expect(result.state.lastEventDigest).toBe(lastEvent.d as string);
 			// The final rotation revealed seed 64; that is the current key.
@@ -186,14 +183,15 @@ describeInterop('keripy interop: KELs', () => {
 		}
 	});
 
-	test('node-keri and keripy produce byte-identical signed events', () => {
+	test('node-keri and keripy produce byte-identical signed KEL streams', () => {
 		// The strongest interop statement: from the same seeds and anchor, the
-		// two implementations independently produce the same event bytes AND
-		// the same (deterministic Ed25519) signatures.
-		const { events } = buildNodeKeriKel();
+		// two implementations independently produce the same CESR stream —
+		// identical event bytes AND identical (deterministic Ed25519) indexed
+		// signatures behind identical `-A` counters.
+		const { kel } = buildNodeKeriKel();
 		const generated = keripyGenKel(SEEDS, ANCHOR);
 
-		expect(events.map(toBridgeEntry)).toEqual(generated.kel);
+		expect(kel).toEqual(generated.kel);
 	});
 });
 
@@ -235,7 +233,7 @@ describeInterop('keripy interop: signed messages', () => {
 
 		const ok = verifySignatureWithDid({
 			did: id.did,
-			kel: [id.inceptionEvent],
+			kel: id.inceptionEvent,
 			payload: message,
 			signature: signed.signature as CesrSignature,
 		});
@@ -252,7 +250,7 @@ describeInterop('keripy interop: signed messages', () => {
 		const tampered = utf8Encode('a different payload');
 		const ok = verifySignatureWithDid({
 			did: id.did,
-			kel: [id.inceptionEvent],
+			kel: id.inceptionEvent,
 			payload: tampered,
 			signature: signed.signature as CesrSignature,
 		});

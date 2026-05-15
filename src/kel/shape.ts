@@ -18,8 +18,8 @@
 
 import {
 	decodeDigest,
+	decodeIndexedSignatureEd25519,
 	decodePublicKeyEd25519,
-	decodeSignatureEd25519,
 } from '../cesr/decode';
 import {
 	KeriVerificationError,
@@ -92,9 +92,32 @@ export function checkDigest(value: unknown): KeriVerificationError | null {
 	}
 }
 
-/** A field that must be a CESR-qualified Ed25519 signature (code `0B`). */
+/**
+ * A controller signature: a CESR-qualified *indexed* Ed25519 signature (a
+ * "Siger", code `A`) whose index points at key 0. This profile is single-key,
+ * so the only valid index is 0 — any other index references a key position
+ * that does not exist and is rejected as an unsupported (multi-key) feature.
+ */
 export function checkSignature(value: unknown): KeriVerificationError | null {
-	return checkCesr(decodeSignatureEd25519, value);
+	if (typeof value !== 'string') {
+		return { code: 'INVALID_CESR_CODE', value: describe(value) };
+	}
+	let index: number;
+	try {
+		index = decodeIndexedSignatureEd25519(value).index;
+	} catch (err) {
+		if (err instanceof MalformedInputError) {
+			return { code: 'INVALID_CESR_CODE', value };
+		}
+		throw err;
+	}
+	if (index !== 0) {
+		return {
+			code: 'UNSUPPORTED_FEATURE',
+			feature: `signature index must be 0, got ${index}`,
+		};
+	}
+	return null;
 }
 
 /**

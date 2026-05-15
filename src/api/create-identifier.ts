@@ -20,7 +20,6 @@ import {
 } from '../crypto/keypair';
 import { Aid, DidKeri } from '../did/did-keri';
 import { createInceptionEvent } from '../event/inception';
-import { SignedKeriEvent } from '../event/types';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
@@ -45,7 +44,8 @@ export interface CreateIdentifierResult {
 	readonly currentKeyPair: KeriKeyPair;
 	/** The pre-rotation keypair — its private half is needed to rotate later. */
 	readonly nextKeyPair: KeriKeyPair;
-	readonly inceptionEvent: SignedKeriEvent;
+	/** The signed inception event, as a CESR stream frame — the KEL's wire form. */
+	readonly inceptionEvent: string;
 	/** Replay-derived initial state (sequence 0). */
 	readonly state: KeriState;
 }
@@ -87,7 +87,7 @@ export function createIdentifier(
 		);
 	}
 
-	const { signedEvent, state } = createInceptionEvent({
+	const { event, state } = createInceptionEvent({
 		currentKeyPair,
 		nextPublicKey: nextKeyPair.publicKey,
 		digestCode: input.digestCode,
@@ -98,7 +98,7 @@ export function createIdentifier(
 		aid: state.aid,
 		currentKeyPair,
 		nextKeyPair,
-		inceptionEvent: signedEvent,
+		inceptionEvent: event,
 		state,
 	};
 }

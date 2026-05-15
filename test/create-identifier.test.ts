@@ -2,6 +2,7 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { generateKeyPair, keyPairFromSeed } from '../src/crypto/keypair';
 import { formatDidKeri } from '../src/did/did-keri';
+import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
 
 function fillSeed(byte: number): Uint8Array {
@@ -23,8 +24,9 @@ describe('createIdentifier — with supplied keypairs', () => {
 		expect(result.did).toBe(result.state.did);
 		expect(result.currentKeyPair).toBe(currentKeyPair);
 		expect(result.nextKeyPair).toBe(nextKeyPair);
-		expect(result.inceptionEvent.event.t).toBe('icp');
-		expect(result.inceptionEvent.event.s).toBe('0');
+		const inception = parseSignedEvent(result.inceptionEvent);
+		expect(inception.event.t).toBe('icp');
+		expect(inception.event.s).toBe('0');
 		expect(result.state.sequenceNumber).toBe(0);
 	});
 
@@ -48,7 +50,7 @@ describe('createIdentifier — with supplied keypairs', () => {
 		});
 		const verified = verifyKel({
 			aid: result.aid,
-			events: [result.inceptionEvent],
+			kel: result.inceptionEvent,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -64,7 +66,7 @@ describe('createIdentifier — generated keypairs', () => {
 		expect(result.nextKeyPair.publicKey.raw).toHaveLength(32);
 		const verified = verifyKel({
 			aid: result.aid,
-			events: [result.inceptionEvent],
+			kel: result.inceptionEvent,
 		});
 		expect(verified.ok).toBe(true);
 	});

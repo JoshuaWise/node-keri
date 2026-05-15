@@ -3,6 +3,7 @@ import { interactIdentifier } from '../src/api/interact-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { keyPairFromSeed } from '../src/crypto/keypair';
+import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
 
 function fillSeed(byte: number): Uint8Array {
@@ -26,8 +27,9 @@ describe('interactIdentifier', () => {
 			data: [{ capabilityHash: 'abc' }],
 		});
 
-		expect(ixn.interactionEvent.event.t).toBe('ixn');
-		expect(ixn.interactionEvent.event.s).toBe('1');
+		const ixnEvent = parseSignedEvent(ixn.interactionEvent).event;
+		expect(ixnEvent.t).toBe('ixn');
+		expect(ixnEvent.s).toBe('1');
 		expect(ixn.state.sequenceNumber).toBe(1);
 		expect(ixn.state.aid).toBe(id.aid);
 		// An interaction does not rotate keys.
@@ -41,7 +43,9 @@ describe('interactIdentifier', () => {
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
 		});
-		expect((ixn.interactionEvent.event as { a: readonly unknown[] }).a).toEqual([]);
+		expect(
+			(parseSignedEvent(ixn.interactionEvent).event as { a: readonly unknown[] }).a
+		).toEqual([]);
 	});
 
 	test('the KEL with an interaction verifies end to end', () => {
@@ -53,7 +57,7 @@ describe('interactIdentifier', () => {
 		});
 		const verified = verifyKel({
 			aid: id.aid,
-			events: [id.inceptionEvent, ixn.interactionEvent],
+			kel: id.inceptionEvent + ixn.interactionEvent,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -73,10 +77,10 @@ describe('interactIdentifier', () => {
 			currentPrivateKey: id.nextKeyPair.privateKey,
 			data: [{ step: 2 }],
 		});
-		expect(ixn.interactionEvent.event.s).toBe('2');
+		expect(parseSignedEvent(ixn.interactionEvent).event.s).toBe('2');
 		const verified = verifyKel({
 			aid: id.aid,
-			events: [id.inceptionEvent, rot.rotationEvent, ixn.interactionEvent],
+			kel: id.inceptionEvent + rot.rotationEvent + ixn.interactionEvent,
 		});
 		expect(verified.ok).toBe(true);
 	});

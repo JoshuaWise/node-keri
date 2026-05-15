@@ -11,7 +11,6 @@
 
 import { KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
 import { createInteractionEvent } from '../event/interaction';
-import { SignedKeriEvent } from '../event/types';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
@@ -33,7 +32,8 @@ export interface InteractIdentifierInput {
 }
 
 export interface InteractIdentifierResult {
-	readonly interactionEvent: SignedKeriEvent;
+	/** The signed interaction event, as a CESR stream frame (the wire form). */
+	readonly interactionEvent: string;
 	/** Replay-equivalent state after applying the interaction. */
 	readonly state: KeriState;
 }
@@ -51,12 +51,12 @@ export function interactIdentifier(
 	// `state.currentPublicKey`.
 	const currentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
 
-	const { signedEvent, state } = createInteractionEvent({
+	const { event, state } = createInteractionEvent({
 		state: input.state,
 		currentKeyPair,
 		data: input.data,
 		digestCode: input.digestCode,
 	});
 
-	return { interactionEvent: signedEvent, state };
+	return { interactionEvent: event, state };
 }

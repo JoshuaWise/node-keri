@@ -20,18 +20,22 @@ import { CesrSignature } from '../cesr/qualified';
 import { verify } from '../crypto/ed25519';
 import { publicKeyFromRaw } from '../crypto/keypair';
 import { DidKeri, parseDidKeri } from '../did/did-keri';
-import { SignedKeriEvent } from '../event/types';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 import { verifyKel } from './verify-kel';
 
 export interface VerifySignatureWithDidInput {
 	/** The signer's `did:keri` DID. */
 	readonly did: DidKeri;
-	/** The signer's full key event log, inception first. */
-	readonly kel: readonly SignedKeriEvent[];
+	/** The signer's full key event log, as a CESR stream (inception first). */
+	readonly kel: string;
 	/** The exact bytes that were signed. */
 	readonly payload: Uint8Array;
-	/** A detached CESR-qualified Ed25519 signature over `payload`. */
+	/**
+	 * A detached CESR-qualified Ed25519 signature over `payload`. This is a
+	 * non-indexed signature (a "Cigar", code `0B`) — the form for signatures
+	 * over arbitrary payloads, as opposed to the indexed signatures attached
+	 * to KEL events.
+	 */
 	readonly signature: CesrSignature;
 }
 
@@ -46,8 +50,8 @@ export function verifySignatureWithDid(input: VerifySignatureWithDidInput): bool
 	if (typeof input.did !== 'string') {
 		throw new InvalidArgumentError('verifySignatureWithDid requires a `did` string');
 	}
-	if (!Array.isArray(input.kel)) {
-		throw new InvalidArgumentError('verifySignatureWithDid requires a `kel` array');
+	if (typeof input.kel !== 'string') {
+		throw new InvalidArgumentError('verifySignatureWithDid requires a `kel` string');
 	}
 	if (!(input.payload instanceof Uint8Array)) {
 		throw new InvalidArgumentError(
@@ -72,7 +76,7 @@ export function verifySignatureWithDid(input: VerifySignatureWithDidInput): bool
 
 	// The KEL must verify *and* belong to this DID's identifier. `verifyKel`
 	// enforces the AID binding, so a KEL for some other identifier fails here.
-	const verification = verifyKel({ aid, events: input.kel });
+	const verification = verifyKel({ aid, kel: input.kel });
 	if (!verification.ok) return false;
 
 	// A structurally malformed signature (wrong CESR code or length) is also

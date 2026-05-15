@@ -136,17 +136,12 @@ export function keripyUnavailableReason(): string {
 	return keripyAvailable() ? '' : (resolutionError?.message ?? 'unknown');
 }
 
-/** A KEL entry in node-keri's `SignedKeriEvent` JSON shape. */
-export interface BridgeKelEntry {
-	event: Record<string, unknown>;
-	signatures: string[];
-}
-
 /** Response of the `gen-kel` bridge command. */
 export interface GenKelResult {
 	aid: string;
 	did: string;
-	kel: BridgeKelEntry[];
+	/** The KEL as a CESR stream — the same wire form node-keri produces. */
+	kel: string;
 }
 
 /** Response of the `verify-kel` bridge command. */
@@ -202,13 +197,13 @@ export function runBridge<T>(command: string, input: unknown): T {
 	}
 }
 
-/** Generate a KEL with keripy and return it in node-keri's JSON shape. */
+/** Generate a KEL with keripy and return it as a CESR stream. */
 export function keripyGenKel(seeds: number[], anchor?: unknown): GenKelResult {
 	return runBridge<GenKelResult>('gen-kel', { seeds, anchor });
 }
 
-/** Replay a node-keri KEL through keripy's verifier. */
-export function keripyVerifyKel(aid: string, kel: BridgeKelEntry[]): VerifyKelResult {
+/** Replay a node-keri CESR-stream KEL through keripy's verifier. */
+export function keripyVerifyKel(aid: string, kel: string): VerifyKelResult {
 	return runBridge<VerifyKelResult>('verify-kel', { aid, kel });
 }
 

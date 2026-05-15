@@ -7,7 +7,7 @@
  * binds the entire event including its SAID.
  */
 
-import { encodeSignatureEd25519 } from '../cesr/encode';
+import { encodeIndexedSignatureEd25519 } from '../cesr/encode';
 import { sign } from '../crypto/ed25519';
 import { KeriPrivateKey } from '../crypto/keypair';
 import { canonicalizeJson } from './canonical-json';
@@ -28,6 +28,11 @@ export function serializeEvent(event: KeriEvent): Uint8Array {
 /**
  * Sign `event` with `privateKey` and return a SignedKeriEvent.
  *
+ * The signature is an *indexed* signature (a "Siger") at index 0 — KERI
+ * attaches controller signatures on KEL events in indexed form, and this
+ * single-key profile has exactly one key, at position 0 of the event's `k`
+ * list.
+ *
  * The returned wrapper, its inner event, and its signatures array are all
  * frozen so that casual post-construction mutation (which would silently
  * invalidate the signature) is rejected at runtime. The readonly types
@@ -39,6 +44,6 @@ export function signEvent(event: KeriEvent, privateKey: KeriPrivateKey): SignedK
 	Object.freeze(event);
 	return Object.freeze({
 		event,
-		signatures: Object.freeze([encodeSignatureEd25519(sig)] as const),
+		signatures: Object.freeze([encodeIndexedSignatureEd25519(sig, 0)] as const),
 	});
 }

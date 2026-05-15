@@ -3,6 +3,7 @@ import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
+import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { SignedKeriEvent } from '../src/event/types';
 import { CesrPublicKey } from '../src/cesr/qualified';
@@ -38,7 +39,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			currentKeyPair: k0,
 			nextPublicKey: k1.publicKey,
 		});
-		events.push(icp.signedEvent);
+		events.push(parseSignedEvent(icp.event));
 		expectedSigner.push(encodePublicKeyEd25519(k0.publicKey.raw));
 
 		// 2. Interaction signed by k0 (no rotation yet).
@@ -47,7 +48,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			currentKeyPair: k0,
 			data: [{ kind: 'announce', payload: 'agent online' }],
 		});
-		events.push(ixn1.signedEvent);
+		events.push(parseSignedEvent(ixn1.event));
 		expectedSigner.push(encodePublicKeyEd25519(k0.publicKey.raw));
 
 		// 3. Rotate to k1; commits to k2 next.
@@ -56,7 +57,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			newCurrentKeyPair: k1,
 			nextPublicKey: k2.publicKey,
 		});
-		events.push(rot1.signedEvent);
+		events.push(parseSignedEvent(rot1.event));
 		expectedSigner.push(encodePublicKeyEd25519(k1.publicKey.raw));
 
 		// 4. Interaction signed by k1.
@@ -65,7 +66,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			currentKeyPair: k1,
 			data: [{ kind: 'attest', hash: 'I' + 'A'.repeat(43) }],
 		});
-		events.push(ixn2.signedEvent);
+		events.push(parseSignedEvent(ixn2.event));
 		expectedSigner.push(encodePublicKeyEd25519(k1.publicKey.raw));
 
 		// 5. Rotate to k2; commits to k3 next.
@@ -74,7 +75,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			newCurrentKeyPair: k2,
 			nextPublicKey: k3.publicKey,
 		});
-		events.push(rot2.signedEvent);
+		events.push(parseSignedEvent(rot2.event));
 		expectedSigner.push(encodePublicKeyEd25519(k2.publicKey.raw));
 
 		// Sequence numbers are dense and monotonic, AID is stable.
@@ -133,11 +134,12 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			expect(r.state.currentPublicKey).toBe(
 				encodePublicKeyEd25519(keys[i]!.publicKey.raw)
 			);
+			const signed = parseSignedEvent(r.event);
 			expect(
 				verifyEventSignature(
-					r.signedEvent.event,
+					signed.event,
 					encodePublicKeyEd25519(keys[i]!.publicKey.raw),
-					r.signedEvent.signatures[0]
+					signed.signatures[0]
 				)
 			).toBe(true);
 			state = r.state;

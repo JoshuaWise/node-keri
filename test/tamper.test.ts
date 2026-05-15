@@ -5,15 +5,21 @@
  * systematically mutated one field — or one structural property — at a time.
  * Every mutation must make `verifyKel` return `{ ok: false }`. `verifyKel`
  * must never *throw* for a tampered KEL: hostile input is expected input.
+ *
+ * The KEL is exchanged as a CESR stream, so a mutation is applied to the
+ * in-memory `SignedKeriEvent`s and then re-framed (`frameKel`) into the wire
+ * form `verifyKel` consumes.
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { createInteractionEvent } from '../src/event/interaction';
+import { parseSignedEvent } from '../src/event/stream';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { SignedKeriEvent } from '../src/event/types';
 import { Aid } from '../src/did/did-keri';
+import { frameKel, reframe } from './kel-stream';
 
 function fillSeed(byte: number): Uint8Array {
 	return new Uint8Array(32).fill(byte);
@@ -50,12 +56,14 @@ function buildKel() {
 		nextKeyPair: k3,
 	});
 
+	// The constructors return wire-form frames; parse them back so each event
+	// can be mutated as a structured `SignedKeriEvent` before re-framing.
 	const events: SignedKeriEvent[] = [
-		id.inceptionEvent,
-		ixn1.signedEvent,
-		rot1.rotationEvent,
-		ixn2.signedEvent,
-		rot2.rotationEvent,
+		parseSignedEvent(id.inceptionEvent),
+		parseSignedEvent(ixn1.event),
+		parseSignedEvent(rot1.rotationEvent),
+		parseSignedEvent(ixn2.event),
+		parseSignedEvent(rot2.rotationEvent),
 	];
 	return { aid: id.aid, events };
 }
@@ -86,11 +94,11 @@ function withReplaced(index: number, replacement: SignedKeriEvent) {
 	return { aid, events: tampered };
 }
 
-/** Assert that verifyKel rejects `events` as belonging to `aid`. */
-function expectRejected(aid: Aid, events: readonly SignedKeriEvent[]): void {
+/** Assert that verifyKel rejects the CESR stream `kel` as belonging to `aid`. */
+function expectRejected(aid: Aid, kel: string): void {
 	let result: ReturnType<typeof verifyKel>;
 	expect(() => {
-		result = verifyKel({ aid, events });
+		result = verifyKel({ aid, kel });
 	}).not.toThrow();
 	expect(result!.ok).toBe(false);
 }
@@ -100,7 +108,7 @@ const indices = [0, 1, 2, 3, 4];
 describe('tamper — the untampered KEL verifies', () => {
 	test('baseline: a clean five-event KEL is accepted', () => {
 		const { aid, events } = buildKel();
-		const result = verifyKel({ aid, events });
+		const result = verifyKel({ aid, kel: frameKel(events) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.state.sequenceNumber).toBe(4);
@@ -112,8 +120,12 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { d: mutateChar(events[i]!.event.d) }))
-				.events
+			frameKel(
+				withReplaced(
+					i,
+					patchEvent(events[i]!, { d: mutateChar(events[i]!.event.d) })
+				).events
+			)
 		);
 	});
 
@@ -121,31 +133,46 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { i: mutateChar(events[i]!.event.i) }))
-				.events
+			frameKel(
+				withReplaced(
+					i,
+					patchEvent(events[i]!, { i: mutateChar(events[i]!.event.i) })
+				).events
+			)
 		);
 	});
 
 	test.each(indices)('event %d: mutated version string `v`', (i) => {
 		const { aid, events } = buildKel();
-		expectRejected(
-			aid,
-			withReplaced(i, patchEvent(events[i]!, { v: mutateChar(events[i]!.event.v) }))
-				.events
+		// The version string is part of the frame's *framing*, so mutate it on
+		// the wire form directly: char 10 falls inside the `KERI10JSON` prefix,
+		// so the parser can no longer recognize the frame.
+		const frames = events.map((e) =>
+			reframe(e.event as unknown as Record<string, unknown>, e.signatures)
 		);
+		const f = frames[i]!;
+		frames[i] = f.slice(0, 10) + (f[10] === 'A' ? 'B' : 'A') + f.slice(11);
+		expectRejected(aid, frames.join(''));
 	});
 
 	test.each(indices)('event %d: wrong sequence number `s`', (i) => {
 		const { aid, events } = buildKel();
-		expectRejected(aid, withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events);
+		expectRejected(
+			aid,
+			frameKel(withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events)
+		);
 	});
 
 	test.each(indices)('event %d: mutated event type `t`', (i) => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { t: mutateChar(events[i]!.event.t) }))
-				.events
+			frameKel(
+				withReplaced(
+					i,
+					patchEvent(events[i]!, { t: mutateChar(events[i]!.event.t) })
+				).events
+			)
 		);
 	});
 
@@ -155,7 +182,9 @@ describe('tamper — single-field mutation of each event', () => {
 		const event = events[i]!.event as { p: string };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { p: mutateChar(event.p) })).events
+			frameKel(
+				withReplaced(i, patchEvent(events[i]!, { p: mutateChar(event.p) })).events
+			)
 		);
 	});
 
@@ -163,7 +192,7 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		const tampered = patchEvent(events[i]!, {});
 		tampered.signatures = [mutateChar(events[i]!.signatures[0]) as never];
-		expectRejected(aid, withReplaced(i, tampered).events);
+		expectRejected(aid, frameKel(withReplaced(i, tampered).events));
 	});
 });
 
@@ -174,7 +203,10 @@ describe('tamper — mutation of key material', () => {
 		const event = events[i]!.event as { k: readonly string[] };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { k: [mutateChar(event.k[0]!)] })).events
+			frameKel(
+				withReplaced(i, patchEvent(events[i]!, { k: [mutateChar(event.k[0]!)] }))
+					.events
+			)
 		);
 	});
 
@@ -183,7 +215,10 @@ describe('tamper — mutation of key material', () => {
 		const event = events[i]!.event as { n: readonly string[] };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { n: [mutateChar(event.n[0]!)] })).events
+			frameKel(
+				withReplaced(i, patchEvent(events[i]!, { n: [mutateChar(event.n[0]!)] }))
+					.events
+			)
 		);
 	});
 
@@ -194,7 +229,7 @@ describe('tamper — mutation of key material', () => {
 		const foreignKey = (events[4]!.event as { k: readonly string[] }).k;
 		expectRejected(
 			aid,
-			withReplaced(2, patchEvent(events[2]!, { k: foreignKey })).events
+			frameKel(withReplaced(2, patchEvent(events[2]!, { k: foreignKey })).events)
 		);
 	});
 });
@@ -204,7 +239,9 @@ describe('tamper — mutation of anchored interaction data', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i]!, { a: [{ step: 999 }] })).events
+			frameKel(
+				withReplaced(i, patchEvent(events[i]!, { a: [{ step: 999 }] })).events
+			)
 		);
 	});
 });
@@ -214,24 +251,24 @@ describe('tamper — structural mutation of the log', () => {
 		const { aid, events } = buildKel();
 		const reordered = events.slice();
 		[reordered[1], reordered[2]] = [reordered[2]!, reordered[1]!];
-		expectRejected(aid, reordered);
+		expectRejected(aid, frameKel(reordered));
 	});
 
 	test('dropping an interior event fails', () => {
 		const { aid, events } = buildKel();
 		const dropped = [...events.slice(0, 2), ...events.slice(3)];
-		expectRejected(aid, dropped);
+		expectRejected(aid, frameKel(dropped));
 	});
 
 	test('duplicating an event fails', () => {
 		const { aid, events } = buildKel();
 		const duplicated = [...events.slice(0, 3), events[2]!, ...events.slice(3)];
-		expectRejected(aid, duplicated);
+		expectRejected(aid, frameKel(duplicated));
 	});
 
 	test('a KEL that does not start with inception fails', () => {
 		const { aid, events } = buildKel();
-		expectRejected(aid, events.slice(1));
+		expectRejected(aid, frameKel(events.slice(1)));
 	});
 
 	test("appending another identifier's event fails", () => {
@@ -240,7 +277,7 @@ describe('tamper — structural mutation of the log', () => {
 			currentKeyPair: keyPairFromSeed(fillSeed(0x70)),
 			nextKeyPair: keyPairFromSeed(fillSeed(0x71)),
 		});
-		expectRejected(aid, [...events, intruder.inceptionEvent]);
+		expectRejected(aid, frameKel(events) + intruder.inceptionEvent);
 	});
 
 	test('verifying the KEL against the wrong AID fails', () => {
@@ -249,33 +286,36 @@ describe('tamper — structural mutation of the log', () => {
 			currentKeyPair: keyPairFromSeed(fillSeed(0x72)),
 			nextKeyPair: keyPairFromSeed(fillSeed(0x73)),
 		});
-		expectRejected(other.aid, events);
+		expectRejected(other.aid, frameKel(events));
 	});
 
 	test('a truncated KEL still verifies as an earlier state', () => {
 		// Truncation is not tampering: a prefix of a valid KEL is itself a
 		// valid KEL describing an earlier point in the identifier's history.
 		const { aid, events } = buildKel();
-		const result = verifyKel({ aid, events: events.slice(0, 3) });
+		const result = verifyKel({ aid, kel: frameKel(events.slice(0, 3)) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.state.sequenceNumber).toBe(2);
 	});
 });
 
-describe('tamper — wrapper-level mutation', () => {
+describe('tamper — attachment-level mutation', () => {
 	test.each(indices)('event %d: zero signatures rejected', (i) => {
 		const { aid, events } = buildKel();
-		const stripped = { event: events[i]!.event, signatures: [] as never };
-		expectRejected(aid, withReplaced(i, stripped).events);
+		const stripped: SignedKeriEvent = {
+			event: events[i]!.event,
+			signatures: [] as never,
+		};
+		expectRejected(aid, frameKel(withReplaced(i, stripped).events));
 	});
 
 	test.each(indices)('event %d: two signatures rejected (multisig)', (i) => {
 		const { aid, events } = buildKel();
-		const doubled = {
+		const doubled: SignedKeriEvent = {
 			event: events[i]!.event,
 			signatures: [events[i]!.signatures[0], events[i]!.signatures[0]] as never,
 		};
-		expectRejected(aid, withReplaced(i, doubled).events);
+		expectRejected(aid, frameKel(withReplaced(i, doubled).events));
 	});
 });

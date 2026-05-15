@@ -12,7 +12,6 @@
  * `{ ok: false, error }` result the caller is expected to handle.
  */
 
-import { SignedKeriEvent } from '../event/types';
 import { Aid } from '../did/did-keri';
 import { InvalidArgumentError } from '../profile/errors';
 import { VerifyKelResult, replayKel } from '../kel/replay';
@@ -22,8 +21,12 @@ export type { VerifyKelResult } from '../kel/replay';
 export interface VerifyKelInput {
 	/** The identifier the caller expects this KEL to belong to. */
 	readonly aid: Aid;
-	/** The full key event log, inception first, in order. */
-	readonly events: readonly SignedKeriEvent[];
+	/**
+	 * The full key event log as a CESR stream — the event frames, inception
+	 * first, concatenated in order. Build one by joining the wire-form events
+	 * returned by `createIdentifier` / `rotateIdentifier` / `interactIdentifier`.
+	 */
+	readonly kel: string;
 }
 
 /**
@@ -40,8 +43,8 @@ export function verifyKel(input: VerifyKelInput): VerifyKelResult {
 	if (typeof input.aid !== 'string' || input.aid.length === 0) {
 		throw new InvalidArgumentError('verifyKel requires a non-empty `aid` string');
 	}
-	if (!Array.isArray(input.events)) {
-		throw new InvalidArgumentError('verifyKel requires an `events` array');
+	if (typeof input.kel !== 'string') {
+		throw new InvalidArgumentError('verifyKel requires a `kel` string');
 	}
-	return replayKel(input.aid, input.events);
+	return replayKel(input.aid, input.kel);
 }

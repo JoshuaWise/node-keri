@@ -16,7 +16,8 @@ import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
 import { computeEventSaid, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
-import { InteractionEvent, SignedKeriEvent } from './types';
+import { encodeEventFrame } from './stream';
+import { InteractionEvent } from './types';
 
 export interface CreateInteractionInput {
 	readonly state: KeriState;
@@ -38,7 +39,8 @@ export interface CreateInteractionInput {
 }
 
 export interface CreateInteractionResult {
-	readonly signedEvent: SignedKeriEvent;
+	/** The signed interaction event, as a CESR stream frame (the wire form). */
+	readonly event: string;
 	readonly state: KeriState;
 }
 
@@ -104,7 +106,7 @@ export function createInteractionEvent(
 		a: anchors,
 	};
 
-	const signed = signEvent(event, input.currentKeyPair.privateKey);
+	const frame = encodeEventFrame(signEvent(event, input.currentKeyPair.privateKey));
 
 	const newState: KeriState = {
 		aid: input.state.aid,
@@ -117,5 +119,5 @@ export function createInteractionEvent(
 		eventType: 'ixn',
 	};
 
-	return { signedEvent: signed, state: newState };
+	return { event: frame, state: newState };
 }
