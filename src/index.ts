@@ -1,8 +1,13 @@
-// Public surface up through Milestone 5. Higher-level entry points
-// (`createIdentifier`, `rotateIdentifier`) are added by later milestones;
-// what's exported here is the foundation, CESR primitives, the event
-// lifecycle building blocks, the KEL replay verifier, and the DID surface —
-// `did:keri` parsing, document generation, and local resolution.
+// Public API v1 — the stable surface of the KERI Direct JSON Profile.
+//
+// Three layers are exported: the foundation (bytes, crypto, CESR, canonical
+// JSON), the event lifecycle building blocks plus the KEL replay verifier,
+// and the high-level identifier API — `createIdentifier`, `rotateIdentifier`,
+// `createInteractionEvent`, `verifyKel`, the `did:keri` surface, and
+// `verifySignatureWithDid` for agent-to-agent message verification.
+//
+// See PROFILE.md for the conformance boundary and SECURITY.md for the trust
+// model and security invariants this surface enforces.
 
 export {
 	KeriError,
@@ -36,13 +41,16 @@ export { sha256 } from './crypto/hash';
 export {
 	generateKeyPair,
 	keyPairFromSeed,
+	keyPairFromPrivateKey,
 	publicKeyFromRaw,
 	exportPublicKeyRaw,
+	exportPublicKey,
 } from './crypto/keypair';
 export type {
 	KeriPublicKey,
 	KeriPrivateKey,
 	KeriKeyPair,
+	PublicKeyJwk,
 } from './crypto/keypair';
 export { sign, verify } from './crypto/ed25519';
 
@@ -58,11 +66,7 @@ export {
 	decodeSignatureEd25519,
 	decodeDigestSha256,
 } from './cesr/decode';
-export type {
-	CesrPublicKey,
-	CesrSignature,
-	CesrDigest,
-} from './cesr/qualified';
+export type { CesrPublicKey, CesrSignature, CesrDigest } from './cesr/qualified';
 
 export {
 	DID_KERI_PREFIX,
@@ -95,16 +99,10 @@ export { serializeEvent, signEvent } from './event/sign';
 export { verifyEventSignature } from './event/verify-signature';
 
 export { createInceptionEvent } from './event/inception';
-export type {
-	CreateInceptionInput,
-	CreateInceptionResult,
-} from './event/inception';
+export type { CreateInceptionInput, CreateInceptionResult } from './event/inception';
 
 export { createRotationEvent } from './event/rotation';
-export type {
-	CreateRotationInput,
-	CreateRotationResult,
-} from './event/rotation';
+export type { CreateRotationInput, CreateRotationResult } from './event/rotation';
 
 export { createInteractionEvent } from './event/interaction';
 export type {
@@ -112,8 +110,23 @@ export type {
 	CreateInteractionResult,
 } from './event/interaction';
 
+export { createIdentifier } from './api/create-identifier';
+export type {
+	CreateIdentifierInput,
+	CreateIdentifierResult,
+} from './api/create-identifier';
+
+export { rotateIdentifier } from './api/rotate-identifier';
+export type {
+	RotateIdentifierInput,
+	RotateIdentifierResult,
+} from './api/rotate-identifier';
+
 export { verifyKel } from './api/verify-kel';
 export type { VerifyKelInput, VerifyKelResult } from './api/verify-kel';
+
+export { verifySignatureWithDid } from './api/verify-signature-with-did';
+export type { VerifySignatureWithDidInput } from './api/verify-signature-with-did';
 
 export { createDidDocument } from './did/document';
 export type {

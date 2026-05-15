@@ -181,7 +181,7 @@ function createInteractionEvent(input: {
 
 Interaction events allow the identifier to anchor arbitrary state transitions or commitments without rotating keys.
 
-For your agent use case, this could anchor:
+For the agent use case, this could anchor:
 
 ```txt
 agent capability document hash
@@ -915,7 +915,7 @@ Flow:
 5. Library verifies message signature.
 ```
 
-That maps cleanly to your agent identity use case.
+That maps cleanly to the agent identity use case.
 
 ---
 
@@ -939,7 +939,7 @@ registry
 filesystem adapter
 ```
 
-That keeps the scope realistic while preserving the KERI property you actually need: **a replay-verifiable cryptographic identity lifecycle for agents.**
+That keeps the scope realistic while preserving the KERI property actually needed: **a replay-verifiable cryptographic identity lifecycle for agents.**
 
 [1]: https://trustoverip.github.io/kswg-keri-specification/?utm_source=chatgpt.com 'KERI specification'
 [2]: https://arxiv.org/abs/1907.02143?utm_source=chatgpt.com 'Key Event Receipt Infrastructure (KERI)'

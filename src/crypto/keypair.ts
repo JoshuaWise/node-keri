@@ -13,10 +13,7 @@ import {
 	SUPPORTED_KEY_ALGORITHM,
 	SupportedKeyAlgorithm,
 } from '../profile/constants';
-import {
-	InvalidArgumentError,
-	UnsupportedAlgorithmError,
-} from '../profile/errors';
+import { InvalidArgumentError, UnsupportedAlgorithmError } from '../profile/errors';
 
 /**
  * Opaque wrapper around a Node KeyObject for an Ed25519 public key.
@@ -50,8 +47,8 @@ export interface KeriKeyPair {
 // PKCS#8 ASN.1 DER prefix for an Ed25519 private key (RFC 8410). The
 // 32-byte seed follows immediately after this prefix.
 const ED25519_PKCS8_PREFIX = new Uint8Array([
-	0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04,
-	0x22, 0x04, 0x20,
+	0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22,
+	0x04, 0x20,
 ]);
 
 /** Generate a fresh Ed25519 keypair using the platform CSPRNG. */
@@ -106,10 +103,43 @@ export function exportPublicKeyRaw(publicKey: KeriPublicKey): Uint8Array {
 	return new Uint8Array(publicKey.raw);
 }
 
-function wrapKeyPair(
-	publicKey: KeyObject,
-	privateKey: KeyObject
-): KeriKeyPair {
+/** An Ed25519 public key in JSON Web Key form (RFC 8037). */
+export interface PublicKeyJwk {
+	readonly kty: 'OKP';
+	readonly crv: 'Ed25519';
+	/** Raw 32-byte public key, unpadded base64url. */
+	readonly x: string;
+}
+
+/**
+ * Export a public key as a JWK — the portable, JSON-safe form a caller
+ * shares for agent-to-agent verification. It is the same representation
+ * embedded in a `did:keri` DID document's verification method.
+ */
+export function exportPublicKey(publicKey: KeriPublicKey): PublicKeyJwk {
+	assertPublicKey(publicKey);
+	return {
+		kty: 'OKP',
+		crv: 'Ed25519',
+		x: base64urlEncode(publicKey.raw),
+	};
+}
+
+/**
+ * Reconstruct a full KeriKeyPair from just its private half.
+ *
+ * Ed25519 private keys carry their public point, so Node can derive the
+ * public KeyObject deterministically — no key material is generated. This
+ * is what lets `rotateIdentifier` accept the bare private key of the
+ * key being rotated *to* and still build the disclosed-public-key event.
+ */
+export function keyPairFromPrivateKey(privateKey: KeriPrivateKey): KeriKeyPair {
+	assertPrivateKey(privateKey);
+	const publicKey = createPublicKey(privateKey.keyObject);
+	return wrapKeyPair(publicKey, privateKey.keyObject);
+}
+
+function wrapKeyPair(publicKey: KeyObject, privateKey: KeyObject): KeriKeyPair {
 	const raw = rawPublicKeyBytes(publicKey);
 	const wrappedPublic: KeriPublicKey = Object.freeze({
 		type: 'KeriPublicKey',
@@ -132,9 +162,7 @@ function rawPublicKeyBytes(publicKey: KeyObject): Uint8Array {
 		x?: string;
 	};
 	if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string') {
-		throw new UnsupportedAlgorithmError(
-			'expected Ed25519 (OKP) public key'
-		);
+		throw new UnsupportedAlgorithmError('expected Ed25519 (OKP) public key');
 	}
 	const raw = base64urlDecode(jwk.x);
 	if (raw.length !== ED25519_PUBLIC_KEY_BYTES) {
@@ -143,9 +171,7 @@ function rawPublicKeyBytes(publicKey: KeyObject): Uint8Array {
 	return raw;
 }
 
-export function assertPublicKey(
-	value: unknown
-): asserts value is KeriPublicKey {
+export function assertPublicKey(value: unknown): asserts value is KeriPublicKey {
 	if (
 		!value
 		|| (value as KeriPublicKey).type !== 'KeriPublicKey'
@@ -155,9 +181,7 @@ export function assertPublicKey(
 	}
 }
 
-export function assertPrivateKey(
-	value: unknown
-): asserts value is KeriPrivateKey {
+export function assertPrivateKey(value: unknown): asserts value is KeriPrivateKey {
 	if (
 		!value
 		|| (value as KeriPrivateKey).type !== 'KeriPrivateKey'
