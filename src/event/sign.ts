@@ -34,10 +34,7 @@ export function serializeEvent(event: KeriEvent): Uint8Array {
  * already prevent this at compile time; the freeze is belt-and-suspenders
  * for callers reaching in through `as any` or untyped JSON paths.
  */
-export function signEvent(
-	event: KeriEvent,
-	privateKey: KeriPrivateKey
-): SignedKeriEvent {
+export function signEvent(event: KeriEvent, privateKey: KeriPrivateKey): SignedKeriEvent {
 	const sig = sign(privateKey, serializeEvent(event));
 	Object.freeze(event);
 	return Object.freeze({

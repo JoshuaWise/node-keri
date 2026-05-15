@@ -38,14 +38,10 @@ export function verifyKel(input: VerifyKelInput): VerifyKelResult {
 		throw new InvalidArgumentError('verifyKel requires an input object');
 	}
 	if (typeof input.aid !== 'string' || input.aid.length === 0) {
-		throw new InvalidArgumentError(
-			'verifyKel requires a non-empty `aid` string'
-		);
+		throw new InvalidArgumentError('verifyKel requires a non-empty `aid` string');
 	}
 	if (!Array.isArray(input.events)) {
-		throw new InvalidArgumentError(
-			'verifyKel requires an `events` array'
-		);
+		throw new InvalidArgumentError('verifyKel requires an `events` array');
 	}
 	return replayKel(input.aid, input.events);
 }

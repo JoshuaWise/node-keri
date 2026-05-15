@@ -10,7 +10,12 @@
  */
 
 import { encodePublicKeyEd25519 } from '../cesr/encode';
-import { KeriKeyPair, KeriPublicKey, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
+import {
+	KeriKeyPair,
+	KeriPublicKey,
+	assertPrivateKey,
+	assertPublicKey,
+} from '../crypto/keypair';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 import { SAID_PLACEHOLDER, computeEventSaid, deriveNextKeyCommitment } from './digest';
@@ -31,16 +36,12 @@ export interface CreateRotationResult {
 	readonly state: KeriState;
 }
 
-export function createRotationEvent(
-	input: CreateRotationInput
-): CreateRotationResult {
+export function createRotationEvent(input: CreateRotationInput): CreateRotationResult {
 	assertPublicKey(input.newCurrentKeyPair.publicKey);
 	assertPrivateKey(input.newCurrentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
 
-	const newCurrentQb64 = encodePublicKeyEd25519(
-		input.newCurrentKeyPair.publicKey.raw
-	);
+	const newCurrentQb64 = encodePublicKeyEd25519(input.newCurrentKeyPair.publicKey.raw);
 	const newCurrentCommitment = deriveNextKeyCommitment(
 		input.newCurrentKeyPair.publicKey
 	);

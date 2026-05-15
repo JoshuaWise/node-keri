@@ -59,10 +59,7 @@ function fail(error: KeriVerificationError): StepResult {
  * inception event must derive exactly that AID, otherwise the KEL — however
  * internally consistent — is for a different identifier.
  */
-export function replayKel(
-	aid: Aid,
-	events: readonly SignedKeriEvent[]
-): VerifyKelResult {
+export function replayKel(aid: Aid, events: readonly SignedKeriEvent[]): VerifyKelResult {
 	if (events.length === 0) {
 		return fail({ code: 'EMPTY_KEL' });
 	}
@@ -107,16 +104,24 @@ export function replayKel(
 }
 
 /** Unwrap a SignedKeriEvent: confirm the event object and single signature. */
-function readWrapper(signed: unknown): {
-	ok: true;
-	value: { event: Record<string, unknown>; signature: CesrSignature };
-} | { ok: false; error: KeriVerificationError } {
+function readWrapper(signed: unknown):
+	| {
+			ok: true;
+			value: { event: Record<string, unknown>; signature: CesrSignature };
+	  }
+	| { ok: false; error: KeriVerificationError } {
 	if (!isRecord(signed)) {
-		return { ok: false, error: { code: 'INVALID_EVENT_TYPE', eventType: describe(signed) } };
+		return {
+			ok: false,
+			error: { code: 'INVALID_EVENT_TYPE', eventType: describe(signed) },
+		};
 	}
 	const event = signed.event;
 	if (!isRecord(event)) {
-		return { ok: false, error: { code: 'INVALID_EVENT_TYPE', eventType: describe(event) } };
+		return {
+			ok: false,
+			error: { code: 'INVALID_EVENT_TYPE', eventType: describe(event) },
+		};
 	}
 	const signatures = signed.signatures;
 	if (!Array.isArray(signatures) || signatures.length !== 1) {
@@ -352,13 +357,7 @@ function applyInteraction(
 	}
 
 	// An interaction is signed by whatever key is currently authoritative.
-	if (
-		!verifyEventSignature(
-			xe,
-			state.currentPublicKey as CesrPublicKey,
-			signature
-		)
-	) {
+	if (!verifyEventSignature(xe, state.currentPublicKey as CesrPublicKey, signature)) {
 		return fail({ code: 'INVALID_SIGNATURE' });
 	}
 

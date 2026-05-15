@@ -70,9 +70,7 @@ export function parseDidKeri(did: string): ParsedDidKeri {
 		throw new InvalidArgumentError('did must be a string');
 	}
 	if (!did.startsWith(DID_KERI_PREFIX)) {
-		throw new InvalidArgumentError(
-			`did must start with '${DID_KERI_PREFIX}'`
-		);
+		throw new InvalidArgumentError(`did must start with '${DID_KERI_PREFIX}'`);
 	}
 	const aid = did.slice(DID_KERI_PREFIX.length);
 	if (aid.length === 0) {

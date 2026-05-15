@@ -94,9 +94,7 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	const metadata: DidResolutionMetadata = {
 		state: verification.state,
 		eventCount: input.kel.length,
-		...(input.options?.includeKel
-			? { kel: input.kel.slice() }
-			: {}),
+		...(input.options?.includeKel ? { kel: input.kel.slice() } : {}),
 	};
 	return { ok: true, didDocument, metadata };
 }

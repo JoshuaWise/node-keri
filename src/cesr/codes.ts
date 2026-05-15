@@ -47,11 +47,7 @@ function spec(code: string, rs: number, label: string): CesrCodeSpec {
 }
 
 /** Ed25519 verification key, transferable (rotatable) variant. */
-export const CESR_PUBLIC_KEY_ED25519 = spec(
-	'D',
-	32,
-	'Ed25519 public key'
-);
+export const CESR_PUBLIC_KEY_ED25519 = spec('D', 32, 'Ed25519 public key');
 
 /** Ed25519 signature. */
 export const CESR_SIGNATURE_ED25519 = spec('0B', 64, 'Ed25519 signature');

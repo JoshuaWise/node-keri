@@ -21,9 +21,7 @@ import { InvalidArgumentError } from '../profile/errors';
  * The canonical field order for each event type, `v` first. This matches the
  * field ordering of the KERI key event spec for `icp` / `rot` / `ixn`.
  */
-export const CANONICAL_FIELD_ORDER: Readonly<
-	Record<KeriEventType, readonly string[]>
-> = {
+export const CANONICAL_FIELD_ORDER: Readonly<Record<KeriEventType, readonly string[]>> = {
 	icp: ['v', 't', 'd', 'i', 's', 'kt', 'k', 'nt', 'n', 'bt', 'b', 'c', 'a'],
 	rot: ['v', 't', 'd', 'i', 's', 'p', 'kt', 'k', 'nt', 'n', 'bt', 'br', 'ba', 'a'],
 	ixn: ['v', 't', 'd', 'i', 's', 'p', 'a'],
@@ -44,9 +42,7 @@ export function toCanonicalEvent(event: object): Record<string, unknown> {
 	const fields = event as Record<string, unknown>;
 	const t = fields.t;
 	const order =
-		typeof t === 'string'
-			? CANONICAL_FIELD_ORDER[t as KeriEventType]
-			: undefined;
+		typeof t === 'string' ? CANONICAL_FIELD_ORDER[t as KeriEventType] : undefined;
 	if (!order) {
 		throw new InvalidArgumentError(
 			`cannot serialize an event of unknown type: ${

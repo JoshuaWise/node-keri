@@ -130,9 +130,7 @@ export function checkArray(
 }
 
 /** The sequence number string: must be present and canonical lowercase hex. */
-export function checkSequenceString(
-	value: unknown
-): KeriVerificationError | null {
+export function checkSequenceString(value: unknown): KeriVerificationError | null {
 	if (typeof value === 'string' && CANONICAL_HEX.test(value)) return null;
 	return { code: 'NON_CANONICAL_EVENT' };
 }
@@ -142,9 +140,7 @@ export function checkSequenceString(
  * format, size) is checked in replay against the recomputed version string,
  * because that requires canonicalizing the whole event.
  */
-export function checkVersionString(
-	value: unknown
-): KeriVerificationError | null {
+export function checkVersionString(value: unknown): KeriVerificationError | null {
 	if (typeof value === 'string') return null;
 	return { code: 'NON_CANONICAL_EVENT' };
 }

@@ -41,9 +41,7 @@ export function createInteractionEvent(
 	assertPublicKey(input.currentKeyPair.publicKey);
 	assertPrivateKey(input.currentKeyPair.privateKey);
 
-	const currentQb64 = encodePublicKeyEd25519(
-		input.currentKeyPair.publicKey.raw
-	);
+	const currentQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
 	if (currentQb64 !== input.state.currentPublicKey) {
 		throw new InvalidArgumentError(
 			'interaction signing key does not match the current public key'

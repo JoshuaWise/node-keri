@@ -69,9 +69,7 @@ function canonicalize(value: unknown): string {
 		// Maps, Sets, etc. have no canonical JSON form.
 		const proto = Object.getPrototypeOf(value);
 		if (proto !== null && proto !== Object.prototype) {
-			throw new CanonicalJsonError(
-				'only plain objects are supported'
-			);
+			throw new CanonicalJsonError('only plain objects are supported');
 		}
 		const obj = value as Record<string, unknown>;
 		const keys = Object.keys(obj);

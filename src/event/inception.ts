@@ -9,14 +9,15 @@
  */
 
 import { encodePublicKeyEd25519 } from '../cesr/encode';
-import { KeriKeyPair, KeriPublicKey, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
+import {
+	KeriKeyPair,
+	KeriPublicKey,
+	assertPrivateKey,
+	assertPublicKey,
+} from '../crypto/keypair';
 import { aidFromSaid, formatDidKeri } from '../did/did-keri';
 import { KeriState } from '../kel/state';
-import {
-	SAID_PLACEHOLDER,
-	computeEventSaid,
-	deriveNextKeyCommitment,
-} from './digest';
+import { SAID_PLACEHOLDER, computeEventSaid, deriveNextKeyCommitment } from './digest';
 import { signEvent } from './sign';
 import { InceptionEvent, SignedKeriEvent } from './types';
 
@@ -32,16 +33,12 @@ export interface CreateInceptionResult {
 	readonly state: KeriState;
 }
 
-export function createInceptionEvent(
-	input: CreateInceptionInput
-): CreateInceptionResult {
+export function createInceptionEvent(input: CreateInceptionInput): CreateInceptionResult {
 	assertPublicKey(input.currentKeyPair.publicKey);
 	assertPrivateKey(input.currentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
 
-	const currentKeyQb64 = encodePublicKeyEd25519(
-		input.currentKeyPair.publicKey.raw
-	);
+	const currentKeyQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
 	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey);
 
 	// `d` and `i` are the SAID-bearing fields for inception: they hold the

@@ -95,9 +95,7 @@ const KEY_FRAGMENT = '#key-0';
  */
 export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 	if (input === null || typeof input !== 'object') {
-		throw new InvalidArgumentError(
-			'createDidDocument requires an input object'
-		);
+		throw new InvalidArgumentError('createDidDocument requires an input object');
 	}
 	const state = input.state;
 	if (
@@ -106,9 +104,7 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 		|| typeof state.did !== 'string'
 		|| typeof state.currentPublicKey !== 'string'
 	) {
-		throw new InvalidArgumentError(
-			'createDidDocument requires a verified KeriState'
-		);
+		throw new InvalidArgumentError('createDidDocument requires a verified KeriState');
 	}
 	const did = state.did;
 	if (input.did !== undefined && input.did !== did) {
@@ -133,9 +129,7 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 	};
 
 	if (input.services !== undefined && !Array.isArray(input.services)) {
-		throw new InvalidArgumentError(
-			'createDidDocument: `services` must be an array'
-		);
+		throw new InvalidArgumentError('createDidDocument: `services` must be an array');
 	}
 	const services = (input.services ?? []).map((service, index) =>
 		normalizeService(service, did, index)
@@ -153,15 +147,9 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 }
 
 /** Validate a caller-supplied service entry and expand a bare-fragment id. */
-function normalizeService(
-	service: DidService,
-	did: DidKeri,
-	index: number
-): DidService {
+function normalizeService(service: DidService, did: DidKeri, index: number): DidService {
 	if (service === null || typeof service !== 'object') {
-		throw new InvalidArgumentError(
-			`services[${index}] must be an object`
-		);
+		throw new InvalidArgumentError(`services[${index}] must be an object`);
 	}
 	if (typeof service.id !== 'string' || service.id.length === 0) {
 		throw new InvalidArgumentError(
@@ -180,9 +168,7 @@ function normalizeService(
 		);
 	}
 	if (service.serviceEndpoint === undefined || service.serviceEndpoint === null) {
-		throw new InvalidArgumentError(
-			`services[${index}].serviceEndpoint is required`
-		);
+		throw new InvalidArgumentError(`services[${index}].serviceEndpoint is required`);
 	}
 	return {
 		id: service.id.startsWith('#') ? did + service.id : service.id,

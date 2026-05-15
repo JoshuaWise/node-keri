@@ -56,9 +56,7 @@ const MAX_EVENT_SIZE = 0xffffff;
 /** Build a version string for `size` bytes. */
 export function formatKeriVersionString(size: number): string {
 	if (!Number.isInteger(size) || size < 0) {
-		throw new InvalidArgumentError(
-			'event size must be a non-negative integer'
-		);
+		throw new InvalidArgumentError('event size must be a non-negative integer');
 	}
 	if (size > MAX_EVENT_SIZE) {
 		throw new CanonicalJsonError(
@@ -135,9 +133,7 @@ export function computeEventSaid(
  * to the algorithm as well as the bytes, so a future rotation cannot
  * substitute a different key type while preserving the digest.
  */
-export function deriveNextKeyCommitment(
-	nextPublicKey: KeriPublicKey
-): CesrDigest {
+export function deriveNextKeyCommitment(nextPublicKey: KeriPublicKey): CesrDigest {
 	assertPublicKey(nextPublicKey);
 	const qb64 = encodePublicKeyEd25519(nextPublicKey.raw);
 	return encodeDigestSha256(sha256(utf8Encode(qb64)));
