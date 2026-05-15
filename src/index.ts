@@ -45,3 +45,19 @@ export type {
 export { sign, verify } from './crypto/ed25519';
 
 export { canonicalizeJson } from './event/canonical-json';
+
+export {
+	encodePublicKeyEd25519,
+	encodeSignatureEd25519,
+	encodeDigestSha256,
+} from './cesr/encode';
+export {
+	decodePublicKeyEd25519,
+	decodeSignatureEd25519,
+	decodeDigestSha256,
+} from './cesr/decode';
+export type {
+	CesrPublicKey,
+	CesrSignature,
+	CesrDigest,
+} from './cesr/qualified';

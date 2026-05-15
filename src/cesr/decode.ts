@@ -1,0 +1,89 @@
+import { base64urlDecode } from '../bytes/base64url';
+import { MalformedInputError } from '../profile/errors';
+import {
+	ALL_CODES,
+	CESR_DIGEST_SHA256,
+	CESR_PUBLIC_KEY_ED25519,
+	CESR_SIGNATURE_ED25519,
+	CesrCodeSpec,
+} from './codes';
+
+/**
+ * Reverse of `encodeMatter`. Validates that:
+ *   - the input is a string of exactly `spec.fs` characters,
+ *   - the leading `spec.hs` characters equal the expected code,
+ *   - the trailing characters decode under the standard base64url alphabet
+ *     and round-trip canonically (this is enforced by `base64urlDecode`),
+ *   - the leading `spec.ps` "pad" bytes of the decoded payload are zero.
+ *
+ * The last check is what catches non-canonical encodings: the high bits of
+ * the first base64 character after the code prefix must be zero, because we
+ * replaced exactly `ps` zero bytes with the code. If those bits aren't zero,
+ * the original prefix concealed bits that a canonical encoder would have
+ * placed elsewhere — a malleable form.
+ */
+function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
+	if (typeof qb64 !== 'string') {
+		throw new MalformedInputError(`${spec.label} must be a string`);
+	}
+	if (qb64.length !== spec.fs) {
+		throw new MalformedInputError(
+			`${spec.label} must be ${spec.fs} characters, got ${qb64.length}`
+		);
+	}
+	if (qb64.slice(0, spec.hs) !== spec.code) {
+		const found = qb64.slice(0, spec.hs);
+		const alternative = findKnownCodeAt(qb64);
+		if (alternative && alternative.code !== spec.code) {
+			throw new MalformedInputError(
+				`expected ${spec.label} (code '${spec.code}'), got ${alternative.label} (code '${alternative.code}')`
+			);
+		}
+		throw new MalformedInputError(
+			`expected ${spec.label} code '${spec.code}', got '${found}'`
+		);
+	}
+	// hs === ps for every supported code, so substituting the prefix with
+	// `ps` copies of 'A' yields a valid base64url string of length `fs`.
+	const substituted = 'A'.repeat(spec.ps) + qb64.slice(spec.hs);
+	const decoded = base64urlDecode(substituted);
+	for (let i = 0; i < spec.ps; i++) {
+		if (decoded[i] !== 0) {
+			throw new MalformedInputError(
+				`non-canonical ${spec.label}: leading pad bits must be zero`
+			);
+		}
+	}
+	return decoded.slice(spec.ps);
+}
+
+/**
+ * Look up the longest known code whose prefix matches the start of `qb64`.
+ * Used purely to produce a clearer error when the caller passed a valid
+ * primitive of the wrong type (e.g. a signature where a public key was
+ * expected). Returns `undefined` if no known code matches.
+ */
+function findKnownCodeAt(qb64: string): CesrCodeSpec | undefined {
+	let best: CesrCodeSpec | undefined;
+	for (const candidate of ALL_CODES) {
+		if (qb64.length < candidate.hs) continue;
+		if (qb64.slice(0, candidate.hs) !== candidate.code) continue;
+		if (!best || candidate.hs > best.hs) best = candidate;
+	}
+	return best;
+}
+
+/** Decode a CESR-qualified Ed25519 public key (code `D`). */
+export function decodePublicKeyEd25519(qb64: string): Uint8Array {
+	return decodeMatter(CESR_PUBLIC_KEY_ED25519, qb64);
+}
+
+/** Decode a CESR-qualified Ed25519 signature (code `0B`). */
+export function decodeSignatureEd25519(qb64: string): Uint8Array {
+	return decodeMatter(CESR_SIGNATURE_ED25519, qb64);
+}
+
+/** Decode a CESR-qualified SHA-256 digest (code `I`). */
+export function decodeDigestSha256(qb64: string): Uint8Array {
+	return decodeMatter(CESR_DIGEST_SHA256, qb64);
+}
