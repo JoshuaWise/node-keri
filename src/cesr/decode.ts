@@ -1,9 +1,10 @@
-import { base64urlDecode } from '../bytes/base64url';
+import { base64urlDecode, b64ToInt } from '../bytes/base64url';
 import { isRegisteredDigestCode } from '../crypto/digests';
 import { MalformedInputError } from '../profile/errors';
 import {
 	ALL_CODES,
 	CESR_DIGEST_SHA256,
+	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_SIGNATURE_ED25519,
 	CesrCodeSpec,
@@ -46,8 +47,8 @@ function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
 			`expected ${spec.label} code '${spec.code}', got '${found}'`
 		);
 	}
-	// hs === ps for every supported code, so substituting the prefix with
-	// `ps` copies of 'A' yields a valid base64url string of length `fs`.
+	// `hs === ps` for every plain code, so substituting the prefix with `ps`
+	// copies of 'A' yields a valid base64url string of length `fs`.
 	const substituted = 'A'.repeat(spec.ps) + qb64.slice(spec.hs);
 	const decoded = base64urlDecode(substituted);
 	for (let i = 0; i < spec.ps; i++) {
@@ -58,6 +59,49 @@ function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
 		}
 	}
 	return decoded.slice(spec.ps);
+}
+
+/**
+ * Reverse of `encodeIndexedSignatureEd25519`. An indexed primitive's prefix is
+ * `hs` code characters plus `ss` "soft" characters carrying the index, and
+ * together they are `ps` long — so the substitution drops `hs + ss` characters
+ * and prepends `ps` copies of 'A'. The index is read from the soft field.
+ */
+function decodeIndexedMatter(
+	spec: CesrCodeSpec,
+	qb64: string
+): { raw: Uint8Array; index: number } {
+	if (typeof qb64 !== 'string') {
+		throw new MalformedInputError(`${spec.label} must be a string`);
+	}
+	if (qb64.length !== spec.fs) {
+		throw new MalformedInputError(
+			`${spec.label} must be ${spec.fs} characters, got ${qb64.length}`
+		);
+	}
+	if (qb64.slice(0, spec.hs) !== spec.code) {
+		const found = qb64.slice(0, spec.hs);
+		const alternative = findKnownCodeAt(qb64);
+		if (alternative && alternative.code !== spec.code) {
+			throw new MalformedInputError(
+				`expected ${spec.label} (code '${spec.code}'), got ${alternative.label} (code '${alternative.code}')`
+			);
+		}
+		throw new MalformedInputError(
+			`expected ${spec.label} code '${spec.code}', got '${found}'`
+		);
+	}
+	const index = b64ToInt(qb64.slice(spec.hs, spec.hs + spec.ss));
+	const substituted = 'A'.repeat(spec.ps) + qb64.slice(spec.hs + spec.ss);
+	const decoded = base64urlDecode(substituted);
+	for (let i = 0; i < spec.ps; i++) {
+		if (decoded[i] !== 0) {
+			throw new MalformedInputError(
+				`non-canonical ${spec.label}: leading pad bits must be zero`
+			);
+		}
+	}
+	return { raw: decoded.slice(spec.ps), index };
 }
 
 /**
@@ -81,9 +125,30 @@ export function decodePublicKeyEd25519(qb64: string): Uint8Array {
 	return decodeMatter(CESR_PUBLIC_KEY_ED25519, qb64);
 }
 
-/** Decode a CESR-qualified Ed25519 signature (code `0B`). */
+/** Decode a CESR-qualified Ed25519 signature, non-indexed (code `0B`). */
 export function decodeSignatureEd25519(qb64: string): Uint8Array {
 	return decodeMatter(CESR_SIGNATURE_ED25519, qb64);
+}
+
+/**
+ * Decode a CESR-qualified indexed Ed25519 signature (a "Siger", code `A`),
+ * returning both the 64 raw signature bytes and the signing-key `index`
+ * carried in the code's soft field.
+ */
+export function decodeIndexedSignatureEd25519(qb64: string): {
+	raw: Uint8Array;
+	index: number;
+} {
+	return decodeIndexedMatter(CESR_INDEXED_SIGNATURE_ED25519, qb64);
+}
+
+/**
+ * Read just the signing-key index from an indexed Ed25519 signature, without
+ * exposing the raw signature bytes. Convenience for callers that only need to
+ * know which key in the establishment event's list a Siger claims to be from.
+ */
+export function signatureIndex(qb64: string): number {
+	return decodeIndexedSignatureEd25519(qb64).index;
 }
 
 /** Decode a CESR-qualified SHA-256 digest (code `I`), specifically. */

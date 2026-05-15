@@ -18,6 +18,17 @@ export type CesrSignature = string & {
 	readonly [cesrBrand]: 'SignatureEd25519';
 };
 
+/**
+ * An indexed Ed25519 signature (a CESR "Siger", code `A`). Unlike
+ * `CesrSignature`, its qb64 form embeds the index of the signing key within
+ * the establishment event's key list. This is the form KERI attaches to KEL
+ * events; `CesrSignature` (non-indexed, code `0B`) is for detached signatures
+ * over arbitrary payloads.
+ */
+export type CesrIndexedSignature = string & {
+	readonly [cesrBrand]: 'IndexedSignatureEd25519';
+};
+
 export type CesrDigest = string & {
 	readonly [cesrBrand]: 'DigestSha256';
 };

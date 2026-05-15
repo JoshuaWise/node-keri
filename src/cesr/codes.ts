@@ -5,12 +5,15 @@
  * paired with a multi-character text code. The qualified ("qb64") text form
  * is built by prepending `ps` zero bytes to the raw payload, base64url-
  * encoding the result, then replacing the leading `ps` base64 characters
- * (which are always `A` = 0) with the `hs`-character code prefix.
+ * (which are always `A` = 0) with the code prefix — `hs` hard characters
+ * followed by `ss` "soft" characters that carry a small variable value (the
+ * index of an indexed signature).
  *
- * This profile is intentionally restricted to codes where `hs === ps`. That
- * rules out the longer "1AAB"-style 4-character codes and lets the
- * encode/decode helpers share a single straightforward substitution. Any
- * future code added here must satisfy the same invariant.
+ * This profile is restricted to codes where `hs + ss === ps`. That rules out
+ * the longer "1AAB"-style codes and lets the encode/decode helpers share a
+ * single straightforward substitution. Plain Matter primitives have `ss === 0`
+ * (so `hs === ps`); indexed primitives carry a non-zero `ss`. Any future code
+ * added here must satisfy the `hs + ss === ps` invariant.
  */
 
 import { MalformedInputError, UnsupportedAlgorithmError } from '../profile/errors';
@@ -20,7 +23,8 @@ export interface CesrCodeSpec {
 	readonly code: string;
 	/** Hard size — number of characters consumed by the code prefix. */
 	readonly hs: number;
-	/** Soft size — variable-length size field. Always 0 in this subset. */
+	/** Soft size — characters carrying a variable value. 0 for plain Matter
+	 *  primitives; non-zero for indexed primitives (the signature index). */
 	readonly ss: number;
 	/** Raw size — number of payload bytes after the code is stripped. */
 	readonly rs: number;
@@ -32,27 +36,60 @@ export interface CesrCodeSpec {
 	readonly label: string;
 }
 
-function spec(code: string, rs: number, label: string): CesrCodeSpec {
+/**
+ * Build a code spec with an explicit hard size `hs` and soft size `ss`. The
+ * encoder/decoder rely on the code prefix (`hs + ss` characters) replacing
+ * exactly `ps` leading 'A' characters, so `hs + ss === ps` must hold.
+ */
+function makeSpec(
+	code: string,
+	hs: number,
+	ss: number,
+	rs: number,
+	label: string
+): CesrCodeSpec {
 	const ps = (3 - (rs % 3)) % 3;
-	const hs = code.length;
-	if (hs !== ps) {
-		// Encoder/decoder rely on the assumption that the code prefix replaces
-		// exactly `ps` leading 'A' characters. Codes with hs > ps (e.g. the
-		// 4-character `1AAB` family) need a different substitution strategy
-		// and are out of scope for this profile.
+	if (hs + ss !== ps) {
+		// Codes that violate this (e.g. the 4-character `1AAB` family) need a
+		// different substitution strategy and are out of scope for this profile.
 		throw new Error(
-			`CESR code '${code}' has hs=${hs} but ps=${ps}; only hs===ps codes are supported`
+			`CESR code '${code}' has hs+ss=${hs + ss} but ps=${ps}; `
+				+ 'only hs+ss===ps codes are supported'
+		);
+	}
+	if (code.length !== hs) {
+		throw new Error(
+			`CESR code '${code}' length ${code.length} does not match hs=${hs}`
 		);
 	}
 	const fs = ((ps + rs) / 3) * 4;
-	return { code, hs, ss: 0, rs, ps, fs, label };
+	return { code, hs, ss, rs, ps, fs, label };
+}
+
+/** A plain (non-indexed) Matter primitive: `ss === 0`, so `hs === ps`. */
+function spec(code: string, rs: number, label: string): CesrCodeSpec {
+	return makeSpec(code, code.length, 0, rs, label);
 }
 
 /** Ed25519 verification key, transferable (rotatable) variant. */
 export const CESR_PUBLIC_KEY_ED25519 = spec('D', 32, 'Ed25519 public key');
 
-/** Ed25519 signature. */
+/** Ed25519 signature, non-indexed (a "Cigar"). */
 export const CESR_SIGNATURE_ED25519 = spec('0B', 64, 'Ed25519 signature');
+
+/**
+ * Ed25519 indexed signature (a "Siger"). The 1-character hard code `A` is
+ * followed by a 1-character soft field encoding the index of the signing key
+ * within the establishment event's key list. KERI attaches controller
+ * signatures on KEL events in this indexed form.
+ */
+export const CESR_INDEXED_SIGNATURE_ED25519 = makeSpec(
+	'A',
+	1,
+	1,
+	64,
+	'Ed25519 indexed signature'
+);
 
 /** SHA-256 digest. */
 export const CESR_DIGEST_SHA256 = spec('I', 32, 'SHA-256 digest');
@@ -64,6 +101,7 @@ export const CESR_DIGEST_SHA256 = spec('I', 32, 'SHA-256 digest');
 export const ALL_CODES: readonly CesrCodeSpec[] = Object.freeze([
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_SIGNATURE_ED25519,
+	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_DIGEST_SHA256,
 ]);
 
