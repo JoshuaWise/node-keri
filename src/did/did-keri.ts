@@ -1,15 +1,15 @@
 /**
  * Branded string types for KERI Autonomic Identifiers (AIDs) and `did:keri`
- * DIDs, plus a minimal formatter.
+ * DIDs, plus the `did:keri` formatter and parser.
  *
- * The full DID surface — parsing, resolution, document generation — is
- * Milestone 5. This file only defines the types and the trivial formatter
- * needed by the event constructors so that state objects can carry both an
- * AID and a DID without importing from a not-yet-existing module.
+ * Document generation and resolution live in sibling modules (`document.ts`,
+ * `resolver.ts`); this file owns the identifier syntax itself — the types,
+ * the `did:keri:<aid>` formatter, and the strict offline parser.
  */
 
+import { decodeDigestSha256 } from '../cesr/decode';
 import { CesrDigest } from '../cesr/qualified';
-import { InvalidArgumentError } from '../profile/errors';
+import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 
 declare const aidBrand: unique symbol;
 declare const didBrand: unique symbol;
@@ -42,4 +42,67 @@ export function formatDidKeri(aid: Aid): DidKeri {
 		throw new InvalidArgumentError('aid must be a non-empty string');
 	}
 	return (DID_KERI_PREFIX + aid) as DidKeri;
+}
+
+/** A `did:keri` DID decomposed into its method and method-specific id. */
+export interface ParsedDidKeri {
+	/** The original DID string, unchanged. */
+	readonly did: DidKeri;
+	/** Always `'keri'` — the only method this library understands. */
+	readonly method: 'keri';
+	/** The method-specific identifier: the controller's AID. */
+	readonly aid: Aid;
+}
+
+/**
+ * Parse a `did:keri:<aid>` string into its components.
+ *
+ * Parsing is strict and offline. The method-specific id must be a well-formed
+ * CESR-qualified SHA-256 digest — the only AID form this transferable-only
+ * profile produces — and no DID-URL syntax (path, query, or fragment) is
+ * accepted, since resolution operates on bare DIDs. A string that fails
+ * either rule throws `InvalidArgumentError`; callers parsing DIDs that arrive
+ * from untrusted input should prefer `resolveDid`, which reports the same
+ * failure as an `INVALID_DID` result rather than throwing.
+ */
+export function parseDidKeri(did: string): ParsedDidKeri {
+	if (typeof did !== 'string') {
+		throw new InvalidArgumentError('did must be a string');
+	}
+	if (!did.startsWith(DID_KERI_PREFIX)) {
+		throw new InvalidArgumentError(
+			`did must start with '${DID_KERI_PREFIX}'`
+		);
+	}
+	const aid = did.slice(DID_KERI_PREFIX.length);
+	if (aid.length === 0) {
+		throw new InvalidArgumentError(
+			'did:keri is missing its method-specific identifier'
+		);
+	}
+	for (const component of ['/', '?', '#']) {
+		if (aid.includes(component)) {
+			throw new InvalidArgumentError(
+				`did:keri does not accept a DID-URL '${component}' component`
+			);
+		}
+	}
+	// The AID must be a canonically-encoded CESR SHA-256 digest.
+	// `decodeDigestSha256` enforces the derivation code, fixed length, and
+	// pad-bit canonicality; the decoded bytes themselves are not needed here.
+	try {
+		decodeDigestSha256(aid);
+	} catch (err) {
+		if (err instanceof MalformedInputError) {
+			throw new InvalidArgumentError(
+				`did:keri identifier is not a valid AID: ${err.message}`
+			);
+		}
+		throw err;
+	}
+	return {
+		did: did as DidKeri,
+		method: 'keri',
+		aid: aid as unknown as Aid,
+	};
 }

@@ -1,7 +1,8 @@
-// Public surface up through Milestone 4. Higher-level entry points
-// (`createIdentifier`, DID resolution) are added by later milestones; what's
-// exported here is the foundation, CESR primitives, the event lifecycle
-// building blocks, and the KEL replay verifier.
+// Public surface up through Milestone 5. Higher-level entry points
+// (`createIdentifier`, `rotateIdentifier`) are added by later milestones;
+// what's exported here is the foundation, CESR primitives, the event
+// lifecycle building blocks, the KEL replay verifier, and the DID surface —
+// `did:keri` parsing, document generation, and local resolution.
 
 export {
 	KeriError,
@@ -63,8 +64,13 @@ export type {
 	CesrDigest,
 } from './cesr/qualified';
 
-export { DID_KERI_PREFIX, aidFromSaid, formatDidKeri } from './did/did-keri';
-export type { Aid, DidKeri } from './did/did-keri';
+export {
+	DID_KERI_PREFIX,
+	aidFromSaid,
+	formatDidKeri,
+	parseDidKeri,
+} from './did/did-keri';
+export type { Aid, DidKeri, ParsedDidKeri } from './did/did-keri';
 
 export type {
 	KeriEventType,
@@ -108,3 +114,19 @@ export type {
 
 export { verifyKel } from './api/verify-kel';
 export type { VerifyKelInput, VerifyKelResult } from './api/verify-kel';
+
+export { createDidDocument } from './did/document';
+export type {
+	CreateDidDocumentInput,
+	DidDocument,
+	DidVerificationMethod,
+	DidService,
+	DidServiceEndpoint,
+} from './did/document';
+
+export { resolveDid } from './did/resolver';
+export type {
+	ResolveDidInput,
+	DidResolutionResult,
+	DidResolutionMetadata,
+} from './did/resolver';
