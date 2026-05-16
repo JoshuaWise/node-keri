@@ -29,6 +29,13 @@ export interface CreateIdentifierInput {
 	readonly currentKeyPair?: KeriKeyPair;
 	/** Pre-rotation keypair. A fresh one is generated when omitted. */
 	readonly nextKeyPair?: KeriKeyPair;
+	/**
+	 * CESR digest code for the inception event's SAID, AID, and next-key
+	 * commitment. Defaults to SHA-256 (`I`). Pass another code — see
+	 * `DIGEST_CODES` and `digestAlgorithms` — to mint an identifier under a
+	 * different hash; requesting an unavailable algorithm throws.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateIdentifierResult {
@@ -83,6 +90,7 @@ export function createIdentifier(
 	const { signedEvent, state } = createInceptionEvent({
 		currentKeyPair,
 		nextPublicKey: nextKeyPair.publicKey,
+		digestCode: input.digestCode,
 	});
 
 	return {

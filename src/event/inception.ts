@@ -9,6 +9,7 @@
  */
 
 import { encodePublicKeyEd25519 } from '../cesr/encode';
+import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import {
 	KeriKeyPair,
 	KeriPublicKey,
@@ -17,7 +18,7 @@ import {
 } from '../crypto/keypair';
 import { aidFromSaid, formatDidKeri } from '../did/did-keri';
 import { KeriState } from '../kel/state';
-import { SAID_PLACEHOLDER, computeEventSaid, deriveNextKeyCommitment } from './digest';
+import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
 import { InceptionEvent, SignedKeriEvent } from './types';
 
@@ -26,6 +27,12 @@ export interface CreateInceptionInput {
 	readonly currentKeyPair: KeriKeyPair;
 	/** Public half of the next keypair — only the digest is committed now. */
 	readonly nextPublicKey: KeriPublicKey;
+	/**
+	 * CESR digest code for this event's SAID and next-key commitment.
+	 * Defaults to SHA-256 (`I`). Any code with a registered implementation
+	 * (see `digestAlgorithms`) is accepted; an unavailable one throws.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateInceptionResult {
@@ -38,16 +45,18 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 	assertPrivateKey(input.currentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
 
+	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
 	const currentKeyQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
-	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey);
+	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey, digestCode);
 
 	// `d` and `i` are the SAID-bearing fields for inception: they hold the
 	// fixed-length placeholder while the SAID is computed, then take the SAID
 	// itself in the final event. Fields are listed in KERI canonical order.
+	const placeholder = saidPlaceholder(digestCode);
 	const partial = {
 		t: 'icp' as const,
-		d: SAID_PLACEHOLDER,
-		i: SAID_PLACEHOLDER,
+		d: placeholder,
+		i: placeholder,
 		s: '0',
 		kt: '1' as const,
 		k: [currentKeyQb64] as const,
@@ -59,7 +68,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 		a: [] as const,
 	};
 
-	const { said, versionString } = computeEventSaid(partial);
+	const { said, versionString } = computeEventSaid(partial, digestCode);
 	const aid = aidFromSaid(said);
 
 	const event: InceptionEvent = {
@@ -96,4 +105,4 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 
 // Re-export so that consumers building on top of inception don't have to
 // reach into the digest module for what is conceptually a key-management op.
-export { deriveNextKeyCommitment, SAID_PLACEHOLDER };
+export { deriveNextKeyCommitment, saidPlaceholder, SAID_PLACEHOLDER } from './digest';

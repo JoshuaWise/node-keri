@@ -13,6 +13,8 @@
  * future code added here must satisfy the same invariant.
  */
 
+import { MalformedInputError, UnsupportedAlgorithmError } from '../profile/errors';
+
 export interface CesrCodeSpec {
 	/** The text code prefix (also the "hard" portion). */
 	readonly code: string;
@@ -64,3 +66,53 @@ export const ALL_CODES: readonly CesrCodeSpec[] = Object.freeze([
 	CESR_SIGNATURE_ED25519,
 	CESR_DIGEST_SHA256,
 ]);
+
+/**
+ * Build the CESR code spec for a digest derivation `code`.
+ *
+ * Unlike public keys and signatures — which have one fixed code each — digests
+ * are algorithm-agile: a KERI digest carries a derivation code that names its
+ * hash algorithm, and a KEL may mix several. KERI's digest codes are also
+ * self-describing about width: a one-character code denotes a 256-bit (32-byte)
+ * digest and a `0`-prefixed two-character code denotes a 512-bit (64-byte) one.
+ * Those are the only two widths this library supports; both satisfy the
+ * `hs === ps` invariant, so the shared substitution still applies.
+ *
+ * This builds the *structural* spec only — it says nothing about whether an
+ * implementation for the algorithm is available. `UnsupportedAlgorithmError`
+ * is thrown for a code whose shape is neither supported width.
+ */
+export function digestSpecForCode(code: string, label?: string): CesrCodeSpec {
+	if (typeof code !== 'string' || code.length === 0) {
+		throw new UnsupportedAlgorithmError('digest code must be a non-empty string');
+	}
+	const named = label ?? `digest (code '${code}')`;
+	if (code.length === 1) {
+		return spec(code, 32, named);
+	}
+	if (code.length === 2 && code[0] === '0') {
+		return spec(code, 64, named);
+	}
+	throw new UnsupportedAlgorithmError(
+		`unsupported digest code '${code}': only 256-bit (one-character) and `
+			+ '512-bit (`0`-prefixed two-character) digest codes are supported'
+	);
+}
+
+/**
+ * Read the CESR derivation code from the start of a qualified digest string.
+ *
+ * A leading `0` marks a two-character code; otherwise the code is the single
+ * leading character. This only *reads* the code — it does not check that the
+ * code is known or that the rest of the string is well-formed, so callers
+ * must still resolve and decode it.
+ */
+export function digestCodeOf(qb64: string): string {
+	if (typeof qb64 !== 'string' || qb64.length === 0) {
+		throw new MalformedInputError('digest must be a non-empty string');
+	}
+	// `charAt` (unlike indexing) is typed `string`, and the length check above
+	// guarantees index 0 exists.
+	const first = qb64.charAt(0);
+	return first === '0' ? qb64.slice(0, 2) : first;
+}

@@ -92,7 +92,7 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		const raw = decodeSignatureEd25519(
 			encodeSignatureEd25519(sign(id.currentKeyPair.privateKey, PAYLOAD))
 		);
-		raw[0] ^= 0xff;
+		raw[0] = raw[0]! ^ 0xff;
 		expect(
 			verifySignatureWithDid({
 				did: id.did,

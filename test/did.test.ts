@@ -123,7 +123,7 @@ describe('createDidDocument', () => {
 					publicKeyJwk: {
 						kty: 'OKP',
 						crv: 'Ed25519',
-						x: doc.verificationMethod[0].publicKeyJwk.x,
+						x: doc.verificationMethod[0]!.publicKeyJwk.x,
 					},
 				},
 			],
@@ -140,10 +140,10 @@ describe('createDidDocument', () => {
 
 		const doc = createDidDocument({ state: result.state });
 		// After the rotation the authoritative key is k1, not the inception k0.
-		expect(doc.verificationMethod[0].publicKeyJwk.x).toBe(
+		expect(doc.verificationMethod[0]!.publicKeyJwk.x).toBe(
 			base64urlEncode(keys.k1.publicKey.raw)
 		);
-		expect(doc.verificationMethod[0].publicKeyJwk.x).not.toBe(
+		expect(doc.verificationMethod[0]!.publicKeyJwk.x).not.toBe(
 			base64urlEncode(keys.k0.publicKey.raw)
 		);
 	});

@@ -39,6 +39,14 @@ export { timingSafeEqual, bytesEqual, concatBytes } from './bytes/compare';
 export { randomBytes } from './crypto/random';
 export { sha256 } from './crypto/hash';
 export {
+	digestAlgorithms,
+	runDigest,
+	isRegisteredDigestCode,
+	DIGEST_CODES,
+	DEFAULT_DIGEST_CODE,
+} from './crypto/digests';
+export type { DigestAlgorithm } from './crypto/digests';
+export {
 	generateKeyPair,
 	keyPairFromSeed,
 	keyPairFromPrivateKey,
@@ -60,12 +68,15 @@ export {
 	encodePublicKeyEd25519,
 	encodeSignatureEd25519,
 	encodeDigestSha256,
+	encodeDigest,
 } from './cesr/encode';
 export {
 	decodePublicKeyEd25519,
 	decodeSignatureEd25519,
 	decodeDigestSha256,
+	decodeDigest,
 } from './cesr/decode';
+export { digestCodeOf, digestSpecForCode } from './cesr/codes';
 export type { CesrPublicKey, CesrSignature, CesrDigest } from './cesr/qualified';
 
 export {
@@ -91,6 +102,7 @@ export type { KeriState } from './kel/state';
 export {
 	KERI_VERSION_STRING_LENGTH,
 	SAID_PLACEHOLDER,
+	saidPlaceholder,
 	computeEventSaid,
 	deriveNextKeyCommitment,
 	formatKeriVersionString,

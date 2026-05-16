@@ -7,7 +7,7 @@
  * the `did:keri:<aid>` formatter, and the strict offline parser.
  */
 
-import { decodeDigestSha256 } from '../cesr/decode';
+import { decodeDigest } from '../cesr/decode';
 import { CesrDigest } from '../cesr/qualified';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 
@@ -17,7 +17,9 @@ declare const didBrand: unique symbol;
 /**
  * A KERI Autonomic Identifier. In this profile every AID is a transferable,
  * self-addressing identifier derived from an inception event, so the
- * underlying string is a CESR-qualified SHA-256 digest (code `I`, 44 chars).
+ * underlying string is a CESR-qualified digest. Its algorithm is whatever the
+ * inception event used — SHA-256 by default — so the string is 44 characters
+ * for a 256-bit digest or 88 for a 512-bit one.
  */
 export type Aid = string & { readonly [aidBrand]: 'Aid' };
 
@@ -58,12 +60,13 @@ export interface ParsedDidKeri {
  * Parse a `did:keri:<aid>` string into its components.
  *
  * Parsing is strict and offline. The method-specific id must be a well-formed
- * CESR-qualified SHA-256 digest — the only AID form this transferable-only
- * profile produces — and no DID-URL syntax (path, query, or fragment) is
- * accepted, since resolution operates on bare DIDs. A string that fails
- * either rule throws `InvalidArgumentError`; callers parsing DIDs that arrive
- * from untrusted input should prefer `resolveDid`, which reports the same
- * failure as an `INVALID_DID` result rather than throwing.
+ * CESR-qualified digest under an algorithm node-keri recognizes (a code with a
+ * registered implementation — see `digestAlgorithms`), and no DID-URL syntax
+ * (path, query, or fragment) is accepted, since resolution operates on bare
+ * DIDs. A string that fails either rule throws `InvalidArgumentError`; callers
+ * parsing DIDs that arrive from untrusted input should prefer `resolveDid`,
+ * which reports the same failure as an `INVALID_DID` result rather than
+ * throwing.
  */
 export function parseDidKeri(did: string): ParsedDidKeri {
 	if (typeof did !== 'string') {
@@ -85,11 +88,12 @@ export function parseDidKeri(did: string): ParsedDidKeri {
 			);
 		}
 	}
-	// The AID must be a canonically-encoded CESR SHA-256 digest.
-	// `decodeDigestSha256` enforces the derivation code, fixed length, and
-	// pad-bit canonicality; the decoded bytes themselves are not needed here.
+	// The AID must be a canonically-encoded CESR digest under a recognized
+	// algorithm. `decodeDigest` enforces the derivation code (and that an
+	// implementation is registered for it), the fixed length, and pad-bit
+	// canonicality; the decoded bytes themselves are not needed here.
 	try {
-		decodeDigestSha256(aid);
+		decodeDigest(aid);
 	} catch (err) {
 		if (err instanceof MalformedInputError) {
 			throw new InvalidArgumentError(

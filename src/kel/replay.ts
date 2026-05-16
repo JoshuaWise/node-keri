@@ -20,18 +20,24 @@
  * *tampered* event fails the digest check directly.
  */
 
+import { digestCodeOf } from '../cesr/codes';
 import { decodePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest, CesrPublicKey, CesrSignature } from '../cesr/qualified';
 import { publicKeyFromRaw } from '../crypto/keypair';
 import {
-	SAID_PLACEHOLDER,
 	computeEventSaid,
 	deriveNextKeyCommitment,
+	saidPlaceholder,
 } from '../event/digest';
 import { SignedKeriEvent } from '../event/types';
 import { verifyEventSignature } from '../event/verify-signature';
 import { Aid, formatDidKeri } from '../did/did-keri';
-import { CanonicalJsonError, KeriVerificationError } from '../profile/errors';
+import {
+	CanonicalJsonError,
+	KeriVerificationError,
+	MalformedInputError,
+	UnsupportedAlgorithmError,
+} from '../profile/errors';
 import { KeriState } from './state';
 import { describe, isRecord, checkSignature } from './shape';
 import { validateInceptionShape } from './validate-inception';
@@ -153,28 +159,42 @@ function applyInception(
 	if (!shape.ok) return shape;
 	const ie = shape.value;
 
+	// The digest algorithm is read from the event's own `d` code — the shape
+	// pass already confirmed it is a recognized, available digest — and the
+	// SAID is recomputed under exactly that algorithm.
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid({
-			t: 'icp',
-			d: SAID_PLACEHOLDER,
-			i: SAID_PLACEHOLDER,
-			s: ie.s,
-			kt: ie.kt,
-			k: ie.k,
-			nt: ie.nt,
-			n: ie.n,
-			bt: ie.bt,
-			b: ie.b,
-			c: ie.c,
-			a: ie.a,
-		});
+		const digestCode = digestCodeOf(ie.d);
+		const placeholder = saidPlaceholder(digestCode);
+		const computed = computeEventSaid(
+			{
+				t: 'icp',
+				d: placeholder,
+				i: placeholder,
+				s: ie.s,
+				kt: ie.kt,
+				k: ie.k,
+				nt: ie.nt,
+				n: ie.n,
+				bt: ie.bt,
+				b: ie.b,
+				c: ie.c,
+				a: ie.a,
+			},
+			digestCode
+		);
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {
 		if (err instanceof CanonicalJsonError) {
 			return fail({ code: 'NON_CANONICAL_EVENT' });
+		}
+		if (
+			err instanceof UnsupportedAlgorithmError
+			|| err instanceof MalformedInputError
+		) {
+			return fail({ code: 'INVALID_CESR_CODE', value: ie.d });
 		}
 		throw err;
 	}
@@ -236,26 +256,36 @@ function applyRotation(
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid({
-			t: 'rot',
-			d: SAID_PLACEHOLDER,
-			i: re.i,
-			s: re.s,
-			p: re.p,
-			kt: re.kt,
-			k: re.k,
-			nt: re.nt,
-			n: re.n,
-			bt: re.bt,
-			br: re.br,
-			ba: re.ba,
-			a: re.a,
-		});
+		const digestCode = digestCodeOf(re.d);
+		const computed = computeEventSaid(
+			{
+				t: 'rot',
+				d: saidPlaceholder(digestCode),
+				i: re.i,
+				s: re.s,
+				p: re.p,
+				kt: re.kt,
+				k: re.k,
+				nt: re.nt,
+				n: re.n,
+				bt: re.bt,
+				br: re.br,
+				ba: re.ba,
+				a: re.a,
+			},
+			digestCode
+		);
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {
 		if (err instanceof CanonicalJsonError) {
 			return fail({ code: 'NON_CANONICAL_EVENT' });
+		}
+		if (
+			err instanceof UnsupportedAlgorithmError
+			|| err instanceof MalformedInputError
+		) {
+			return fail({ code: 'INVALID_CESR_CODE', value: re.d });
 		}
 		throw err;
 	}
@@ -279,10 +309,25 @@ function applyRotation(
 	}
 
 	// Pre-rotation: the disclosed signing key, hashed exactly as the prior
-	// event committed it, must reproduce that next-key commitment.
-	const revealedCommitment = deriveNextKeyCommitment(
-		publicKeyFromRaw(decodePublicKeyEd25519(re.k[0]))
-	);
+	// event committed it, must reproduce that next-key commitment. The prior
+	// commitment names its own algorithm in its CESR code, so the recomputation
+	// uses that — not this event's digest code, which may differ.
+	let revealedCommitment: CesrDigest;
+	try {
+		const priorCommitmentCode = digestCodeOf(state.nextKeyCommitment);
+		revealedCommitment = deriveNextKeyCommitment(
+			publicKeyFromRaw(decodePublicKeyEd25519(re.k[0])),
+			priorCommitmentCode
+		);
+	} catch (err) {
+		if (
+			err instanceof UnsupportedAlgorithmError
+			|| err instanceof MalformedInputError
+		) {
+			return fail({ code: 'INVALID_NEXT_KEY_COMMITMENT' });
+		}
+		throw err;
+	}
 	if ((revealedCommitment as string) !== (state.nextKeyCommitment as string)) {
 		return fail({ code: 'INVALID_NEXT_KEY_COMMITMENT' });
 	}
@@ -320,20 +365,30 @@ function applyInteraction(
 	let said: CesrDigest;
 	let versionString: string;
 	try {
-		const computed = computeEventSaid({
-			t: 'ixn',
-			d: SAID_PLACEHOLDER,
-			i: xe.i,
-			s: xe.s,
-			p: xe.p,
-			a: xe.a,
-		});
+		const digestCode = digestCodeOf(xe.d);
+		const computed = computeEventSaid(
+			{
+				t: 'ixn',
+				d: saidPlaceholder(digestCode),
+				i: xe.i,
+				s: xe.s,
+				p: xe.p,
+				a: xe.a,
+			},
+			digestCode
+		);
 		said = computed.said;
 		versionString = computed.versionString;
 	} catch (err) {
 		if (err instanceof CanonicalJsonError) {
 			// A non-JSON-safe anchor in `a` surfaces here.
 			return fail({ code: 'NON_CANONICAL_EVENT' });
+		}
+		if (
+			err instanceof UnsupportedAlgorithmError
+			|| err instanceof MalformedInputError
+		) {
+			return fail({ code: 'INVALID_CESR_CODE', value: xe.d });
 		}
 		throw err;
 	}

@@ -499,23 +499,48 @@ decodePublicKeyEd25519(qb64: string): Uint8Array
 encodeSignatureEd25519(raw64: Uint8Array): CesrSignature
 decodeSignatureEd25519(qb64: string): Uint8Array
 
+// Digests are algorithm-agile. SHA-256 has dedicated helpers; the generic
+// pair works for any registered digest code.
 encodeDigestSha256(raw32: Uint8Array): CesrDigest
 decodeDigestSha256(qb64: string): Uint8Array
+encodeDigest(code: string, raw: Uint8Array): CesrDigest
+decodeDigest(qb64: string): { raw: Uint8Array; code: string }
 ```
+
+### Digest algorithm registry
+
+Keys and signatures are Ed25519-only, but **digests are not pinned to one
+algorithm**. KERI digests are self-describing — the CESR derivation code names
+the hash — so a KEL may mix algorithms across events. The policy is "any
+available 256-bit or 512-bit hash":
+
+- `digestAlgorithms` (`src/crypto/digests.ts`) is an `Object.create(null)` map
+  from CESR digest code to `{ name, hash }`. It is exported and
+  **monkey-patchable**: a caller can register an algorithm node-keri does not
+  ship (e.g. Blake3-256 under code `E`).
+- At load it auto-registers every native `node:crypto` hash the linked OpenSSL
+  provides (SHA2-256/512, SHA3-256/512, BLAKE2s-256, BLAKE2b-512).
+- SHA-256 (`I`) is the hard-coded default for generation; `digestCode` on the
+  event constructors and the high-level API overrides it.
+- Verification auto-detects each event's algorithm from its own digest code
+  and recomputes under exactly that — never KEL-wide pinned.
 
 ### Reject
 
 ```txt
 unknown derivation codes
+digest codes with no registered implementation
+digest widths other than 256-bit and 512-bit
 variable-length groups
 counters
 binary CESR
 attached receipts
 non-Ed25519 keys
-non-selected digest algorithms
 ```
 
-This is where strictness helps security. Do not silently accept unsupported codes.
+This is where strictness helps security. Do not silently accept unsupported
+codes — a digest whose algorithm has no registered implementation is rejected,
+never assumed.
 
 ---
 

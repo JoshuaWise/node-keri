@@ -86,7 +86,7 @@ describe('ed25519', () => {
 		const kp = generateKeyPair();
 		const msg = utf8Encode('hello');
 		const sig = sign(kp.privateKey, msg);
-		sig[0] ^= 0x01;
+		sig[0] = sig[0]! ^ 0x01;
 		expect(verify(kp.publicKey, msg, sig)).toBe(false);
 	});
 

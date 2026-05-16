@@ -93,18 +93,18 @@ function buildNodeKeriKel() {
 	const icp = createIdentifier({ currentKeyPair: k0, nextKeyPair: k1 });
 	const rot1 = rotateIdentifier({
 		state: icp.state,
-		currentPrivateKey: k1.privateKey,
-		nextKeyPair: k2,
+		currentPrivateKey: k1!.privateKey,
+		nextKeyPair: k2!,
 	});
 	const ixn = interactIdentifier({
 		state: rot1.state,
-		currentPrivateKey: k1.privateKey,
+		currentPrivateKey: k1!.privateKey,
 		data: [ANCHOR],
 	});
 	const rot2 = rotateIdentifier({
 		state: ixn.state,
-		currentPrivateKey: k2.privateKey,
-		nextKeyPair: k3,
+		currentPrivateKey: k2!.privateKey,
+		nextKeyPair: k3!,
 	});
 
 	const events: SignedKeriEvent[] = [
@@ -176,7 +176,7 @@ describeInterop('keripy interop: KELs', () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			const lastEvent = generated.kel[generated.kel.length - 1].event;
+			const lastEvent = generated.kel[generated.kel.length - 1]!.event;
 			expect(result.state.sequenceNumber).toBe(3);
 			expect(result.state.lastEventDigest).toBe(lastEvent.d as string);
 			// The final rotation revealed seed 64; that is the current key.

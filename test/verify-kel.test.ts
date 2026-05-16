@@ -252,7 +252,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 	test('rejects reordered events', () => {
 		const { aid, events } = buildKel();
 		const reordered = [...events];
-		[reordered[1], reordered[2]] = [reordered[2], reordered[1]];
+		[reordered[1], reordered[2]] = [reordered[2]!, reordered[1]!];
 		const result = verifyKel({ aid, events: reordered });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -266,7 +266,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 	test('rejects a sequence gap (a dropped event)', () => {
 		const { aid, events } = buildKel();
 		// Drop the seq-1 interaction; the seq-2 rotation now follows inception.
-		const withGap = [events[0], events[2], events[3], events[4]];
+		const withGap = [events[0]!, events[2]!, events[3]!, events[4]!];
 		const result = verifyKel({ aid, events: withGap });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -521,7 +521,7 @@ describe('verifyKel — cryptographic and chain rejection', () => {
 
 		const result = verifyKel({
 			aid,
-			events: [events[0], events[1], events[2], staleIxn],
+			events: [events[0]!, events[1]!, events[2]!, staleIxn],
 		});
 		expect(result.ok).toBe(false);
 		if (result.ok) return;

@@ -20,24 +20,31 @@
  */
 
 import { utf8Encode } from '../bytes/utf8';
-import { CESR_DIGEST_SHA256 } from '../cesr/codes';
-import { encodeDigestSha256, encodePublicKeyEd25519 } from '../cesr/encode';
+import { digestSpecForCode } from '../cesr/codes';
+import { encodeDigest, encodePublicKeyEd25519 } from '../cesr/encode';
 import { CesrDigest } from '../cesr/qualified';
-import { sha256 } from '../crypto/hash';
+import { DEFAULT_DIGEST_CODE, runDigest } from '../crypto/digests';
 import { KeriPublicKey, assertPublicKey } from '../crypto/keypair';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
 import { toCanonicalEvent } from './field-order';
 
-/** Length of the qb64 form of a SHA-256 digest under code `I` (44 chars). */
-const SAID_LENGTH = CESR_DIGEST_SHA256.fs;
+/**
+ * The placeholder for a SAID-bearing field is a run of `#` — a character
+ * outside the base64url alphabet, conventional in KERI tooling — exactly as
+ * long as the qb64 digest it stands in for. Its length therefore depends on
+ * the digest algorithm (44 chars for a 256-bit code, 88 for a 512-bit one),
+ * so the placeholder substitution preserves the event's byte length.
+ */
+export function saidPlaceholder(digestCode: string = DEFAULT_DIGEST_CODE): string {
+	return '#'.repeat(digestSpecForCode(digestCode).fs);
+}
 
 /**
- * Placeholder string used in SAID-bearing fields prior to digesting. Any
- * single character outside the base64url alphabet works; `#` is conventional
- * in KERI tooling and makes the placeholder visually distinct in dumps.
+ * The SAID placeholder for the default (SHA-256) digest — 44 `#` characters.
+ * Events digested with another algorithm need `saidPlaceholder(code)` instead.
  */
-export const SAID_PLACEHOLDER = '#'.repeat(SAID_LENGTH) as string;
+export const SAID_PLACEHOLDER: string = saidPlaceholder(DEFAULT_DIGEST_CODE);
 
 const VERSION_PROTOCOL = 'KERI';
 const VERSION_NUMBER = '10';
@@ -84,21 +91,35 @@ export interface SaidComputation {
 }
 
 /**
- * Compute the SAID for an event from its `fields`.
+ * Compute the SAID for an event from its `fields`, under digest `digestCode`.
  *
  * `fields` carries the event body — `t`, the SAID-bearing fields already
- * present as `SAID_PLACEHOLDER` (`d`, plus `i` for inception, whose AID *is*
- * the SAID), and the remaining fields — in any order; `toCanonicalEvent`
- * reorders it into KERI canonical field order before serialization. `v` is
- * omitted by the caller and filled in here.
+ * present as a placeholder (`d`, plus `i` for inception, whose AID *is* the
+ * SAID), and the remaining fields — in any order; `toCanonicalEvent` reorders
+ * it into KERI canonical field order before serialization. `v` is omitted by
+ * the caller and filled in here.
+ *
+ * `digestCode` selects the hash algorithm — defaulting to SHA-256. The `d`
+ * placeholder the caller passes must be exactly as long as a qb64 digest under
+ * that code (use `saidPlaceholder(digestCode)`); a mismatch is a programmer
+ * error and throws, because it would break the byte-length accounting below.
  *
  * The two-pass version-string sizing is unchanged: both passes differ only in
  * the value of `v`, which is a fixed-length string, so the byte size is stable
  * across them.
  */
 export function computeEventSaid(
-	fields: Readonly<Record<string, unknown>>
+	fields: Readonly<Record<string, unknown>>,
+	digestCode: string = DEFAULT_DIGEST_CODE
 ): SaidComputation {
+	const spec = digestSpecForCode(digestCode);
+	if (typeof fields.d === 'string' && fields.d.length !== spec.fs) {
+		throw new InvalidArgumentError(
+			`SAID placeholder must be ${spec.fs} characters for digest code `
+				+ `'${digestCode}', got ${fields.d.length}`
+		);
+	}
+
 	// Pass 1 — placeholder version string. We only need the byte length here;
 	// the bytes themselves are discarded.
 	const draftBytes = canonicalizeJson(
@@ -120,21 +141,26 @@ export function computeEventSaid(
 		);
 	}
 
-	const digest = sha256(digestedBytes);
-	const said = encodeDigestSha256(digest);
+	const digest = runDigest(digestCode, digestedBytes);
+	const said = encodeDigest(digestCode, digest);
 	return { said, versionString, digestedBytes };
 }
 
 /**
- * Compute the pre-rotation commitment for `nextPublicKey`.
+ * Compute the pre-rotation commitment for `nextPublicKey`, under `digestCode`.
  *
- * The commitment is the qb64 SHA-256 of the *qb64-encoded* next public key.
- * Hashing the qualified form (rather than raw bytes) binds the commitment
- * to the algorithm as well as the bytes, so a future rotation cannot
- * substitute a different key type while preserving the digest.
+ * The commitment is the qb64 digest of the *qb64-encoded* next public key.
+ * Hashing the qualified form (rather than raw bytes) binds the commitment to
+ * the key's algorithm as well as its bytes. `digestCode` defaults to SHA-256;
+ * a rotation that reveals this key must recompute the commitment under the
+ * *same* code, which it reads from the prior commitment itself — so a KEL may
+ * carry commitments under different algorithms across rotations.
  */
-export function deriveNextKeyCommitment(nextPublicKey: KeriPublicKey): CesrDigest {
+export function deriveNextKeyCommitment(
+	nextPublicKey: KeriPublicKey,
+	digestCode: string = DEFAULT_DIGEST_CODE
+): CesrDigest {
 	assertPublicKey(nextPublicKey);
 	const qb64 = encodePublicKeyEd25519(nextPublicKey.raw);
-	return encodeDigestSha256(sha256(utf8Encode(qb64)));
+	return encodeDigest(digestCode, runDigest(digestCode, utf8Encode(qb64)));
 }

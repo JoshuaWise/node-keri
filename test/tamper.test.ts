@@ -112,7 +112,7 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { d: mutateChar(events[i].event.d) }))
+			withReplaced(i, patchEvent(events[i]!, { d: mutateChar(events[i]!.event.d) }))
 				.events
 		);
 	});
@@ -121,7 +121,7 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { i: mutateChar(events[i].event.i) }))
+			withReplaced(i, patchEvent(events[i]!, { i: mutateChar(events[i]!.event.i) }))
 				.events
 		);
 	});
@@ -130,21 +130,21 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { v: mutateChar(events[i].event.v) }))
+			withReplaced(i, patchEvent(events[i]!, { v: mutateChar(events[i]!.event.v) }))
 				.events
 		);
 	});
 
 	test.each(indices)('event %d: wrong sequence number `s`', (i) => {
 		const { aid, events } = buildKel();
-		expectRejected(aid, withReplaced(i, patchEvent(events[i], { s: 'ff' })).events);
+		expectRejected(aid, withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events);
 	});
 
 	test.each(indices)('event %d: mutated event type `t`', (i) => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { t: mutateChar(events[i].event.t) }))
+			withReplaced(i, patchEvent(events[i]!, { t: mutateChar(events[i]!.event.t) }))
 				.events
 		);
 	});
@@ -152,17 +152,17 @@ describe('tamper — single-field mutation of each event', () => {
 	// `p` (previous-event digest) exists on every non-inception event.
 	test.each([1, 2, 3, 4])('event %d: mutated previous-event digest `p`', (i) => {
 		const { aid, events } = buildKel();
-		const event = events[i].event as { p: string };
+		const event = events[i]!.event as { p: string };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { p: mutateChar(event.p) })).events
+			withReplaced(i, patchEvent(events[i]!, { p: mutateChar(event.p) })).events
 		);
 	});
 
 	test.each(indices)('event %d: mutated signature', (i) => {
 		const { aid, events } = buildKel();
-		const tampered = patchEvent(events[i], {});
-		tampered.signatures = [mutateChar(events[i].signatures[0]) as never];
+		const tampered = patchEvent(events[i]!, {});
+		tampered.signatures = [mutateChar(events[i]!.signatures[0]) as never];
 		expectRejected(aid, withReplaced(i, tampered).events);
 	});
 });
@@ -171,19 +171,19 @@ describe('tamper — mutation of key material', () => {
 	// Events 0, 2, 4 are icp/rot/rot — each carries a `k` and an `n` list.
 	test.each([0, 2, 4])('event %d: mutated current key `k[0]`', (i) => {
 		const { aid, events } = buildKel();
-		const event = events[i].event as { k: readonly string[] };
+		const event = events[i]!.event as { k: readonly string[] };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { k: [mutateChar(event.k[0])] })).events
+			withReplaced(i, patchEvent(events[i]!, { k: [mutateChar(event.k[0]!)] })).events
 		);
 	});
 
 	test.each([0, 2, 4])('event %d: mutated next-key commitment `n[0]`', (i) => {
 		const { aid, events } = buildKel();
-		const event = events[i].event as { n: readonly string[] };
+		const event = events[i]!.event as { n: readonly string[] };
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { n: [mutateChar(event.n[0])] })).events
+			withReplaced(i, patchEvent(events[i]!, { n: [mutateChar(event.n[0]!)] })).events
 		);
 	});
 
@@ -191,10 +191,10 @@ describe('tamper — mutation of key material', () => {
 		const { aid, events } = buildKel();
 		// Lift event 4's key list onto event 2 — a structurally valid key,
 		// but not the one event 1 pre-committed to.
-		const foreignKey = (events[4].event as { k: readonly string[] }).k;
+		const foreignKey = (events[4]!.event as { k: readonly string[] }).k;
 		expectRejected(
 			aid,
-			withReplaced(2, patchEvent(events[2], { k: foreignKey })).events
+			withReplaced(2, patchEvent(events[2]!, { k: foreignKey })).events
 		);
 	});
 });
@@ -204,7 +204,7 @@ describe('tamper — mutation of anchored interaction data', () => {
 		const { aid, events } = buildKel();
 		expectRejected(
 			aid,
-			withReplaced(i, patchEvent(events[i], { a: [{ step: 999 }] })).events
+			withReplaced(i, patchEvent(events[i]!, { a: [{ step: 999 }] })).events
 		);
 	});
 });
@@ -213,7 +213,7 @@ describe('tamper — structural mutation of the log', () => {
 	test('reordering two events fails', () => {
 		const { aid, events } = buildKel();
 		const reordered = events.slice();
-		[reordered[1], reordered[2]] = [reordered[2], reordered[1]];
+		[reordered[1], reordered[2]] = [reordered[2]!, reordered[1]!];
 		expectRejected(aid, reordered);
 	});
 
@@ -225,7 +225,7 @@ describe('tamper — structural mutation of the log', () => {
 
 	test('duplicating an event fails', () => {
 		const { aid, events } = buildKel();
-		const duplicated = [...events.slice(0, 3), events[2], ...events.slice(3)];
+		const duplicated = [...events.slice(0, 3), events[2]!, ...events.slice(3)];
 		expectRejected(aid, duplicated);
 	});
 
@@ -266,15 +266,15 @@ describe('tamper — structural mutation of the log', () => {
 describe('tamper — wrapper-level mutation', () => {
 	test.each(indices)('event %d: zero signatures rejected', (i) => {
 		const { aid, events } = buildKel();
-		const stripped = { event: events[i].event, signatures: [] as never };
+		const stripped = { event: events[i]!.event, signatures: [] as never };
 		expectRejected(aid, withReplaced(i, stripped).events);
 	});
 
 	test.each(indices)('event %d: two signatures rejected (multisig)', (i) => {
 		const { aid, events } = buildKel();
 		const doubled = {
-			event: events[i].event,
-			signatures: [events[i].signatures[0], events[i].signatures[0]] as never,
+			event: events[i]!.event,
+			signatures: [events[i]!.signatures[0], events[i]!.signatures[0]] as never,
 		};
 		expectRejected(aid, withReplaced(i, doubled).events);
 	});

@@ -26,6 +26,12 @@ export interface RotateIdentifierInput {
 	readonly currentPrivateKey: KeriPrivateKey;
 	/** Freshly chosen pre-rotation keypair for the *next* rotation. */
 	readonly nextKeyPair: KeriKeyPair;
+	/**
+	 * CESR digest code for the rotation event's SAID and new next-key
+	 * commitment. Defaults to SHA-256 (`I`). The prior commitment is always
+	 * re-checked under its own original algorithm, so KELs may mix codes.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface RotateIdentifierResult {
@@ -58,6 +64,7 @@ export function rotateIdentifier(input: RotateIdentifierInput): RotateIdentifier
 		state: input.state,
 		newCurrentKeyPair,
 		nextPublicKey: input.nextKeyPair.publicKey,
+		digestCode: input.digestCode,
 	});
 
 	return { rotationEvent: signedEvent, state };

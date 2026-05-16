@@ -1,4 +1,5 @@
 import { base64urlDecode } from '../bytes/base64url';
+import { isRegisteredDigestCode } from '../crypto/digests';
 import { MalformedInputError } from '../profile/errors';
 import {
 	ALL_CODES,
@@ -6,6 +7,8 @@ import {
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_SIGNATURE_ED25519,
 	CesrCodeSpec,
+	digestCodeOf,
+	digestSpecForCode,
 } from './codes';
 
 /**
@@ -83,7 +86,34 @@ export function decodeSignatureEd25519(qb64: string): Uint8Array {
 	return decodeMatter(CESR_SIGNATURE_ED25519, qb64);
 }
 
-/** Decode a CESR-qualified SHA-256 digest (code `I`). */
+/** Decode a CESR-qualified SHA-256 digest (code `I`), specifically. */
 export function decodeDigestSha256(qb64: string): Uint8Array {
 	return decodeMatter(CESR_DIGEST_SHA256, qb64);
+}
+
+/**
+ * Decode any CESR-qualified digest whose algorithm node-keri recognizes.
+ *
+ * "Recognizes" means the derivation code has an implementation registered in
+ * `digestAlgorithms` — a built-in native hash, or one a caller has added by
+ * monkey-patching that registry. A digest under an unregistered (or
+ * structurally invalid) code is rejected with `MalformedInputError`: the
+ * library never accepts a hash it could not recompute. The returned `code` is
+ * the detected derivation code, so callers can recompute under the same
+ * algorithm.
+ */
+export function decodeDigest(qb64: string): { raw: Uint8Array; code: string } {
+	if (typeof qb64 !== 'string') {
+		throw new MalformedInputError('digest must be a string');
+	}
+	const code = digestCodeOf(qb64);
+	if (!isRegisteredDigestCode(code)) {
+		throw new MalformedInputError(
+			`unrecognized or unavailable digest code '${code}'`
+		);
+	}
+	// `code` came from `digestCodeOf`, so its shape is always a valid digest
+	// width and `digestSpecForCode` will not throw here.
+	const raw = decodeMatter(digestSpecForCode(code), qb64);
+	return { raw, code };
 }

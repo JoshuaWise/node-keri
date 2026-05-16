@@ -5,6 +5,7 @@ import {
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_SIGNATURE_ED25519,
 	CesrCodeSpec,
+	digestSpecForCode,
 } from './codes';
 import { CesrDigest, CesrPublicKey, CesrSignature } from './qualified';
 
@@ -40,7 +41,19 @@ export function encodeSignatureEd25519(raw: Uint8Array): CesrSignature {
 	return encodeMatter(CESR_SIGNATURE_ED25519, raw) as CesrSignature;
 }
 
-/** CESR-qualify a 32-byte SHA-256 digest (code `I`). */
+/** CESR-qualify a 32-byte SHA-256 digest (code `I`), specifically. */
 export function encodeDigestSha256(raw: Uint8Array): CesrDigest {
 	return encodeMatter(CESR_DIGEST_SHA256, raw) as CesrDigest;
+}
+
+/**
+ * CESR-qualify a raw digest under an explicit derivation `code`.
+ *
+ * `code` must be a supported digest width — a one-character (256-bit) or
+ * `0`-prefixed two-character (512-bit) code — and `raw` must be exactly the
+ * matching length (32 or 64 bytes); both are enforced here. This does not
+ * require the algorithm to be *registered*: it is a pure structural encoding.
+ */
+export function encodeDigest(code: string, raw: Uint8Array): CesrDigest {
+	return encodeMatter(digestSpecForCode(code), raw) as CesrDigest;
 }

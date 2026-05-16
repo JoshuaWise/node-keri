@@ -9,11 +9,12 @@
  */
 
 import { encodePublicKeyEd25519 } from '../cesr/encode';
+import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import { KeriKeyPair, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
 import { KeriState } from '../kel/state';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
-import { SAID_PLACEHOLDER, computeEventSaid } from './digest';
+import { computeEventSaid, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
 import { InteractionEvent, SignedKeriEvent } from './types';
 
@@ -28,6 +29,12 @@ export interface CreateInteractionInput {
 	 * is purely a "heartbeat" advancing the sequence.
 	 */
 	readonly data?: readonly unknown[];
+	/**
+	 * CESR digest code for this event's SAID. Defaults to SHA-256 (`I`).
+	 * Interaction events carry no next-key commitment, so this affects only
+	 * the event's own `d`.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateInteractionResult {
@@ -75,16 +82,17 @@ export function createInteractionEvent(
 
 	// `d` holds the placeholder while the SAID is computed; fields are listed
 	// in KERI canonical order.
+	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
 	const partial = {
 		t: 'ixn' as const,
-		d: SAID_PLACEHOLDER,
+		d: saidPlaceholder(digestCode),
 		i: input.state.aid,
 		s: nextSeq.toString(16),
 		p: input.state.lastEventDigest,
 		a: anchors,
 	};
 
-	const { said, versionString } = computeEventSaid(partial);
+	const { said, versionString } = computeEventSaid(partial, digestCode);
 
 	const event: InteractionEvent = {
 		v: versionString,

@@ -4,26 +4,27 @@ This library implements a deliberately narrow subset of KERI. This document defi
 
 ## Scope
 
-The profile covers a **single-controller, transferable `did:keri` identity lifecycle**: JSON events, Ed25519 keys, CESR text primitives, local KEL creation, replay verification, key rotation, interaction events, and DID document generation. Witnesses, transport, and discovery are out of scope by design — they are separable from KERI's core, which is the replay-verifiable key event log.
+The profile covers a **single-controller, transferable `did:keri` identity lifecycle**: JSON events, Ed25519 keys, CESR text primitives, local KEL creation, replay verification, key rotation, interaction events, and DID document generation. Witnesses, transport, and discovery are out of scope by design — they are separable from KERI's core, which is the replay-verifiable key event log. Non-transferable AIDs are not supported.
 
 ## Supported
 
-| Capability                           | Status |
-| ------------------------------------ | ------ |
-| JSON KERI events                     | Yes    |
-| CESR text primitives                 | Yes    |
-| Ed25519 signing keys                 | Yes    |
-| Self-certifying transferable AIDs    | Yes    |
-| Single signing key (threshold 1)     | Yes    |
-| Single next-key commitment           | Yes    |
-| Inception (`icp`) events             | Yes    |
-| Rotation (`rot`) events              | Yes    |
-| Interaction (`ixn`) events           | Yes    |
-| Local KEL replay & verification      | Yes    |
-| Deterministic event digesting (SAID) | Yes    |
-| `did:keri` parsing & formatting      | Yes    |
-| DID document generation              | Yes    |
-| Signature verification               | Yes    |
+| Capability                               | Status |
+| ---------------------------------------- | ------ |
+| JSON KERI events                         | Yes    |
+| CESR text primitives                     | Yes    |
+| Ed25519 signing keys                     | Yes    |
+| Self-certifying transferable AIDs        | Yes    |
+| Single signing key (threshold 1)         | Yes    |
+| Single next-key commitment               | Yes    |
+| Inception (`icp`) events                 | Yes    |
+| Rotation (`rot`) events                  | Yes    |
+| Interaction (`ixn`) events               | Yes    |
+| Local KEL replay & verification          | Yes    |
+| Deterministic event digesting (SAID)     | Yes    |
+| Pluggable 256-/512-bit digest algorithms | Yes    |
+| `did:keri` parsing & formatting          | Yes    |
+| DID document generation                  | Yes    |
+| Signature verification                   | Yes    |
 
 ## Excluded — and rejected
 
@@ -40,7 +41,7 @@ Every capability below is **outside the profile**. An event that uses one is rej
 | Binary CESR, counters, groups    | Excluded |
 | CBOR / MessagePack serialization | Excluded |
 | Non-Ed25519 keys                 | Excluded |
-| Non-SHA-256 digests              | Excluded |
+| Non-transferable AIDs            | Excluded |
 | HTTP transport, filesystem       | Excluded |
 
 ## Event shapes
@@ -75,23 +76,36 @@ Event top-level fields follow KERI's fixed, type-specific **canonical field orde
 | `rot` | `v t d i s p kt k nt n bt br ba a` |
 | `ixn` | `v t d i s p a`                    |
 
-The event digest (`d`) is a SHA-256 self-addressing identifier (SAID) computed over the canonical event with the digest field(s) replaced by a fixed-length placeholder. For inception, the AID _is_ the SAID — `d` and `i` are identical.
+The event digest (`d`) is a self-addressing identifier (SAID) computed over the canonical event with the digest field(s) replaced by a fixed-length placeholder. For inception, the AID _is_ the SAID — `d` and `i` are identical. The hash algorithm is whatever the digest's own CESR code names — see [Digest algorithms](#digest-algorithms) — so different events in one KEL may use different algorithms; SHA-256 is the default for events this library generates.
 
 ## CESR subset
 
-Only three qualified text primitives are implemented:
+Qualified text primitives — keys and signatures are Ed25519-only; digests are algorithm-agile:
 
-| Primitive          | Code | Qualified length |
-| ------------------ | ---- | ---------------- |
-| Ed25519 public key | `D`  | 44 chars         |
-| Ed25519 signature  | `0B` | 88 chars         |
-| SHA-256 digest     | `I`  | 44 chars         |
+| Primitive          | Code         | Qualified length |
+| ------------------ | ------------ | ---------------- |
+| Ed25519 public key | `D`          | 44 chars         |
+| Ed25519 signature  | `0B`         | 88 chars         |
+| 256-bit digest     | one char     | 44 chars         |
+| 512-bit digest     | `0`-prefixed | 88 chars         |
 
 Decoders enforce the derivation code, the fixed length, the base64url alphabet, and **pad-bit canonicality** (the leading pad bits must be zero, so no malleable alternate encoding decodes to the same bytes). Unknown codes, wrong lengths, and non-canonical encodings are rejected.
 
+A digest code is accepted only when an implementation is registered for it (see [Digest algorithms](#digest-algorithms)); a digest under an unregistered code is rejected with `INVALID_CESR_CODE`.
+
+## Digest algorithms
+
+KERI digests are self-describing: a qualified digest's CESR code names its hash algorithm, so a KEL may freely mix algorithms across events. This library follows that — the policy is **"any available 256-bit or 512-bit hash"**:
+
+- A one-character code denotes a 256-bit (32-byte) digest; a `0`-prefixed two-character code a 512-bit (64-byte) one. No other digest widths are supported.
+- node-keri auto-registers every native `node:crypto` hash the linked OpenSSL provides — SHA2-256/512, SHA3-256/512, BLAKE2s-256, BLAKE2b-512. SHA3 and BLAKE2 availability is build-dependent, so the runtime registry is the source of truth.
+- The `digestAlgorithms` registry maps CESR code → implementation and is monkey-patchable: a caller can register an algorithm node-keri does not ship (e.g. Blake3-256) and it is then accepted for decoding, verification, and generation alike.
+- **Generation** defaults to SHA-256 (`I`); pass a `digestCode` to `createIdentifier` / `rotateIdentifier` / `interactIdentifier` to pick another. **Verification** auto-detects each digest's algorithm from its code and recomputes under exactly that — it is never pinned to one algorithm.
+- The library fails closed: a digest under a code with no registered implementation is rejected, never assumed.
+
 ## `did:keri` method
 
-- DID syntax: `did:keri:<aid>`, where `<aid>` is a CESR-qualified SHA-256 digest (the inception event's SAID).
+- DID syntax: `did:keri:<aid>`, where `<aid>` is the inception event's SAID — a CESR-qualified digest under any registered algorithm (44 chars for a 256-bit digest, 88 for a 512-bit one).
 - The parser is strict and offline: DID-URL components (path, query, fragment) are rejected, and the identifier must be a well-formed AID.
 - Resolution is local only — the caller supplies the KEL. The library never discovers, fetches, or persists anything.
 - A DID document is a projection of one **verified** key state: it advertises the single currently-authoritative Ed25519 key as a `JsonWebKey2020` verification method, referenced from `authentication` and `assertionMethod`.

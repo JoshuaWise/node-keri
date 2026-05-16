@@ -9,7 +9,9 @@
  * at construction time so the resulting event is always self-consistent.
  */
 
+import { digestCodeOf } from '../cesr/codes';
 import { encodePublicKeyEd25519 } from '../cesr/encode';
+import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import {
 	KeriKeyPair,
 	KeriPublicKey,
@@ -18,7 +20,7 @@ import {
 } from '../crypto/keypair';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
-import { SAID_PLACEHOLDER, computeEventSaid, deriveNextKeyCommitment } from './digest';
+import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
 import { RotationEvent, SignedKeriEvent } from './types';
 
@@ -29,6 +31,13 @@ export interface CreateRotationInput {
 	readonly newCurrentKeyPair: KeriKeyPair;
 	/** Public half of the freshly chosen next keypair. */
 	readonly nextPublicKey: KeriPublicKey;
+	/**
+	 * CESR digest code for this event's SAID and *new* next-key commitment.
+	 * Defaults to SHA-256 (`I`). The prior commitment being revealed is always
+	 * re-checked under whatever code it was originally made with, so rotations
+	 * may switch algorithms freely.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateRotationResult {
@@ -41,9 +50,15 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	assertPrivateKey(input.newCurrentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
 
+	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
 	const newCurrentQb64 = encodePublicKeyEd25519(input.newCurrentKeyPair.publicKey.raw);
+	// The prior commitment must be reproduced under the algorithm it was
+	// *originally* made with — read from the commitment's own CESR code — not
+	// under the code chosen for this event.
+	const priorCommitmentCode = digestCodeOf(input.state.nextKeyCommitment);
 	const newCurrentCommitment = deriveNextKeyCommitment(
-		input.newCurrentKeyPair.publicKey
+		input.newCurrentKeyPair.publicKey,
+		priorCommitmentCode
 	);
 	if (newCurrentCommitment !== input.state.nextKeyCommitment) {
 		// The disclosed key isn't the one that was pre-rotated to. Building
@@ -54,7 +69,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 		);
 	}
 
-	const newNextCommitment = deriveNextKeyCommitment(input.nextPublicKey);
+	const newNextCommitment = deriveNextKeyCommitment(input.nextPublicKey, digestCode);
 	const nextSeq = input.state.sequenceNumber + 1;
 	if (!Number.isSafeInteger(nextSeq)) {
 		throw new InvalidArgumentError('sequence number overflow');
@@ -64,7 +79,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	// in KERI canonical order.
 	const partial = {
 		t: 'rot' as const,
-		d: SAID_PLACEHOLDER,
+		d: saidPlaceholder(digestCode),
 		i: input.state.aid,
 		s: nextSeq.toString(16),
 		p: input.state.lastEventDigest,
@@ -78,7 +93,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 		a: [] as const,
 	};
 
-	const { said, versionString } = computeEventSaid(partial);
+	const { said, versionString } = computeEventSaid(partial, digestCode);
 
 	const event: RotationEvent = {
 		v: versionString,

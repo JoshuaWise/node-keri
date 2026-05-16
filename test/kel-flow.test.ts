@@ -80,16 +80,16 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 		// Sequence numbers are dense and monotonic, AID is stable.
 		const aid = icp.state.aid;
 		for (let i = 0; i < events.length; i++) {
-			const e = events[i].event;
+			const e = events[i]!.event;
 			expect(e.i).toBe(aid);
 			expect(e.s).toBe(i.toString(16));
 		}
 
 		// Each event's `p` (where it has one) chains to the previous SAID.
 		for (let i = 1; i < events.length; i++) {
-			const e = events[i].event;
+			const e = events[i]!.event;
 			if (e.t === 'icp') throw new Error('only the first event may be icp');
-			expect(e.p).toBe(events[i - 1].event.d);
+			expect(e.p).toBe(events[i - 1]!.event.d);
 		}
 
 		// Every signature verifies under the key that was authoritative at
@@ -97,9 +97,9 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 		for (let i = 0; i < events.length; i++) {
 			expect(
 				verifyEventSignature(
-					events[i].event,
-					expectedSigner[i],
-					events[i].signatures[0]
+					events[i]!.event,
+					expectedSigner[i]!,
+					events[i]!.signatures[0]
 				)
 			).toBe(true);
 		}
@@ -118,25 +118,25 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 		const keys = seeds.map((s) => keyPairFromSeed(s));
 
 		const icp = createInceptionEvent({
-			currentKeyPair: keys[0],
-			nextPublicKey: keys[1].publicKey,
+			currentKeyPair: keys[0]!,
+			nextPublicKey: keys[1]!.publicKey,
 		});
 		let state = icp.state;
 
 		for (let i = 1; i < keys.length - 1; i++) {
 			const r = createRotationEvent({
 				state,
-				newCurrentKeyPair: keys[i],
-				nextPublicKey: keys[i + 1].publicKey,
+				newCurrentKeyPair: keys[i]!,
+				nextPublicKey: keys[i + 1]!.publicKey,
 			});
 			expect(r.state.sequenceNumber).toBe(i);
 			expect(r.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(keys[i].publicKey.raw)
+				encodePublicKeyEd25519(keys[i]!.publicKey.raw)
 			);
 			expect(
 				verifyEventSignature(
 					r.signedEvent.event,
-					encodePublicKeyEd25519(keys[i].publicKey.raw),
+					encodePublicKeyEd25519(keys[i]!.publicKey.raw),
 					r.signedEvent.signatures[0]
 				)
 			).toBe(true);

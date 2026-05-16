@@ -104,6 +104,7 @@ Generate a fresh Ed25519 keypair from the platform CSPRNG. `KeriKeyPair` is an o
 function createIdentifier(input?: {
 	currentKeyPair?: KeriKeyPair;
 	nextKeyPair?: KeriKeyPair;
+	digestCode?: string;
 }): {
 	did: DidKeri;
 	aid: Aid;
@@ -116,6 +117,8 @@ function createIdentifier(input?: {
 
 Mint a new transferable `did:keri` identifier. Generates fresh current and next (pre-rotation) keypairs when they are not supplied, builds and signs the inception event, and returns the DID, both keypairs, the signed event, and the replay-derived sequence-0 state. Throws `InvalidArgumentError` if the two keypairs are the same key. **The caller must store the returned key material.**
 
+`digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to SHA-256 (`I`). See [Digest algorithms](#digest-algorithms).
+
 #### `rotateIdentifier`
 
 ```ts
@@ -123,6 +126,7 @@ function rotateIdentifier(input: {
 	state: KeriState;
 	currentPrivateKey: KeriPrivateKey;
 	nextKeyPair: KeriKeyPair;
+	digestCode?: string;
 }): {
 	rotationEvent: SignedKeriEvent;
 	state: KeriState;
@@ -131,6 +135,8 @@ function rotateIdentifier(input: {
 
 Roll the signing key forward. `currentPrivateKey` is the private half of the key being rotated _to_ — the pre-rotation key whose digest the prior event committed; its public half must reproduce that commitment or the rotation is rejected. `nextKeyPair` is the freshly chosen pre-rotation key for the _next_ rotation. Returns the signed rotation event and the new state.
 
+`digestCode` selects the hash for this event's SAID and new next-key commitment (default SHA-256). The prior commitment is always re-checked under its _own_ original algorithm, so rotations may switch algorithms freely.
+
 #### `interactIdentifier`
 
 ```ts
@@ -138,13 +144,14 @@ function interactIdentifier(input: {
 	state: KeriState;
 	currentPrivateKey: KeriPrivateKey;
 	data?: readonly unknown[];
+	digestCode?: string;
 }): {
 	interactionEvent: SignedKeriEvent;
 	state: KeriState;
 };
 ```
 
-Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state.
+Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256).
 
 #### `verifyKel`
 
@@ -240,6 +247,56 @@ function exportPublicKeyRaw(publicKey: KeriPublicKey): Uint8Array;
 
 Export the raw 32-byte public-key bytes as a fresh copy.
 
+### Digest algorithms
+
+KERI digests are self-describing — every qualified digest carries a CESR derivation code naming its hash algorithm — so a KEL may mix algorithms across events. This library supports **any available 256-bit or 512-bit hash**.
+
+#### `digestAlgorithms`
+
+```ts
+const digestAlgorithms: Record<string, DigestAlgorithm | undefined>;
+interface DigestAlgorithm {
+	name: string;
+	hash(input: Uint8Array): Uint8Array;
+}
+```
+
+The registry of digest implementations, keyed by CESR derivation code. The value type includes `undefined` because the registry is sparse — indexing an unregistered code yields `undefined` — so every read must handle the absent case. It is a null-prototype object, populated at load with every native `node:crypto` hash the linked OpenSSL provides — SHA2-256 (`I`), SHA2-512 (`0G`), SHA3-256 (`H`), SHA3-512 (`0E`), BLAKE2s-256 (`G`), BLAKE2b-512 (`0F`). A code with no entry is rejected everywhere — decoding, verification, generation — so the library never trusts a hash it cannot recompute.
+
+It is **monkey-patchable**: register an algorithm node-keri does not ship by assigning an entry. The implementation must return 32 bytes for a one-character code or 64 for a `0`-prefixed code.
+
+```ts
+import { digestAlgorithms } from 'node-keri';
+import { blake3 } from 'some-blake3-library';
+
+// Blake3-256 uses CESR code 'E'. Once registered, it is accepted for
+// decoding, KEL verification, and generation alike.
+digestAlgorithms['E'] = {
+	name: 'Blake3-256',
+	hash: (input) => blake3(input), // must return 32 bytes
+};
+```
+
+#### Choosing an algorithm for generation
+
+`createIdentifier`, `rotateIdentifier`, and `interactIdentifier` each accept an optional `digestCode`. It defaults to SHA-256 (`DEFAULT_DIGEST_CODE`, `'I'`); requesting a code with no registered implementation throws `UnsupportedAlgorithmError`.
+
+```ts
+import { createIdentifier, rotateIdentifier, DIGEST_CODES } from 'node-keri';
+
+const id = createIdentifier({ digestCode: DIGEST_CODES.SHA3_256 });
+const rot = rotateIdentifier({
+	state: id.state,
+	currentPrivateKey: id.nextKeyPair.privateKey,
+	nextKeyPair: generateKeyPair(),
+	digestCode: DIGEST_CODES.SHA2_512, // a KEL may mix algorithms
+});
+```
+
+Verification (`verifyKel`, `resolveDid`, `verifySignatureWithDid`) needs no configuration: each event's algorithm is detected from its own CESR code and recomputed under exactly that — verification is never pinned to one algorithm.
+
+`DIGEST_CODES` names the well-known codes (`SHA2_256`, `SHA2_512`, `SHA3_256`, `SHA3_512`, `BLAKE2B_512`, `BLAKE2S_256`, `BLAKE2B_256`, `BLAKE3_256`). `decodeDigest(qb64)` decodes any recognized digest and reports its code; `encodeDigest(code, raw)` qualifies a raw digest; `digestCodeOf(qb64)` reads a digest's code; `isRegisteredDigestCode(code)` tests availability; `runDigest(code, input)` hashes through the registry.
+
 ### Errors
 
 Programmer errors throw a subclass of `KeriError`:
@@ -276,12 +333,13 @@ Alongside the functions above, the package exports the full type surface:
 
 - **Keys** — `KeriKeyPair`, `KeriPublicKey`, `KeriPrivateKey`, `PublicKeyJwk`.
 - **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrDigest` (compile-time branded strings).
+- **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
 - **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent`.
 - **State** — `KeriState`, the replay-derived, trusted summary of an identifier.
 - **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`, `DidResolutionMetadata`.
 - **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyKelResult`, and so on).
-- **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.
+- **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `DEFAULT_DIGEST_CODE`, `DIGEST_CODES`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.
 
 ## What this library does not do
 

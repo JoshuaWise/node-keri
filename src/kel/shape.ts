@@ -17,11 +17,15 @@
  */
 
 import {
-	decodeDigestSha256,
+	decodeDigest,
 	decodePublicKeyEd25519,
 	decodeSignatureEd25519,
 } from '../cesr/decode';
-import { KeriVerificationError, MalformedInputError } from '../profile/errors';
+import {
+	KeriVerificationError,
+	MalformedInputError,
+	UnsupportedAlgorithmError,
+} from '../profile/errors';
 
 /** Result of a structural validation pass over a single event. */
 export type ShapeResult<T> =
@@ -63,9 +67,29 @@ function checkCesr(
 	}
 }
 
-/** A field that must be a CESR-qualified SHA-256 digest (code `I`). */
+/**
+ * A field that must be a CESR-qualified digest under *some* algorithm node-keri
+ * recognizes — any code with a registered implementation (see
+ * `digestAlgorithms`). A digest under an unregistered or structurally invalid
+ * code is rejected with `INVALID_CESR_CODE`, so the verifier fails closed on a
+ * hash it could not recompute.
+ */
 export function checkDigest(value: unknown): KeriVerificationError | null {
-	return checkCesr(decodeDigestSha256, value);
+	if (typeof value !== 'string') {
+		return { code: 'INVALID_CESR_CODE', value: describe(value) };
+	}
+	try {
+		decodeDigest(value);
+		return null;
+	} catch (err) {
+		if (
+			err instanceof MalformedInputError
+			|| err instanceof UnsupportedAlgorithmError
+		) {
+			return { code: 'INVALID_CESR_CODE', value };
+		}
+		throw err;
+	}
 }
 
 /** A field that must be a CESR-qualified Ed25519 signature (code `0B`). */

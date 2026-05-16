@@ -25,6 +25,11 @@ export interface InteractIdentifierInput {
 	readonly currentPrivateKey: KeriPrivateKey;
 	/** Optional anchored data; each entry must be canonical-JSON-serializable. */
 	readonly data?: readonly unknown[];
+	/**
+	 * CESR digest code for the interaction event's SAID. Defaults to
+	 * SHA-256 (`I`).
+	 */
+	readonly digestCode?: string;
 }
 
 export interface InteractIdentifierResult {
@@ -50,6 +55,7 @@ export function interactIdentifier(
 		state: input.state,
 		currentKeyPair,
 		data: input.data,
+		digestCode: input.digestCode,
 	});
 
 	return { interactionEvent: signedEvent, state };
