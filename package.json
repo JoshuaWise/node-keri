@@ -16,7 +16,8 @@
 		"prepare": "tsc",
 		"watch": "tsc --watch",
 		"prettier": "prettier --write src/**",
-		"clean": "rm -rf node_modules dist"
+		"setup-interop-tests": "bash test/interop/setup-keripy.sh",
+		"clean": "rm -rf node_modules dist keripy keripy-wheels"
 	},
 	"files": [
 		"src/**",

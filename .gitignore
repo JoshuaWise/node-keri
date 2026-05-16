@@ -12,3 +12,8 @@ dst/
 build/
 node_modules/
 .local/
+
+# keripy interop virtualenv + optional offline wheelhouse (provisioned by
+# test/interop/setup-keripy.sh)
+keripy/
+keripy-wheels/
