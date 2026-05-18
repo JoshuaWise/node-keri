@@ -54,7 +54,9 @@ beforeEach(() => {
 	for (const c of Object.keys(digestAlgorithms)) snapshot[c] = digestAlgorithms[c];
 });
 afterEach(() => {
-	for (const c of Object.keys(digestAlgorithms)) delete digestAlgorithms[c];
+	// `digestAlgorithms` is sealed: clear entries by reassigning `undefined`
+	// (not `delete`), then restore them from the snapshot.
+	for (const c of Object.keys(digestAlgorithms)) digestAlgorithms[c] = undefined;
 	for (const c of Object.keys(snapshot)) digestAlgorithms[c] = snapshot[c];
 });
 
@@ -321,7 +323,8 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 		const kel = id.inceptionEvent;
 
 		// ...then drop the implementation. The KEL can no longer be verified.
-		delete digestAlgorithms['E'];
+		// The registry is sealed, so the entry is cleared by reassignment.
+		digestAlgorithms['E'] = undefined;
 
 		const result = verifyKel({ aid, kel });
 		expect(result.ok).toBe(false);

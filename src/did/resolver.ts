@@ -19,7 +19,6 @@
 
 import { verifyKel } from '../api/verify-kel';
 import { CesrPublicKey } from '../cesr/qualified';
-import { parseKel } from '../event/stream';
 import { KeriState, NonTransferableKeriState } from '../kel/state';
 import { InvalidArgumentError, KeriVerificationError } from '../profile/errors';
 import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
@@ -111,11 +110,11 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		state: verification.state,
 	});
 
-	// The KEL verified, so its CESR stream is well-framed: `parseKel` re-parses
-	// it purely to count the events and cannot throw here.
+	// `verifyKel` already parsed and replayed the stream, so it reports the
+	// event count directly — no need to parse the KEL a second time here.
 	const metadata: DidResolutionMetadata = {
 		state: verification.state,
-		eventCount: parseKel(input.kel).length,
+		eventCount: verification.eventCount,
 		deactivated: verification.state.deactivated === true,
 	};
 	return { ok: true, didDocument, metadata };

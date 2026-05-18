@@ -248,7 +248,11 @@ describe('tamper — single-field mutation of each event', () => {
 		// caught by — the signature check.
 		const tampered = patchEvent(events[i]!, {});
 		tampered.signatures = [mutateChar(events[i]!.signatures[0]) as never];
-		expectRejected(aid, frameKel(withReplaced(i, tampered).events), 'INVALID_SIGNATURE');
+		expectRejected(
+			aid,
+			frameKel(withReplaced(i, tampered).events),
+			'INVALID_SIGNATURE'
+		);
 	});
 });
 
@@ -393,5 +397,33 @@ describe('tamper — attachment-level mutation', () => {
 			frameKel(withReplaced(i, doubled).events),
 			'UNSUPPORTED_FEATURE'
 		);
+	});
+});
+
+describe('tamper — non-canonical serialization', () => {
+	// KERI fixes a type-specific field order; the event SAID and signature are
+	// computed over those ordered bytes. The replay verifier re-canonicalizes
+	// an event before recomputing, so a frame whose JSON merely reorders fields
+	// is byte-for-byte equivalent in content and would pass the digest and
+	// signature checks — yet a strict verifier (which digests the bytes as
+	// received) rejects it. `verifyKel` must reject it too, as
+	// `NON_CANONICAL_EVENT`, so the KEL has one canonical wire form.
+	test.each(indices)('event %d: non-canonical field order rejected', (i) => {
+		const { aid, events } = buildKel();
+		const stream = events
+			.map((e, idx) => {
+				const ev = e.event as unknown as Record<string, unknown>;
+				if (idx !== i) return reframe(ev, e.signatures);
+				// Same fields, same values — only the order differs from canonical.
+				const reordered: Record<string, unknown> = { v: ev.v };
+				for (const k of Object.keys(ev)
+					.filter((k) => k !== 'v')
+					.reverse()) {
+					reordered[k] = ev[k];
+				}
+				return reframe(reordered, e.signatures);
+			})
+			.join('');
+		expectRejected(aid, stream, 'NON_CANONICAL_EVENT');
 	});
 });

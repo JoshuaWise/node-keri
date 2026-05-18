@@ -20,15 +20,18 @@
  * *tampered* event fails the digest check directly.
  */
 
+import { bytesEqual } from '../bytes/compare';
 import { digestCodeOf } from '../cesr/codes';
 import { decodePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest, CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
 import { publicKeyFromRaw } from '../crypto/keypair';
+import { canonicalizeJson } from '../event/canonical-json';
 import {
 	computeEventSaid,
 	deriveNextKeyCommitment,
 	saidPlaceholder,
 } from '../event/digest';
+import { toCanonicalEvent } from '../event/field-order';
 import { parseStreamResult } from '../event/stream';
 import { verifyEventSignature } from '../event/verify-signature';
 import { Aid, formatDidKeri } from '../did/did-keri';
@@ -46,7 +49,7 @@ import { validateRotationShape } from './validate-rotation';
 
 /** Discriminated result of verifying an entire KEL. */
 export type VerifyKelResult =
-	| { ok: true; state: KeriState }
+	| { ok: true; state: KeriState; eventCount: number }
 	| { ok: false; error: KeriVerificationError };
 
 /** Internal per-event outcome: a fresh state, or the error that stopped us. */
@@ -54,8 +57,44 @@ type StepResult =
 	| { ok: true; state: KeriState }
 	| { ok: false; error: KeriVerificationError };
 
-function fail(error: KeriVerificationError): StepResult {
+/**
+ * Build a failure result. Typed as the bare `{ ok: false }` arm — which is
+ * common to both `StepResult` and `VerifyKelResult` — so `replayKel` and the
+ * per-event `apply*` helpers can all `return fail(...)` directly.
+ */
+function fail(error: KeriVerificationError): { ok: false; error: KeriVerificationError } {
 	return { ok: false, error };
+}
+
+/**
+ * Confirm an event's on-wire JSON bytes are exactly its canonical
+ * serialization — KERI's fixed, type-specific field order with no
+ * insignificant whitespace.
+ *
+ * The replay verifier recomputes every digest and signature over the event
+ * *re-canonicalized* through `toCanonicalEvent`, so an event whose wire bytes
+ * differ only in field order would otherwise verify here even though a strict
+ * KERI verifier — one that digests the bytes as received — would reject it.
+ * Comparing the raw frame bytes against the canonical form closes that gap, so
+ * a non-canonical KEL fails closed with `NON_CANONICAL_EVENT` instead of being
+ * silently normalized.
+ *
+ * Called only after shape validation, so `event.t` is a known event type and
+ * `toCanonicalEvent` cannot throw; a `canonicalizeJson` failure (a non-JSON-
+ * safe interaction anchor) is reported with the same code, consistent with how
+ * such an anchor surfaces from SAID recomputation.
+ */
+function checkCanonicalBytes(
+	event: Record<string, unknown>,
+	eventBytes: Uint8Array
+): boolean {
+	let canonicalBytes: Uint8Array;
+	try {
+		canonicalBytes = canonicalizeJson(toCanonicalEvent(event));
+	} catch {
+		return false;
+	}
+	return bytesEqual(canonicalBytes, eventBytes);
 }
 
 /**
@@ -72,15 +111,16 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 	if (!parsed.ok) {
 		return fail({ code: 'MALFORMED_STREAM', message: parsed.message });
 	}
-	const events = parsed.events;
-	if (events.length === 0) {
+	const frames = parsed.frames;
+	if (frames.length === 0) {
 		return fail({ code: 'EMPTY_KEL' });
 	}
 
 	let state: KeriState | undefined;
 
-	for (let index = 0; index < events.length; index++) {
-		const wrapper = readWrapper(events[index]);
+	for (let index = 0; index < frames.length; index++) {
+		const frame = frames[index]!;
+		const wrapper = readWrapper(frame.signed);
 		if (!wrapper.ok) return wrapper;
 		const { event, signature } = wrapper.value;
 		const t = event.t;
@@ -93,7 +133,7 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 					eventType: typeof t === 'string' ? t : describe(t),
 				});
 			}
-			step = applyInception(aid, event, signature);
+			step = applyInception(aid, event, frame.eventBytes, signature);
 		} else {
 			// `state` is always defined here: index 0 either set it or returned.
 			const prior = state as KeriState;
@@ -110,9 +150,9 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 				});
 			}
 			if (t === 'rot') {
-				step = applyRotation(prior, event, signature);
+				step = applyRotation(prior, event, frame.eventBytes, signature);
 			} else if (t === 'ixn') {
-				step = applyInteraction(prior, event, signature);
+				step = applyInteraction(prior, event, frame.eventBytes, signature);
 			} else {
 				// A second `icp`, or an unknown type, both land here.
 				return fail({
@@ -126,7 +166,7 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 		state = step.state;
 	}
 
-	return { ok: true, state: state as KeriState };
+	return { ok: true, state: state as KeriState, eventCount: frames.length };
 }
 
 /** Unwrap a SignedKeriEvent: confirm the event object and single signature. */
@@ -181,10 +221,13 @@ function readWrapper(signed: unknown):
 function applyInception(
 	aid: Aid,
 	event: Record<string, unknown>,
+	eventBytes: Uint8Array,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInceptionShape(event);
 	if (!shape.ok) return shape;
+	const canonical = checkCanonicalBytes(event, eventBytes);
+	if (!canonical) return fail({ code: 'NON_CANONICAL_EVENT' });
 	const validated = shape.value;
 	const ie = validated.event;
 
@@ -311,10 +354,13 @@ function applyInception(
 function applyRotation(
 	state: TransferableKeriState,
 	event: Record<string, unknown>,
+	eventBytes: Uint8Array,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateRotationShape(event);
 	if (!shape.ok) return shape;
+	const canonical = checkCanonicalBytes(event, eventBytes);
+	if (!canonical) return fail({ code: 'NON_CANONICAL_EVENT' });
 	const validated = shape.value;
 	const re = validated.event;
 
@@ -440,10 +486,13 @@ function applyRotation(
 function applyInteraction(
 	state: TransferableKeriState,
 	event: Record<string, unknown>,
+	eventBytes: Uint8Array,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInteractionShape(event);
 	if (!shape.ok) return shape;
+	const canonical = checkCanonicalBytes(event, eventBytes);
+	if (!canonical) return fail({ code: 'NON_CANONICAL_EVENT' });
 	const xe = shape.value;
 
 	let said: CesrDigest;

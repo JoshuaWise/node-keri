@@ -38,8 +38,8 @@ import { SignedKeriEvent } from './types';
 /** Character length of one indexed Ed25519 signature (a "Siger"). */
 const SIGER_LENGTH = CESR_INDEXED_SIGNATURE_ED25519.fs;
 
-/** The literal bytes every KERI 1.0 JSON event begins with. */
-const VERSION_PREFIX = '{"v":"KERI10JSON';
+/** The literal bytes every KERI 1.0 JSON event frame begins with. */
+const EVENT_FRAME_PREFIX = '{"v":"KERI10JSON';
 
 /**
  * Smallest possible event header: `{"v":"` + `KERI10JSON` + 6 hex size chars
@@ -114,9 +114,24 @@ export function encodeEventFrame(signed: SignedKeriEvent): string {
 	return utf8Decode(eventBytes) + attachment;
 }
 
-/** Result of parsing a CESR stream — events, or the framing defect found. */
+/**
+ * One parsed frame: the signed event in memory, plus the exact event JSON
+ * bytes it occupied in the stream.
+ *
+ * The replay verifier needs `eventBytes` — not just `signed` — because it
+ * recomputes digests and signatures over a *re-canonicalized* event, which
+ * would silently accept an event whose wire bytes merely differ in field
+ * order. Comparing the raw frame bytes against the canonical serialization
+ * is what lets the verifier reject that as `NON_CANONICAL_EVENT`.
+ */
+export interface ParsedFrame {
+	readonly signed: SignedKeriEvent;
+	readonly eventBytes: Uint8Array;
+}
+
+/** Result of parsing a CESR stream — frames, or the framing defect found. */
 export type ParseStreamResult =
-	| { ok: true; events: SignedKeriEvent[] }
+	| { ok: true; frames: ParsedFrame[] }
 	| { ok: false; message: string };
 
 /** Render the ASCII text in `bytes[start, end)`, rejecting any non-ASCII byte. */
@@ -141,13 +156,13 @@ function readEventSize(bytes: Uint8Array, offset: number): number {
 		throw new MalformedInputError('truncated event header');
 	}
 	const head = asciiSlice(bytes, offset, offset + HEADER_LENGTH);
-	if (!head.startsWith(VERSION_PREFIX)) {
+	if (!head.startsWith(EVENT_FRAME_PREFIX)) {
 		throw new MalformedInputError('frame does not begin with a KERI JSON event');
 	}
 	if (head[HEADER_LENGTH - 1] !== '_') {
 		throw new MalformedInputError('malformed KERI version string');
 	}
-	const hex = head.slice(VERSION_PREFIX.length, HEADER_LENGTH - 1);
+	const hex = head.slice(EVENT_FRAME_PREFIX.length, HEADER_LENGTH - 1);
 	if (!/^[0-9a-f]{6}$/.test(hex)) {
 		throw new MalformedInputError('malformed version-string size field');
 	}
@@ -165,12 +180,15 @@ function readEventSize(bytes: Uint8Array, offset: number): number {
 function parseFrameAt(
 	bytes: Uint8Array,
 	offset: number
-): { signed: SignedKeriEvent; nextOffset: number } {
+): { signed: SignedKeriEvent; eventBytes: Uint8Array; nextOffset: number } {
 	const size = readEventSize(bytes, offset);
 
+	// The exact event JSON bytes, kept so the replay verifier can check them
+	// against the event's canonical serialization (see `ParsedFrame`).
+	const eventBytes = bytes.subarray(offset, offset + size);
 	let event: unknown;
 	try {
-		event = JSON.parse(utf8Decode(bytes.subarray(offset, offset + size)));
+		event = JSON.parse(utf8Decode(eventBytes));
 	} catch {
 		throw new MalformedInputError('event is not valid JSON');
 	}
@@ -195,11 +213,11 @@ function parseFrameAt(
 	}
 
 	const signed = { event, signatures } as unknown as SignedKeriEvent;
-	return { signed, nextOffset: sigOffset };
+	return { signed, eventBytes, nextOffset: sigOffset };
 }
 
 /**
- * Parse a CESR stream into its signed events, never throwing.
+ * Parse a CESR stream into its frames, never throwing.
  *
  * A framing defect — a bad version string, a truncated event, an unsupported
  * counter, a short signature — is returned as `{ ok: false, message }`. The
@@ -213,12 +231,12 @@ export function parseStreamResult(stream: string): ParseStreamResult {
 		return { ok: false, message: 'stream must be a string' };
 	}
 	const bytes = utf8Encode(stream);
-	const events: SignedKeriEvent[] = [];
+	const frames: ParsedFrame[] = [];
 	let offset = 0;
 	while (offset < bytes.length) {
 		try {
-			const { signed, nextOffset } = parseFrameAt(bytes, offset);
-			events.push(signed);
+			const { signed, eventBytes, nextOffset } = parseFrameAt(bytes, offset);
+			frames.push({ signed, eventBytes });
 			offset = nextOffset;
 		} catch (err) {
 			if (err instanceof MalformedInputError) {
@@ -227,7 +245,7 @@ export function parseStreamResult(stream: string): ParseStreamResult {
 			throw err;
 		}
 	}
-	return { ok: true, events };
+	return { ok: true, frames };
 }
 
 /**
@@ -243,7 +261,7 @@ export function parseKel(stream: string): SignedKeriEvent[] {
 	if (!result.ok) {
 		throw new MalformedInputError(result.message);
 	}
-	return result.events;
+	return result.frames.map((frame) => frame.signed);
 }
 
 /**

@@ -28,7 +28,9 @@ beforeEach(() => {
 	}
 });
 afterEach(() => {
-	for (const code of Object.keys(digestAlgorithms)) delete digestAlgorithms[code];
+	// `digestAlgorithms` is sealed, so its entries are cleared by reassignment
+	// to `undefined` rather than `delete`d, then restored from the snapshot.
+	for (const code of Object.keys(digestAlgorithms)) digestAlgorithms[code] = undefined;
 	for (const code of Object.keys(snapshot)) digestAlgorithms[code] = snapshot[code];
 });
 

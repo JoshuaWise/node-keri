@@ -18,18 +18,31 @@
  *
  * `digestAlgorithms` is a null-prototype object so it is safe to index with an
  * untrusted code (no `__proto__` / `constructor` footguns) and carries no
- * inherited keys. It is intentionally mutable: a caller may add an algorithm
- * node-keri does not ship — e.g. Blake3-256 — by assigning an entry, after
- * which decoding, verification, and generation all accept that code:
+ * inherited keys. At load it is pre-keyed with every valid CESR digest code
+ * and then `Object.seal`ed, so its set of *codes* is fixed: a code reserved by
+ * a non-digest primitive (an Ed25519 key or signature) can never be added, and
+ * neither can any other novel code. Each entry stays writable, though, so a
+ * caller may still register an algorithm node-keri does not ship — e.g.
+ * Blake3-256 under code `E` — after which decoding, verification, and
+ * generation all accept that code:
  *
  * ```ts
  * import { digestAlgorithms } from 'node-keri';
  * digestAlgorithms['E'] = { name: 'Blake3-256', hash: myBlake3_256 };
  * ```
+ *
+ * Assigning a code the registry was not pre-keyed with throws `TypeError` —
+ * the sealed object rejects new properties — which is the intended guard.
  */
 
 import { createHash, getHashes } from 'node:crypto';
-import { digestSpecForCode } from '../cesr/codes';
+import {
+	CESR_INDEXED_SIGNATURE_ED25519,
+	CESR_PUBLIC_KEY_ED25519,
+	CESR_PUBLIC_KEY_ED25519N,
+	CESR_SIGNATURE_ED25519,
+	digestSpecForCode,
+} from '../cesr/codes';
 import { UnsupportedAlgorithmError } from '../profile/errors';
 
 /** A hash algorithm registered against a CESR digest derivation code. */
@@ -65,16 +78,66 @@ export const DIGEST_CODES = Object.freeze({
 export const DEFAULT_DIGEST_CODE: string = DIGEST_CODES.SHA2_256;
 
 /**
+ * The 64-character base64url alphabet — the character set of every CESR
+ * derivation code.
+ */
+const CESR_CODE_ALPHABET =
+	'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+/**
+ * CESR codes claimed by this profile's non-digest primitives — the Ed25519
+ * verification keys and signatures. The digest registry is pre-keyed with
+ * every digest code *except* these, so a key or signature code can never be
+ * registered as a digest algorithm.
+ */
+const RESERVED_NON_DIGEST_CODES: ReadonlySet<string> = new Set([
+	CESR_PUBLIC_KEY_ED25519.code,
+	CESR_PUBLIC_KEY_ED25519N.code,
+	CESR_SIGNATURE_ED25519.code,
+	CESR_INDEXED_SIGNATURE_ED25519.code,
+]);
+
+/**
+ * Every CESR code that is structurally a valid digest code: a one-character
+ * (256-bit) code or a `0`-prefixed two-character (512-bit) code over the
+ * base64url alphabet, minus the codes reserved by a non-digest primitive.
+ * `digestAlgorithms` is pre-keyed with exactly these.
+ */
+function validDigestCodes(): string[] {
+	const codes: string[] = [];
+	for (const ch of CESR_CODE_ALPHABET) {
+		if (!RESERVED_NON_DIGEST_CODES.has(ch)) codes.push(ch);
+	}
+	for (const ch of CESR_CODE_ALPHABET) {
+		const code = '0' + ch;
+		if (!RESERVED_NON_DIGEST_CODES.has(code)) codes.push(code);
+	}
+	return codes;
+}
+
+/**
  * The live registry of digest implementations, keyed by CESR derivation code.
- * Monkey-patchable — see the module comment.
  *
- * The value type is `DigestAlgorithm | undefined` deliberately: the registry is
- * sparse (only registered codes have entries) and null-prototyped, so indexing
- * with an arbitrary — possibly untrusted — code yields `undefined`. Encoding
- * that in the type forces every reader to handle the absent case.
+ * Pre-keyed with every valid digest code and then `Object.seal`ed — see the
+ * module comment. The seal fixes the set of codes (a reserved or otherwise
+ * novel code cannot be added) while leaving each entry writable, so a caller
+ * can still swap in an implementation.
+ *
+ * The value type is `DigestAlgorithm | undefined` deliberately: a pre-keyed
+ * code with no implementation maps to `undefined`, and — because the object is
+ * null-prototyped — so does any code it was not pre-keyed with. Encoding that
+ * in the type forces every reader to handle the absent case.
  */
 export const digestAlgorithms: Record<string, DigestAlgorithm | undefined> =
 	Object.create(null);
+
+// Pre-key the registry with every valid digest code, each initially absent,
+// then seal it. Native digests are installed below by reassignment, and a
+// caller may likewise reassign — but no new (e.g. reserved) code can appear.
+for (const code of validDigestCodes()) {
+	digestAlgorithms[code] = undefined;
+}
+Object.seal(digestAlgorithms);
 
 /** One-shot hash through `node:crypto`. */
 function nodeHash(nodeName: string, input: Uint8Array): Uint8Array {
