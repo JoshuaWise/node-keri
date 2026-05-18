@@ -709,7 +709,7 @@ describe('verifyKel — argument contract', () => {
 		expect(() => verifyKel({ aid, kel: 123 as never })).toThrow(InvalidArgumentError);
 	});
 
-	test('throws on a missing aid', () => {
+	test('throws on an empty aid', () => {
 		const { events } = buildKel();
 		expect(() => verifyKel({ aid: '' as never, kel: kel(...events) })).toThrow(
 			InvalidArgumentError

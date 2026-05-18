@@ -3,8 +3,30 @@
  *
  * A single valid five-event KEL (icp, ixn, rot, ixn, rot) is built once, then
  * systematically mutated one field — or one structural property — at a time.
- * Every mutation must make `verifyKel` return `{ ok: false }`. `verifyKel`
- * must never *throw* for a tampered KEL: hostile input is expected input.
+ * Every mutation must make `verifyKel` return `{ ok: false }`, and never
+ * *throw*: a tampered KEL is hostile but expected input.
+ *
+ * What each mutation actually exercises
+ * -------------------------------------
+ * Most event fields (`d`, `i`, `s`, `t`, `p`, `k`, `n`, `a`) are inputs to the
+ * event's self-addressing digest. Mutating any of them changes the bytes the
+ * SAID is computed over, so replay recomputes a digest that no longer matches
+ * the event's `d` and rejects with `INVALID_EVENT_DIGEST` — the digest check
+ * is the single mechanism that catches every content tamper, which is the
+ * whole point of a self-addressing identifier. These tests therefore assert
+ * that *specific* code: a content tamper that started being caught for some
+ * other reason (or stopped being caught at all) is itself a regression.
+ *
+ * A few mutations are caught earlier or elsewhere: the event-type `t` is read
+ * before the digest is recomputed; the version string `v` is part of the
+ * frame's framing; the controller signature and its count are checked against
+ * the attachment, not the event body. Those have their own expected codes.
+ *
+ * This suite proves *tamper detection breadth* — that no single-field change to
+ * any event survives. It deliberately does NOT reach the per-stage semantic
+ * checks (sequence chaining, previous-digest linkage, next-key commitment),
+ * because the digest check intercepts a raw mutation first. Those checks are
+ * exercised against well-formed, self-consistent events in `verify-kel.test.ts`.
  *
  * The KEL is exchanged as a CESR stream, so a mutation is applied to the
  * in-memory `SignedKeriEvent`s and then re-framed (`frameKel`) into the wire
@@ -19,6 +41,7 @@ import { parseSignedEvent } from '../src/event/stream';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { SignedKeriEvent } from '../src/event/types';
 import { Aid } from '../src/did/did-keri';
+import { KeriVerificationError } from '../src/profile/errors';
 import { frameKel, reframe } from './kel-stream';
 
 function fillSeed(byte: number): Uint8Array {
@@ -94,13 +117,24 @@ function withReplaced(index: number, replacement: SignedKeriEvent) {
 	return { aid, events: tampered };
 }
 
-/** Assert that verifyKel rejects the CESR stream `kel` as belonging to `aid`. */
-function expectRejected(aid: Aid, kel: string): void {
+/**
+ * Assert that verifyKel rejects the CESR stream `kel` for `aid`, without
+ * throwing, and with the exact discriminated error `code` expected. Asserting
+ * the code — not merely `ok === false` — is what keeps each test honest about
+ * which check is doing the rejecting.
+ */
+function expectRejected(
+	aid: Aid,
+	kel: string,
+	expectedCode: KeriVerificationError['code']
+): void {
 	let result: ReturnType<typeof verifyKel>;
 	expect(() => {
 		result = verifyKel({ aid, kel });
 	}).not.toThrow();
 	expect(result!.ok).toBe(false);
+	if (result!.ok) throw new Error('unreachable');
+	expect(result!.error.code).toBe(expectedCode);
 }
 
 const indices = [0, 1, 2, 3, 4];
@@ -125,12 +159,19 @@ describe('tamper — single-field mutation of each event', () => {
 					i,
 					patchEvent(events[i]!, { d: mutateChar(events[i]!.event.d) })
 				).events
-			)
+			),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 
 	test.each(indices)('event %d: mutated identifier `i`', (i) => {
 		const { aid, events } = buildKel();
+		// `i` is the only content field NOT folded into a transferable
+		// inception's SAID (there the AID *is* the SAID, so `i` is digested as a
+		// placeholder). Mutating it on the inception therefore survives the
+		// digest check and is caught by the `i === SAID` identity check
+		// instead; on every later event `i` is a normal digested field.
+		const code = i === 0 ? 'INVALID_DID' : 'INVALID_EVENT_DIGEST';
 		expectRejected(
 			aid,
 			frameKel(
@@ -138,7 +179,8 @@ describe('tamper — single-field mutation of each event', () => {
 					i,
 					patchEvent(events[i]!, { i: mutateChar(events[i]!.event.i) })
 				).events
-			)
+			),
+			code
 		);
 	});
 
@@ -152,19 +194,25 @@ describe('tamper — single-field mutation of each event', () => {
 		);
 		const f = frames[i]!;
 		frames[i] = f.slice(0, 10) + (f[10] === 'A' ? 'B' : 'A') + f.slice(11);
-		expectRejected(aid, frames.join(''));
+		expectRejected(aid, frames.join(''), 'MALFORMED_STREAM');
 	});
 
-	test.each(indices)('event %d: wrong sequence number `s`', (i) => {
+	test.each(indices)('event %d: mutated sequence number `s`', (i) => {
 		const { aid, events } = buildKel();
+		// `s` is digested, so a raw mutation is caught as a digest mismatch
+		// before the sequence check ever runs; the sequence check itself is
+		// exercised by the structural-reorder tests below and in verify-kel.
 		expectRejected(
 			aid,
-			frameKel(withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events)
+			frameKel(withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 
 	test.each(indices)('event %d: mutated event type `t`', (i) => {
 		const { aid, events } = buildKel();
+		// `t` is read and validated before the digest is recomputed, so a
+		// mangled type is diagnosed as an invalid event type directly.
 		expectRejected(
 			aid,
 			frameKel(
@@ -172,7 +220,8 @@ describe('tamper — single-field mutation of each event', () => {
 					i,
 					patchEvent(events[i]!, { t: mutateChar(events[i]!.event.t) })
 				).events
-			)
+			),
+			'INVALID_EVENT_TYPE'
 		);
 	});
 
@@ -180,19 +229,26 @@ describe('tamper — single-field mutation of each event', () => {
 	test.each([1, 2, 3, 4])('event %d: mutated previous-event digest `p`', (i) => {
 		const { aid, events } = buildKel();
 		const event = events[i]!.event as { p: string };
+		// `p` is digested: a raw mutation is a digest mismatch, caught before
+		// the previous-digest chain check. That chain check is exercised
+		// against self-consistent events in verify-kel.test.ts.
 		expectRejected(
 			aid,
 			frameKel(
 				withReplaced(i, patchEvent(events[i]!, { p: mutateChar(event.p) })).events
-			)
+			),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 
 	test.each(indices)('event %d: mutated signature', (i) => {
 		const { aid, events } = buildKel();
+		// The signature is an attachment, not a digested field: the event still
+		// hashes correctly, so this is the one mutation that reaches — and is
+		// caught by — the signature check.
 		const tampered = patchEvent(events[i]!, {});
 		tampered.signatures = [mutateChar(events[i]!.signatures[0]) as never];
-		expectRejected(aid, frameKel(withReplaced(i, tampered).events));
+		expectRejected(aid, frameKel(withReplaced(i, tampered).events), 'INVALID_SIGNATURE');
 	});
 });
 
@@ -206,7 +262,8 @@ describe('tamper — mutation of key material', () => {
 			frameKel(
 				withReplaced(i, patchEvent(events[i]!, { k: [mutateChar(event.k[0]!)] }))
 					.events
-			)
+			),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 
@@ -218,18 +275,23 @@ describe('tamper — mutation of key material', () => {
 			frameKel(
 				withReplaced(i, patchEvent(events[i]!, { n: [mutateChar(event.n[0]!)] }))
 					.events
-			)
+			),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 
-	test('a rotation revealing the wrong key fails the commitment check', () => {
+	test('lifting a foreign key onto a rotation is caught as a digest mismatch', () => {
 		const { aid, events } = buildKel();
-		// Lift event 4's key list onto event 2 — a structurally valid key,
-		// but not the one event 1 pre-committed to.
+		// Lift event 4's key list onto event 2. `k` is a digested field, so the
+		// swap changes event 2's recomputed SAID and is rejected as a digest
+		// mismatch — before the next-key commitment check is even reached. The
+		// commitment check proper (a rotation that reveals an uncommitted key
+		// but whose SAID *is* self-consistent) is exercised in verify-kel.test.ts.
 		const foreignKey = (events[4]!.event as { k: readonly string[] }).k;
 		expectRejected(
 			aid,
-			frameKel(withReplaced(2, patchEvent(events[2]!, { k: foreignKey })).events)
+			frameKel(withReplaced(2, patchEvent(events[2]!, { k: foreignKey })).events),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 });
@@ -241,43 +303,49 @@ describe('tamper — mutation of anchored interaction data', () => {
 			aid,
 			frameKel(
 				withReplaced(i, patchEvent(events[i]!, { a: [{ step: 999 }] })).events
-			)
+			),
+			'INVALID_EVENT_DIGEST'
 		);
 	});
 });
 
 describe('tamper — structural mutation of the log', () => {
-	test('reordering two events fails', () => {
+	test('reordering two events fails the sequence check', () => {
 		const { aid, events } = buildKel();
 		const reordered = events.slice();
 		[reordered[1], reordered[2]] = [reordered[2]!, reordered[1]!];
-		expectRejected(aid, frameKel(reordered));
+		expectRejected(aid, frameKel(reordered), 'INVALID_SEQUENCE');
 	});
 
-	test('dropping an interior event fails', () => {
+	test('dropping an interior event fails the sequence check', () => {
 		const { aid, events } = buildKel();
 		const dropped = [...events.slice(0, 2), ...events.slice(3)];
-		expectRejected(aid, frameKel(dropped));
+		expectRejected(aid, frameKel(dropped), 'INVALID_SEQUENCE');
 	});
 
-	test('duplicating an event fails', () => {
+	test('duplicating an event fails the sequence check', () => {
 		const { aid, events } = buildKel();
 		const duplicated = [...events.slice(0, 3), events[2]!, ...events.slice(3)];
-		expectRejected(aid, frameKel(duplicated));
+		expectRejected(aid, frameKel(duplicated), 'INVALID_SEQUENCE');
 	});
 
 	test('a KEL that does not start with inception fails', () => {
 		const { aid, events } = buildKel();
-		expectRejected(aid, frameKel(events.slice(1)));
+		expectRejected(aid, frameKel(events.slice(1)), 'INVALID_EVENT_TYPE');
 	});
 
-	test("appending another identifier's event fails", () => {
+	test("appending another identifier's inception event fails", () => {
 		const { aid, events } = buildKel();
 		const intruder = createIdentifier({
 			currentKeyPair: keyPairFromSeed(fillSeed(0x70)),
 			nextKeyPair: keyPairFromSeed(fillSeed(0x71)),
 		});
-		expectRejected(aid, frameKel(events) + intruder.inceptionEvent);
+		// A second `icp` past sequence 0 is not a valid continuation event.
+		expectRejected(
+			aid,
+			frameKel(events) + intruder.inceptionEvent,
+			'INVALID_EVENT_TYPE'
+		);
 	});
 
 	test('verifying the KEL against the wrong AID fails', () => {
@@ -286,7 +354,7 @@ describe('tamper — structural mutation of the log', () => {
 			currentKeyPair: keyPairFromSeed(fillSeed(0x72)),
 			nextKeyPair: keyPairFromSeed(fillSeed(0x73)),
 		});
-		expectRejected(other.aid, frameKel(events));
+		expectRejected(other.aid, frameKel(events), 'INVALID_DID');
 	});
 
 	test('a truncated KEL still verifies as an earlier state', () => {
@@ -307,7 +375,11 @@ describe('tamper — attachment-level mutation', () => {
 			event: events[i]!.event,
 			signatures: [] as never,
 		};
-		expectRejected(aid, frameKel(withReplaced(i, stripped).events));
+		expectRejected(
+			aid,
+			frameKel(withReplaced(i, stripped).events),
+			'UNSUPPORTED_FEATURE'
+		);
 	});
 
 	test.each(indices)('event %d: two signatures rejected (multisig)', (i) => {
@@ -316,6 +388,10 @@ describe('tamper — attachment-level mutation', () => {
 			event: events[i]!.event,
 			signatures: [events[i]!.signatures[0], events[i]!.signatures[0]] as never,
 		};
-		expectRejected(aid, frameKel(withReplaced(i, doubled).events));
+		expectRejected(
+			aid,
+			frameKel(withReplaced(i, doubled).events),
+			'UNSUPPORTED_FEATURE'
+		);
 	});
 });

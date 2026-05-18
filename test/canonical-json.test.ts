@@ -17,6 +17,18 @@ describe('canonicalizeJson', () => {
 		expect(canon(-7)).toBe('-7');
 	});
 
+	test('serializes finite non-integer and large numbers via JSON.stringify', () => {
+		// The number policy is "finite, and not negative zero"; representation
+		// is otherwise delegated to JSON.stringify, which is well-specified and
+		// deterministic. Non-integers are accepted (interaction anchors may
+		// carry arbitrary JSON), as are integers beyond the safe range.
+		expect(canon(1.5)).toBe('1.5');
+		expect(canon(-0.25)).toBe('-0.25');
+		expect(canon(100000)).toBe('100000');
+		expect(canon(1e21)).toBe('1e+21');
+		expect(canon(Number.MAX_SAFE_INTEGER)).toBe('9007199254740991');
+	});
+
 	test('escapes strings via JSON.stringify rules', () => {
 		expect(canon('a"b')).toBe('"a\\"b"');
 		expect(canon('a\nb')).toBe('"a\\nb"');

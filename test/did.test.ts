@@ -110,7 +110,7 @@ describe('parseDidKeri', () => {
 
 describe('createDidDocument', () => {
 	test('projects a verified state into a minimal DID document', () => {
-		const { aid, did, kel } = buildKel();
+		const { aid, did, kel, keys } = buildKel();
 		const result = verifyKel({ aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -131,7 +131,9 @@ describe('createDidDocument', () => {
 					publicKeyJwk: {
 						kty: 'OKP',
 						crv: 'Ed25519',
-						x: doc.verificationMethod[0]!.publicKeyJwk.x,
+						// After icp, ixn, rot the authoritative key is k1; the JWK
+						// `x` is its raw public key, base64url-encoded.
+						x: base64urlEncode(keys.k1.publicKey.raw),
 					},
 				},
 			],

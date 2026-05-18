@@ -10,10 +10,7 @@ import {
 	ED25519_PUBLIC_KEY_BYTES,
 	ED25519_SIGNATURE_BYTES,
 } from '../src/profile/constants';
-import {
-	InvalidArgumentError,
-	UnsupportedAlgorithmError,
-} from '../src/profile/errors';
+import { InvalidArgumentError } from '../src/profile/errors';
 
 function hex(bytes: Uint8Array): string {
 	let s = '';
@@ -145,8 +142,4 @@ describe('ed25519', () => {
 			verify(kp.privateKey as never, utf8Encode('x'), new Uint8Array(64))
 		).toThrow(InvalidArgumentError);
 	});
-
-	// Reference to UnsupportedAlgorithmError exists so that future RSA/X25519
-	// regression tests can extend this file without re-importing.
-	void UnsupportedAlgorithmError;
 });

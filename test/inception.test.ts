@@ -1,8 +1,12 @@
-import { decodeDigestSha256, decodePublicKeyEd25519 } from '../src/cesr/decode';
+import {
+	decodeDigestSha256,
+	decodeIndexedSignatureEd25519,
+	decodePublicKeyEd25519,
+} from '../src/cesr/decode';
 import { encodePublicKeyEd25519 } from '../src/cesr/encode';
+import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { DID_KERI_PREFIX } from '../src/did/did-keri';
-import { canonicalizeJson } from '../src/event/canonical-json';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent, CreateInceptionInput } from '../src/event/inception';
 import { serializeEvent, signEvent } from '../src/event/sign';
@@ -248,7 +252,7 @@ describe('createInceptionEvent', () => {
 		}).toThrow(TypeError);
 	});
 
-	test('signature is over canonical bytes of the FINAL event (with SAID in d/i)', () => {
+	test('signature is the Ed25519 signature over the canonical bytes of the final event', () => {
 		const current = keyPairFromSeed(SEED_CURRENT);
 		const next = keyPairFromSeed(SEED_NEXT);
 		const { signedEvent } = inceptSigned({
@@ -256,14 +260,14 @@ describe('createInceptionEvent', () => {
 			nextPublicKey: next.publicKey,
 		});
 
-		// Reconstruct the event verbatim and re-sign with the same key; we
-		// should get back the same signature, demonstrating the bytes the
-		// signature was made over are exactly canonicalize(event).
-		const resigned = signEvent(signedEvent.event, current.privateKey);
-		expect(resigned.signatures[0]).toBe(signedEvent.signatures[0]);
-		// And canonicalize must match.
-		expect(Array.from(canonicalizeJson(signedEvent.event))).toEqual(
-			Array.from(canonicalizeJson(resigned.event))
-		);
+		// Independently sign `serializeEvent(event)` — the canonical JSON of the
+		// final event, SAID and version string in place — with the raw Ed25519
+		// primitive. Those 64 bytes must equal the raw signature carried by the
+		// event's indexed Siger (at key index 0), pinning down exactly which
+		// bytes the attached signature was made over.
+		const expected = sign(current.privateKey, serializeEvent(signedEvent.event));
+		const carried = decodeIndexedSignatureEd25519(signedEvent.signatures[0]);
+		expect(carried.index).toBe(0);
+		expect(Array.from(carried.raw)).toEqual(Array.from(expected));
 	});
 });
