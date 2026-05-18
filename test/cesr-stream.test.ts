@@ -184,3 +184,79 @@ describe('event-frame codec', () => {
 		expect(parseKel('')).toEqual([]);
 	});
 });
+
+describe('encodeEventFrame — robust serialization', () => {
+	const id = createIdentifier({
+		currentKeyPair: keyPairFromSeed(fillSeed(0x21)),
+		nextKeyPair: keyPairFromSeed(fillSeed(0x22)),
+	});
+	const signed = parseSignedEvent(id.inceptionEvent);
+
+	test('rejects a non-object signed event', () => {
+		expect(() => encodeEventFrame(null as never)).toThrow(MalformedInputError);
+		expect(() => encodeEventFrame('frame' as never)).toThrow(MalformedInputError);
+	});
+
+	test('rejects a signed event with no signatures', () => {
+		expect(() =>
+			encodeEventFrame({ event: signed.event, signatures: [] as never })
+		).toThrow(MalformedInputError);
+	});
+
+	test('rejects a non-string signature', () => {
+		expect(() =>
+			encodeEventFrame({ event: signed.event, signatures: [42] as never })
+		).toThrow(MalformedInputError);
+	});
+
+	test('rejects a signature that is not a well-formed siger', () => {
+		expect(() =>
+			encodeEventFrame({
+				event: signed.event,
+				signatures: ['AA' + 'A'.repeat(40)] as never,
+			})
+		).toThrow(MalformedInputError);
+	});
+
+	test('rejects a non-indexed (0B Cigar) signature', () => {
+		const cigar = encodeSignatureEd25519(sig64(7));
+		expect(() =>
+			encodeEventFrame({ event: signed.event, signatures: [cigar] as never })
+		).toThrow(MalformedInputError);
+	});
+
+	test('rejects a signature at a non-zero key index', () => {
+		const indexed = encodeIndexedSignatureEd25519(sig64(7), 3);
+		expect(() =>
+			encodeEventFrame({ event: signed.event, signatures: [indexed] as never })
+		).toThrow(/index must be 0/);
+	});
+
+	test('rejects an event whose version string size is wrong', () => {
+		// Mutate one hex digit of the `v` size so the declared length no longer
+		// matches the bytes the event actually serializes to.
+		const v = signed.event.v;
+		const hi = v.slice(0, 10) + (v[10] === '0' ? '1' : '0') + v.slice(11);
+		expect(() =>
+			encodeEventFrame({
+				event: { ...signed.event, v: hi } as never,
+				signatures: signed.signatures,
+			})
+		).toThrow(MalformedInputError);
+	});
+
+	test('rejects an event of an unserializable type', () => {
+		expect(() =>
+			encodeEventFrame({
+				event: { ...signed.event, t: 'xxx' } as never,
+				signatures: signed.signatures,
+			})
+		).toThrow();
+	});
+
+	test('a well-formed signed event round-trips through parse', () => {
+		const frame = encodeEventFrame(signed);
+		expect(frame).toBe(id.inceptionEvent);
+		expect(parseSignedEvent(frame)).toEqual(signed);
+	});
+});

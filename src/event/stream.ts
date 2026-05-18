@@ -28,6 +28,7 @@ import {
 	encodeControllerSigCount,
 	parseCounter,
 } from '../cesr/counter';
+import { decodeIndexedSignatureEd25519 } from '../cesr/decode';
 import { CesrIndexedSignature } from '../cesr/qualified';
 import { MalformedInputError } from '../profile/errors';
 import { KERI_VERSION_STRING_LENGTH } from './digest';
@@ -54,6 +55,20 @@ const HEADER_LENGTH = 6 + KERI_VERSION_STRING_LENGTH;
  * canonical JSON), then the controller's indexed signatures are appended
  * behind a `-A` counter. Concatenating the frames of a KEL's events — in
  * order — yields the KEL's wire form.
+ *
+ * The encoder fails closed on a malformed input rather than emitting a corrupt
+ * stream. `encodeEventFrame` is exported and may be reached through untyped
+ * (`as any`, JSON) paths, so every part of `signed` is re-validated at runtime:
+ *
+ *   - the event must serialize to bytes whose length matches the size its own
+ *     version string declares — otherwise the frame is self-contradicting and
+ *     the parser, which trusts `v` to locate the attachment, would mis-frame it;
+ *   - every signature must be a well-formed *indexed* Ed25519 signature at key
+ *     index 0 (this single-key profile permits no other index), guaranteeing
+ *     each siger is exactly `SIGER_LENGTH` characters and re-parseable.
+ *
+ * A defect throws `MalformedInputError`; a valid `SignedKeriEvent` always round-
+ * trips through `parseSignedEvent`.
  */
 export function encodeEventFrame(signed: SignedKeriEvent): string {
 	if (signed === null || typeof signed !== 'object') {
@@ -65,15 +80,38 @@ export function encodeEventFrame(signed: SignedKeriEvent): string {
 	if (!Array.isArray(signatures) || signatures.length === 0) {
 		throw new MalformedInputError('signed event has no signatures');
 	}
-	const eventJson = utf8Decode(serializeEvent(signed.event));
+
+	const eventBytes = serializeEvent(signed.event);
+	// The event's version string declares its own byte length, and the frame
+	// parser trusts that to find where the attachment begins. Refuse to emit a
+	// frame whose `v` size disagrees with the bytes actually serialized — that
+	// is a wire artifact no parser could read back. `readEventSize` also
+	// rejects a missing or malformed version string here.
+	const declaredSize = readEventSize(eventBytes, 0);
+	if (declaredSize !== eventBytes.length) {
+		throw new MalformedInputError(
+			`event version string declares ${declaredSize} bytes but the event `
+				+ `serializes to ${eventBytes.length}`
+		);
+	}
+
 	let attachment = encodeControllerSigCount(signatures.length);
 	for (const sig of signatures) {
 		if (typeof sig !== 'string') {
 			throw new MalformedInputError('signature must be a CESR-qualified string');
 		}
+		// Validate every signature is a real indexed Ed25519 siger before it
+		// goes on the wire: a bad code, length, base64, or pad bit throws here
+		// rather than producing a frame that cannot be parsed back.
+		const { index } = decodeIndexedSignatureEd25519(sig);
+		if (index !== 0) {
+			throw new MalformedInputError(
+				`signature index must be 0 in this single-key profile, got ${index}`
+			);
+		}
 		attachment += sig;
 	}
-	return eventJson + attachment;
+	return utf8Decode(eventBytes) + attachment;
 }
 
 /** Result of parsing a CESR stream — events, or the framing defect found. */
