@@ -19,6 +19,7 @@
 import {
 	decodeDigest,
 	decodeIndexedSignatureEd25519,
+	decodeNonTransferablePublicKeyEd25519,
 	decodePublicKeyEd25519,
 } from '../cesr/decode';
 import {
@@ -123,10 +124,14 @@ export function checkSignature(value: unknown): KeriVerificationError | null {
 /**
  * A `k` / `n` list: exactly one entry, itself a valid CESR primitive of the
  * given `kind`. More than one entry is multisig, which the profile excludes.
+ *
+ * `kind` selects the entry's expected primitive: a transferable Ed25519 key
+ * (`'key'`, code `D`), a non-transferable Ed25519 key (`'ntkey'`, code `B` —
+ * only ever a non-transferable inception's `k`), or a digest (`'digest'`).
  */
 export function checkSingleton(
 	field: unknown,
-	kind: 'key' | 'digest'
+	kind: 'key' | 'ntkey' | 'digest'
 ): KeriVerificationError | null {
 	if (!Array.isArray(field)) {
 		return {
@@ -140,9 +145,11 @@ export function checkSingleton(
 			feature: `multisig: expected exactly 1 key, got ${field.length}`,
 		};
 	}
-	return kind === 'key'
-		? checkCesr(decodePublicKeyEd25519, field[0])
-		: checkDigest(field[0]);
+	if (kind === 'digest') return checkDigest(field[0]);
+	if (kind === 'ntkey') {
+		return checkCesr(decodeNonTransferablePublicKeyEd25519, field[0]);
+	}
+	return checkCesr(decodePublicKeyEd25519, field[0]);
 }
 
 /** A field that must equal the single permitted sentinel value. */

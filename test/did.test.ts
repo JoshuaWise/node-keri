@@ -63,6 +63,20 @@ describe('parseDidKeri', () => {
 		expect(parseDidKeri(formatDidKeri(aid)).aid).toBe(aid);
 	});
 
+	test('reports transferable for a digest AID, non-transferable for a B-key AID', () => {
+		const { did } = buildKel();
+		// node-keri mints transferable, self-addressing AIDs: a digest.
+		expect(parseDidKeri(did).transferable).toBe(true);
+
+		// A non-transferable AID is a `B`-coded Ed25519 key (44 chars). The
+		// all-zero key is a valid one; node-keri verifies these but the parser
+		// is what first recognizes the kind.
+		const ntAid = 'B' + 'A'.repeat(43);
+		const parsed = parseDidKeri(`${DID_KERI_PREFIX}${ntAid}`);
+		expect(parsed.transferable).toBe(false);
+		expect(parsed.aid).toBe(ntAid);
+	});
+
 	test('rejects a non-string argument', () => {
 		expect(() => parseDidKeri(undefined as never)).toThrow(InvalidArgumentError);
 	});
@@ -262,12 +276,35 @@ describe('resolveDid', () => {
 		expect(result.error.code).toBe('INVALID_DID');
 	});
 
-	test('rejects an empty KEL', () => {
+	test('rejects an empty KEL for a transferable DID', () => {
 		const { did } = buildKel();
 		const result = resolveDid({ did, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({ code: 'EMPTY_KEL' });
+	});
+
+	test('resolves a bare non-transferable DID with the empty-string "no KEL" value', () => {
+		// A non-transferable AID is a `B`-coded Ed25519 key — self-certifying,
+		// so it resolves with no KEL. The all-zero key is a valid one.
+		const ntAid = 'B' + 'A'.repeat(43);
+		const ntDid = `${DID_KERI_PREFIX}${ntAid}`;
+		// `includeKel` is set, but a bare resolution has no KEL to echo.
+		const result = resolveDid({
+			did: ntDid as never,
+			kel: '',
+			options: { includeKel: true },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.didDocument.id).toBe(ntDid);
+		expect(result.didDocument.verificationMethod).toHaveLength(1);
+		expect(result.metadata.state.transferable).toBe(false);
+		expect(result.metadata.state.aid).toBe(ntAid);
+		// A non-transferable AID *is* its own signing key.
+		expect(result.metadata.state.currentPublicKey).toBe(ntAid);
+		expect(result.metadata.eventCount).toBe(0);
+		expect(result.metadata.kel).toBeUndefined();
 	});
 
 	test('throws on an argument-contract violation', () => {

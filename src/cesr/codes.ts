@@ -74,6 +74,18 @@ function spec(code: string, rs: number, label: string): CesrCodeSpec {
 /** Ed25519 verification key, transferable (rotatable) variant. */
 export const CESR_PUBLIC_KEY_ED25519 = spec('D', 32, 'Ed25519 public key');
 
+/**
+ * Ed25519 verification key, non-transferable variant. This is the basic prefix
+ * of a non-transferable AID — the controller commits to one unrotatable key.
+ * node-keri *verifies* identifiers built on these (a keripy non-transferable
+ * AID is the motivating case) but never generates one.
+ */
+export const CESR_PUBLIC_KEY_ED25519N = spec(
+	'B',
+	32,
+	'Ed25519 non-transferable public key'
+);
+
 /** Ed25519 signature, non-indexed (a "Cigar"). */
 export const CESR_SIGNATURE_ED25519 = spec('0B', 64, 'Ed25519 signature');
 
@@ -100,6 +112,7 @@ export const CESR_DIGEST_SHA256 = spec('I', 32, 'SHA-256 digest');
  */
 export const ALL_CODES: readonly CesrCodeSpec[] = Object.freeze([
 	CESR_PUBLIC_KEY_ED25519,
+	CESR_PUBLIC_KEY_ED25519N,
 	CESR_SIGNATURE_ED25519,
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_DIGEST_SHA256,

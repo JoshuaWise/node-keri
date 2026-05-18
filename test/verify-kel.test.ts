@@ -17,7 +17,7 @@ import {
 	SignedKeriEvent,
 } from '../src/event/types';
 import { aidFromSaid } from '../src/did/did-keri';
-import { KeriState } from '../src/kel/state';
+import { TransferableKeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { verifyKel } from '../src/api/verify-kel';
 import { frameKel } from './kel-stream';
@@ -32,7 +32,7 @@ function kel(...signed: SignedKeriEvent[]): string {
 }
 
 /** A constructor result, with its event parsed back into a `SignedKeriEvent`. */
-function asSigned(result: { event: string; state: KeriState }) {
+function asSigned(result: { event: string; state: TransferableKeriState }) {
 	return { signedEvent: parseSignedEvent(result.event), state: result.state };
 }
 
@@ -119,7 +119,10 @@ describe('verifyKel — successful replay', () => {
 			encodePublicKeyEd25519(keys.k2.publicKey.raw)
 		);
 		expect(result.state.lastEventDigest).toBe(rot2.signedEvent.event.d);
-		expect(result.state.nextKeyCommitment).toBe(rot2.state.nextKeyCommitment);
+		expect(result.state.transferable).toBe(true);
+		if (result.state.transferable) {
+			expect(result.state.nextKeyCommitment).toBe(rot2.state.nextKeyCommitment);
+		}
 	});
 
 	test('verifies an inception-only KEL', () => {

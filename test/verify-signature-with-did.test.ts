@@ -2,9 +2,10 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
-import { encodeSignatureEd25519 } from '../src/cesr/encode';
+import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed } from '../src/crypto/keypair';
+import type { DidKeri } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
 
@@ -158,6 +159,69 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 			verifySignatureWithDid({
 				did: id.did,
 				kel: '',
+				payload: PAYLOAD,
+				signature,
+			})
+		).toBe(false);
+	});
+
+	test('false for a transferable DID given the empty-string "no KEL" value', () => {
+		const id = newIdentifier();
+		const signature = encodeSignatureEd25519(
+			sign(id.currentKeyPair.privateKey, PAYLOAD)
+		);
+		// A transferable identifier's key state lives in its KEL; the
+		// empty-string "no KEL" value leaves nothing to establish the key from.
+		expect(
+			verifySignatureWithDid({ did: id.did, kel: '', payload: PAYLOAD, signature })
+		).toBe(false);
+	});
+});
+
+describe('verifySignatureWithDid — non-transferable DID', () => {
+	// A non-transferable AID *is* the signing key — a `B`-coded basic prefix,
+	// self-certifying, so it verifies with the empty-string "no KEL" value.
+	// node-keri has no `B` encoder, so build one by swapping the code char of
+	// a `D` key: same raw bytes, the non-transferable derivation code.
+	const kp = keyPairFromSeed(fillSeed(0x44));
+	const ntDid = ('did:keri:B'
+		+ encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as DidKeri;
+
+	test('verifies a signature with the empty-string "no KEL" value', () => {
+		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
+		expect(
+			verifySignatureWithDid({ did: ntDid, kel: '', payload: PAYLOAD, signature })
+		).toBe(true);
+	});
+
+	test('false for a tampered payload', () => {
+		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
+		expect(
+			verifySignatureWithDid({
+				did: ntDid,
+				kel: '',
+				payload: utf8Encode('a different message'),
+				signature,
+			})
+		).toBe(false);
+	});
+
+	test('false for a signature by a different key', () => {
+		const other = keyPairFromSeed(fillSeed(0x45));
+		const signature = encodeSignatureEd25519(sign(other.privateKey, PAYLOAD));
+		expect(
+			verifySignatureWithDid({ did: ntDid, kel: '', payload: PAYLOAD, signature })
+		).toBe(false);
+	});
+
+	test('false when given a malformed KEL instead of the empty string', () => {
+		// A non-empty `kel` is always replayed — even for a non-transferable
+		// DID — so a bogus one fails rather than being silently ignored.
+		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
+		expect(
+			verifySignatureWithDid({
+				did: ntDid,
+				kel: 'not-a-real-kel',
 				payload: PAYLOAD,
 				signature,
 			})

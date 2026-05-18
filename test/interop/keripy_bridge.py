@@ -8,6 +8,9 @@ It uses the reference KERI implementation (keripy, the `keri` PyPI package) to:
 
   * `gen-kel`    - build a KEL (icp, rot, ixn, rot) with keripy and emit it as
                    a CESR stream (the wire form node-keri's `verifyKel` reads).
+  * `gen-nt-kel` - build a single-event KEL for a *non-transferable* AID with
+                   keripy and emit it as a CESR stream. node-keri verifies
+                   these (it does not generate them).
   * `verify-kel` - replay a node-keri-produced CESR stream through keripy's
                    `Kevery` and report whether keripy's verifier accepts it.
   * `sign`       - sign a payload with keripy's Ed25519 signer.
@@ -58,17 +61,32 @@ def _fail(message):
     sys.exit(1)
 
 
-def _signer(seed):
-    """Deterministic Ed25519 signer from an integer seed (0..223).
+def _seed_bytes(seed):
+    """The 32-byte raw seed for an integer seed (0..223).
 
-    The 32-byte raw seed is `bytes(range(seed, seed + 32))`, which is exactly
-    what the TypeScript tests feed to `keyPairFromSeed`, so both sides derive
-    the same key material.
+    `bytes(range(seed, seed + 32))` is exactly what the TypeScript tests feed
+    to `keyPairFromSeed`, so both sides derive the same key material.
     """
     if not isinstance(seed, int) or not (0 <= seed <= 223):
         raise ValueError(f"seed must be an int in [0, 223], got {seed!r}")
-    raw = bytes(range(seed, seed + 32))
-    return Signer(raw=raw, code=MtrDex.Ed25519_Seed, transferable=True)
+    return bytes(range(seed, seed + 32))
+
+
+def _signer(seed):
+    """Deterministic *transferable* Ed25519 signer (verfer code `D`)."""
+    return Signer(raw=_seed_bytes(seed), code=MtrDex.Ed25519_Seed,
+                  transferable=True)
+
+
+def _signer_nt(seed):
+    """Deterministic *non-transferable* Ed25519 signer (verfer code `B`).
+
+    `transferable=False` is the only difference from `_signer`: the private
+    key — and so the raw signature bytes — is identical, only the verfer's
+    CESR code changes (`B` instead of `D`).
+    """
+    return Signer(raw=_seed_bytes(seed), code=MtrDex.Ed25519_Seed,
+                  transferable=False)
 
 
 def _ndig(signer):
@@ -152,6 +170,42 @@ def _cmd_gen_kel(req):
     }
 
 
+def _cmd_gen_nt_kel(req):
+    """Build a single-event KEL for a *non-transferable* identifier with keripy.
+
+    Request : {"seed": <int, optional, default 0>}
+    Response: {"aid", "did", "kel": "<CESR stream>"}
+
+    A non-transferable AID is a basic prefix: the `i` field is the controller's
+    `B`-coded Ed25519 key itself — not a self-addressing digest — so `d != i`.
+    The inception commits to no next key (`nt="0"`, `n=[]`) and the identifier
+    can never rotate, so the whole KEL is exactly this one inception event.
+
+    As in `gen-kel`, the event SAID `d` is pinned to SHA2-256 (CESR code `I`)
+    so node-keri can recompute it; only `d` is self-addressing here — `i` is
+    the fixed basic prefix and is kept verbatim through `makify`.
+    """
+    seed = req.get("seed", 0)
+    s0 = _signer_nt(seed)
+    pre = s0.verfer.qb64  # the basic non-transferable prefix == the `B` key
+
+    icp = dict(v=_vs(), t=Ilks.icp, d="", i=pre, s="0", kt="1",
+               k=[s0.verfer.qb64], nt="0", n=[],
+               bt="0", b=[], c=[], a=[])
+    icp_s = _said_keri(icp)  # saids={"d": SHA2}; `i` left as the given prefix
+
+    # Controller signature: an indexed Siger at key index 0, exactly as for a
+    # transferable event — `transferable=False` changed the verfer code, not
+    # how the controller signs.
+    siger = s0.sign(ser=icp_s.raw, index=0)
+    stream = eventing.messagize(icp_s, sigers=[siger])
+    return {
+        "aid": pre,
+        "did": f"did:keri:{pre}",
+        "kel": bytes(stream).decode("utf-8"),
+    }
+
+
 def _cmd_verify_kel(req):
     """Replay a node-keri CESR-stream KEL through keripy's `Kevery` verifier.
 
@@ -214,6 +268,7 @@ def _cmd_verify_sig(req):
 
 _COMMANDS = {
     "gen-kel": _cmd_gen_kel,
+    "gen-nt-kel": _cmd_gen_nt_kel,
     "verify-kel": _cmd_verify_kel,
     "sign": _cmd_sign,
     "verify-sig": _cmd_verify_sig,

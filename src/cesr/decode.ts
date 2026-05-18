@@ -6,6 +6,7 @@ import {
 	CESR_DIGEST_SHA256,
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
+	CESR_PUBLIC_KEY_ED25519N,
 	CESR_SIGNATURE_ED25519,
 	CesrCodeSpec,
 	digestCodeOf,
@@ -120,9 +121,38 @@ function findKnownCodeAt(qb64: string): CesrCodeSpec | undefined {
 	return best;
 }
 
-/** Decode a CESR-qualified Ed25519 public key (code `D`). */
+/** Decode a CESR-qualified Ed25519 public key, transferable (code `D`). */
 export function decodePublicKeyEd25519(qb64: string): Uint8Array {
 	return decodeMatter(CESR_PUBLIC_KEY_ED25519, qb64);
+}
+
+/**
+ * Decode a CESR-qualified *non-transferable* Ed25519 public key (code `B`).
+ *
+ * A non-transferable key is the basic prefix of a non-transferable AID: the
+ * controller commits to a single, unrotatable key. node-keri verifies
+ * identifiers built on these but never generates one — there is no matching
+ * encoder.
+ */
+export function decodeNonTransferablePublicKeyEd25519(qb64: string): Uint8Array {
+	return decodeMatter(CESR_PUBLIC_KEY_ED25519N, qb64);
+}
+
+/**
+ * Decode a CESR-qualified Ed25519 verification key in either variant — the
+ * transferable `D` code or the non-transferable `B` code — returning the raw
+ * 32 key bytes.
+ *
+ * Use this wherever a key may legitimately be either form: a KEL event's `k`
+ * entry, or a `currentPublicKey` carried in replay-derived state. Use the
+ * strict `decodePublicKeyEd25519` where only the transferable form is valid —
+ * a rotation's revealed key, since a non-transferable identifier never rotates.
+ */
+export function decodeVerificationKeyEd25519(qb64: string): Uint8Array {
+	if (typeof qb64 === 'string' && qb64.startsWith(CESR_PUBLIC_KEY_ED25519N.code)) {
+		return decodeNonTransferablePublicKeyEd25519(qb64);
+	}
+	return decodePublicKeyEd25519(qb64);
 }
 
 /** Decode a CESR-qualified Ed25519 signature, non-indexed (code `0B`). */

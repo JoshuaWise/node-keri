@@ -20,7 +20,7 @@ import {
 } from '../crypto/keypair';
 import { Aid, DidKeri } from '../did/did-keri';
 import { createInceptionEvent } from '../event/inception';
-import { KeriState } from '../kel/state';
+import { TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
 export interface CreateIdentifierInput {
@@ -46,8 +46,8 @@ export interface CreateIdentifierResult {
 	readonly nextKeyPair: KeriKeyPair;
 	/** The signed inception event, as a CESR stream frame — the KEL's wire form. */
 	readonly inceptionEvent: string;
-	/** Replay-derived initial state (sequence 0). */
-	readonly state: KeriState;
+	/** Replay-derived initial state (sequence 0) — always transferable. */
+	readonly state: TransferableKeriState;
 }
 
 /**

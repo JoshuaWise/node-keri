@@ -7,7 +7,7 @@
  * the `did:keri:<aid>` formatter, and the strict offline parser.
  */
 
-import { decodeDigest } from '../cesr/decode';
+import { decodeDigest, decodeNonTransferablePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest } from '../cesr/qualified';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 
@@ -15,11 +15,14 @@ declare const aidBrand: unique symbol;
 declare const didBrand: unique symbol;
 
 /**
- * A KERI Autonomic Identifier. In this profile every AID is a transferable,
- * self-addressing identifier derived from an inception event, so the
- * underlying string is a CESR-qualified digest. Its algorithm is whatever the
- * inception event used — SHA-256 by default — so the string is 44 characters
- * for a 256-bit digest or 88 for a 512-bit one.
+ * A KERI Autonomic Identifier. An AID is one of two forms:
+ *   - a *transferable*, self-addressing identifier — a CESR-qualified digest,
+ *     the SAID of an inception event (44 characters for a 256-bit digest, 88
+ *     for a 512-bit one; SHA-256 by default); or
+ *   - a *non-transferable* identifier — a basic prefix that is itself the
+ *     controller's `B`-coded Ed25519 key (44 characters).
+ *
+ * node-keri generates only the transferable form; it verifies both.
  */
 export type Aid = string & { readonly [aidBrand]: 'Aid' };
 
@@ -54,16 +57,26 @@ export interface ParsedDidKeri {
 	readonly method: 'keri';
 	/** The method-specific identifier: the controller's AID. */
 	readonly aid: Aid;
+	/**
+	 * Whether the AID is transferable. `true` for a self-addressing digest — a
+	 * rotatable identifier whose key state must be replayed from a KEL.
+	 * `false` for a non-transferable basic prefix — the controller's `B`-coded
+	 * Ed25519 key itself, which can never rotate and is self-certifying (the
+	 * signing key is read straight from the AID, no KEL required).
+	 */
+	readonly transferable: boolean;
 }
 
 /**
  * Parse a `did:keri:<aid>` string into its components.
  *
  * Parsing is strict and offline. The method-specific id must be a well-formed
- * CESR-qualified digest under an algorithm node-keri recognizes (a code with a
- * registered implementation — see `digestAlgorithms`), and no DID-URL syntax
- * (path, query, or fragment) is accepted, since resolution operates on bare
- * DIDs. A string that fails either rule throws `InvalidArgumentError`; callers
+ * AID — either a CESR-qualified digest under an algorithm node-keri recognizes
+ * (a code with a registered implementation — see `digestAlgorithms`) for a
+ * transferable AID, or a CESR-qualified non-transferable (`B`) Ed25519 key for
+ * a non-transferable one — and no DID-URL syntax (path, query, or fragment) is
+ * accepted, since resolution operates on bare DIDs. A string that fails either
+ * rule throws `InvalidArgumentError`; callers
  * parsing DIDs that arrive from untrusted input should prefer `resolveDid`,
  * which reports the same failure as an `INVALID_DID` result rather than
  * throwing.
@@ -88,23 +101,35 @@ export function parseDidKeri(did: string): ParsedDidKeri {
 			);
 		}
 	}
-	// The AID must be a canonically-encoded CESR digest under a recognized
-	// algorithm. `decodeDigest` enforces the derivation code (and that an
-	// implementation is registered for it), the fixed length, and pad-bit
-	// canonicality; the decoded bytes themselves are not needed here.
+	// The AID is either a transferable, self-addressing digest or a
+	// non-transferable basic prefix (a `B`-coded Ed25519 key). Both decoders
+	// enforce the derivation code, the fixed length, and pad-bit canonicality;
+	// the decoded bytes themselves are not needed here. Try the digest form
+	// first — it is the form node-keri itself mints — then the key form, and
+	// record which one matched.
+	let transferable: boolean;
 	try {
 		decodeDigest(aid);
-	} catch (err) {
-		if (err instanceof MalformedInputError) {
-			throw new InvalidArgumentError(
-				`did:keri identifier is not a valid AID: ${err.message}`
-			);
+		transferable = true;
+	} catch (digestErr) {
+		if (!(digestErr instanceof MalformedInputError)) throw digestErr;
+		try {
+			decodeNonTransferablePublicKeyEd25519(aid);
+			transferable = false;
+		} catch (keyErr) {
+			if (keyErr instanceof MalformedInputError) {
+				throw new InvalidArgumentError(
+					'did:keri identifier is not a valid AID: it is neither a '
+						+ `recognized digest nor a non-transferable key (${digestErr.message})`
+				);
+			}
+			throw keyErr;
 		}
-		throw err;
 	}
 	return {
 		did: did as DidKeri,
 		method: 'keri',
 		aid: aid as unknown as Aid,
+		transferable,
 	};
 }

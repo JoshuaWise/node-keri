@@ -81,9 +81,11 @@ const ok = verifySignatureWithDid({
 // ok === true: the signature verifies under the DID's latest key.
 ```
 
-`verifySignatureWithDid` replays the KEL, extracts the latest authoritative
-key, and checks the signature in one step. It returns `false` for any
-data-level failure — a malformed DID, a non-verifying KEL, or a bad signature.
+`verifySignatureWithDid` establishes the DID's authoritative key — by replaying
+the KEL for a transferable DID, or reading it straight from the AID for a
+self-certifying non-transferable one — and checks the signature in one step. It
+returns `false` for any data-level failure — a malformed DID, a non-verifying
+KEL, or a bad signature.
 
 ## Wire format
 
@@ -202,6 +204,8 @@ function verifyKel(input: {
 
 Replay a key event log — a CESR stream — from inception and reconstruct the latest authoritative state. The stream is first parsed into its events (a framing defect is reported as `MALFORMED_STREAM`); then every event's structure, self-addressing digest, version string, sequence number, previous-event link, rotation commitment, and signature is recomputed and checked, and the inception event must derive exactly `aid`. **The returned `state` is the only `KeriState` a caller may treat as verified.** Never throws for a malformed or hostile KEL — that is returned as `{ ok: false }`.
 
+`verifyKel` accepts both transferable and non-transferable AIDs. A non-transferable AID — a basic prefix that is the controller's `B`-coded Ed25519 key — has a single-event KEL and cannot rotate; an event appended after its inception is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`. `state.transferable` discriminates the two, and `state.nextKeyCommitment` is present only when it is `true`. node-keri verifies non-transferable AIDs but does not generate them.
+
 #### `verifySignatureWithDid`
 
 ```ts
@@ -213,7 +217,12 @@ function verifySignatureWithDid(input: {
 }): boolean;
 ```
 
-The message verification primitive. Verifies that `kel` (a CESR stream) is valid and belongs to `did`, extracts the latest authoritative key, and checks `signature` over `payload` against it — all in one call. Returns `false` for every data-level failure: a malformed DID, a non-verifying KEL, a KEL for a different identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads.
+The message verification primitive. Establishes the key `did` makes authoritative and checks `signature` over `payload` against it — in one call. `kel` is always required, but the **empty string** `''` stands for "no KEL":
+
+- With a **non-empty `kel`** (a CESR stream), the key is whatever replaying that KEL yields — it must verify and belong to the DID's AID. A transferable DID can be verified only this way.
+- With an **empty `kel`**, the DID must be a **non-transferable** AID: a `B`-coded basic prefix is self-certifying, so the key is read straight from the AID. (A non-transferable identifier may have no KEL at all.)
+
+Returns `false` for every data-level failure: a malformed DID, an empty or non-verifying KEL for a transferable DID, a KEL for a different identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads.
 
 ### DID surface
 
@@ -230,6 +239,8 @@ function resolveDid(input: {
 ```
 
 Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `metadata` carries the verified `state` and `eventCount`, plus the KEL itself when `options.includeKel` is set. Any data-level failure is returned as `{ ok: false }`.
+
+A non-transferable DID resolves with the **empty string** `''` for `kel`: it is self-certifying, so the document is projected straight from the prefix. (`eventCount` is then 0, and `metadata.kel` is absent even under `includeKel` — there is no KEL to echo.) A non-transferable DID may also be resolved from its trivial single-event KEL by passing that stream.
 
 #### `createDidDocument`
 
@@ -354,6 +365,7 @@ type KeriVerificationError =
 	| { code: 'INVALID_DID'; message: string }
 	| { code: 'UNSUPPORTED_FEATURE'; feature: string }
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
+	| { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
 	| { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
 	| { code: 'INVALID_PREVIOUS_DIGEST' }
 	| { code: 'INVALID_EVENT_DIGEST' }
@@ -374,8 +386,8 @@ Alongside the functions above, the package exports the full type surface:
 - **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrIndexedSignature`, `CesrDigest` (compile-time branded strings).
 - **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
-- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
-- **State** — `KeriState`, the replay-derived, trusted summary of an identifier.
+- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `NonTransferableInceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
+- **State** — `KeriState`, the replay-derived, trusted summary of an identifier — a discriminated union of `TransferableKeriState` and `NonTransferableKeriState` on the `transferable` field.
 - **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`, `DidResolutionMetadata`.
 - **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyKelResult`, and so on).
 - **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `DEFAULT_DIGEST_CODE`, `DIGEST_CODES`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.

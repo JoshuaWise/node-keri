@@ -25,8 +25,11 @@ export type KeriEventType = 'icp' | 'rot' | 'ixn';
  * Fields shared by every event in the KEL.
  *
  * `d` is the self-addressing digest of the event (computed with `d` itself,
- * and `i` for inception, replaced by a fixed-length placeholder).
- * `i` is the AID of the controller; for inception, it equals `d`.
+ * and `i` for a transferable inception, replaced by a fixed-length
+ * placeholder).
+ * `i` is the AID of the controller; for a transferable inception it equals
+ * `d`, while for a non-transferable inception it is the controller's
+ * (`B`-coded) Ed25519 key itself.
  * `s` is the sequence number as lowercase hex without leading zeros.
  * `v` is the KERI version string `KERI10JSON{size:06x}_` where `size` is the
  *   serialized byte length of the event in lowercase hex.
@@ -45,6 +48,29 @@ export interface InceptionEvent extends KeriEventBase {
 	k: readonly [CesrPublicKey];
 	nt: '1';
 	n: readonly [CesrDigest];
+	bt: '0';
+	b: readonly [];
+	c: readonly [];
+	a: readonly [];
+}
+
+/**
+ * Inception of a *non-transferable* identifier.
+ *
+ * A non-transferable AID is a basic prefix: `i` is the controller's
+ * non-transferable (`B`-coded) Ed25519 key itself, not a self-addressing
+ * digest. The event commits to no next key — `nt` is `"0"` and `n` is empty —
+ * so the identifier can never rotate, and its KEL is exactly this one event.
+ *
+ * node-keri *verifies* these (a keripy non-transferable AID is the motivating
+ * case) but does not generate them: no constructor emits one.
+ */
+export interface NonTransferableInceptionEvent extends KeriEventBase {
+	t: 'icp';
+	kt: '1';
+	k: readonly [CesrPublicKey];
+	nt: '0';
+	n: readonly [];
 	bt: '0';
 	b: readonly [];
 	c: readonly [];
@@ -70,7 +96,11 @@ export interface InteractionEvent extends KeriEventBase {
 	a: readonly unknown[];
 }
 
-export type KeriEvent = InceptionEvent | RotationEvent | InteractionEvent;
+export type KeriEvent =
+	| InceptionEvent
+	| NonTransferableInceptionEvent
+	| RotationEvent
+	| InteractionEvent;
 
 /**
  * An event paired with the signature(s) authorizing it.

@@ -454,19 +454,32 @@ not well-framed is rejected by `verifyKel` with `MALFORMED_STREAM`.
 ## 6. Internal state model
 
 ```ts
-interface KeriState {
+interface KeriStateBase {
     aid: Aid;
     did: DidKeri;
     sequenceNumber: number;
     lastEventDigest: CesrDigest;
     currentPublicKey: CesrPublicKey;
-    nextKeyCommitment: CesrDigest;
-    transferable: true;
     eventType: KeriEventType;
 }
+
+// A transferable identifier pre-rotates, so it carries the next-key commitment.
+interface TransferableKeriState extends KeriStateBase {
+    transferable: true;
+    nextKeyCommitment: CesrDigest;
+}
+
+// A non-transferable identifier's KEL is its single inception event: it
+// commits to no next key and can never rotate. node-keri verifies these
+// (e.g. from keripy) but does not generate them.
+interface NonTransferableKeriState extends KeriStateBase {
+    transferable: false;
+}
+
+type KeriState = TransferableKeriState | NonTransferableKeriState;
 ```
 
-This is derived by replaying the KEL. It should not be trusted if provided externally unless it was returned by `verifyKel`.
+This is derived by replaying the KEL. It should not be trusted if provided externally unless it was returned by `verifyKel`. Narrow on `transferable` to reach `nextKeyCommitment`.
 
 ---
 
@@ -686,6 +699,7 @@ type KeriVerificationError =
     | { code: 'INVALID_DID'; message: string }
     | { code: 'UNSUPPORTED_FEATURE'; feature: string }
     | { code: 'INVALID_EVENT_TYPE'; eventType: string }
+    | { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
     | { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
     | { code: 'INVALID_PREVIOUS_DIGEST' }
     | { code: 'INVALID_EVENT_DIGEST' }
@@ -969,7 +983,7 @@ Where `verifySignatureWithDid` is useful for agent-to-agent communication:
 ```ts
 function verifySignatureWithDid(input: {
     did: DidKeri;
-    kel: string; // CESR stream
+    kel: string; // CESR stream; the empty string '' means "no KEL"
     payload: Uint8Array;
     signature: CesrSignature;
 }): boolean;
@@ -979,11 +993,15 @@ Flow:
 
 ```txt
 1. Caller receives message over HTTPS.
-2. Caller receives or already has sender DID + KEL.
-3. Library verifies KEL.
-4. Library extracts latest public key.
-5. Library verifies message signature.
+2. Caller receives or already has the sender DID (+ KEL, if transferable).
+3. With a non-empty `kel`: library verifies the KEL and extracts the latest
+   public key. With `kel === ''` and a non-transferable DID: the AID *is* the
+   key — self-certifying — so the key is read straight from the prefix.
+4. Library verifies the message signature against that key.
 ```
+
+`resolveDid` follows the same `kel: string` convention — pass `''` to resolve a
+non-transferable DID straight from its prefix.
 
 That maps cleanly to the agent identity use case.
 

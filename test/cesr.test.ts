@@ -1,7 +1,9 @@
 import {
 	decodeDigestSha256,
+	decodeNonTransferablePublicKeyEd25519,
 	decodePublicKeyEd25519,
 	decodeSignatureEd25519,
+	decodeVerificationKeyEd25519,
 } from '../src/cesr/decode';
 import {
 	encodeDigestSha256,
@@ -101,9 +103,10 @@ describe('cesr encode/decode', () => {
 			);
 		});
 
-		test('decode rejects unknown derivation codes', () => {
-			// 'B' is the non-transferable Ed25519 code, which this profile does
-			// not support. It is the same length (44) so only the code differs.
+		test('decode rejects the wrong known code, and unknown codes', () => {
+			// 'B' is the non-transferable Ed25519 code — a recognized code, but
+			// `decodePublicKeyEd25519` decodes only the transferable `D` form,
+			// so a `B` key is the wrong code here (same length, 44).
 			const bad = 'B' + 'A'.repeat(43);
 			expect(() => decodePublicKeyEd25519(bad)).toThrow(MalformedInputError);
 			// A completely unrecognized prefix.
@@ -246,6 +249,40 @@ describe('cesr encode/decode', () => {
 		test('decode rejects non-canonical encodings', () => {
 			const bad = 'IQ' + 'A'.repeat(42);
 			expect(() => decodeDigestSha256(bad)).toThrow(/non-canonical/);
+		});
+	});
+
+	describe('non-transferable public keys (code B)', () => {
+		// node-keri has no `B` encoder — it verifies non-transferable AIDs but
+		// does not generate them. A valid `B` qb64 is a `D` key qb64 with the
+		// code char swapped: same raw bytes, different derivation code.
+		const RAW = keyPairFromSeed(RFC8032_SEED).publicKey.raw;
+		const dKey = encodePublicKeyEd25519(RAW);
+		const bKey = 'B' + dKey.slice(1);
+
+		test('decodeNonTransferablePublicKeyEd25519 decodes a `B` key', () => {
+			expect(toArray(decodeNonTransferablePublicKeyEd25519(bKey))).toEqual(
+				toArray(RAW)
+			);
+		});
+
+		test('decodeNonTransferablePublicKeyEd25519 rejects a transferable `D` key', () => {
+			expect(() => decodeNonTransferablePublicKeyEd25519(dKey)).toThrow(
+				MalformedInputError
+			);
+		});
+
+		test('decodeVerificationKeyEd25519 accepts both `B` and `D` keys', () => {
+			expect(toArray(decodeVerificationKeyEd25519(bKey))).toEqual(toArray(RAW));
+			expect(toArray(decodeVerificationKeyEd25519(dKey))).toEqual(toArray(RAW));
+		});
+
+		test('decodeVerificationKeyEd25519 rejects an unrelated code', () => {
+			// A SHA-256 digest qb64 is the same length but neither `B` nor `D`.
+			const digestQb64 = encodeDigestSha256(new Uint8Array(32));
+			expect(() => decodeVerificationKeyEd25519(digestQb64)).toThrow(
+				MalformedInputError
+			);
 		});
 	});
 

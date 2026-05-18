@@ -202,6 +202,15 @@ export function keripyGenKel(seeds: number[], anchor?: unknown): GenKelResult {
 	return runBridge<GenKelResult>('gen-kel', { seeds, anchor });
 }
 
+/**
+ * Generate a *non-transferable* AID and its single-event KEL with keripy,
+ * returning the KEL as a CESR stream. node-keri verifies these; it does not
+ * generate them.
+ */
+export function keripyGenNonTransferableKel(seed: number): GenKelResult {
+	return runBridge<GenKelResult>('gen-nt-kel', { seed });
+}
+
 /** Replay a node-keri CESR-stream KEL through keripy's verifier. */
 export function keripyVerifyKel(aid: string, kel: string): VerifyKelResult {
 	return runBridge<VerifyKelResult>('verify-kel', { aid, kel });

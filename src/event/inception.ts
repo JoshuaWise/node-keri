@@ -17,7 +17,7 @@ import {
 	assertPublicKey,
 } from '../crypto/keypair';
 import { aidFromSaid, formatDidKeri } from '../did/did-keri';
-import { KeriState } from '../kel/state';
+import { TransferableKeriState } from '../kel/state';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
 import { encodeEventFrame } from './stream';
@@ -39,7 +39,8 @@ export interface CreateInceptionInput {
 export interface CreateInceptionResult {
 	/** The signed inception event, as a CESR stream frame (the wire form). */
 	readonly event: string;
-	readonly state: KeriState;
+	/** Replay-derived initial state. node-keri mints only transferable AIDs. */
+	readonly state: TransferableKeriState;
 }
 
 export function createInceptionEvent(input: CreateInceptionInput): CreateInceptionResult {
@@ -91,7 +92,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 
 	const frame = encodeEventFrame(signEvent(event, input.currentKeyPair.privateKey));
 
-	const state: KeriState = {
+	const state: TransferableKeriState = {
 		aid,
 		did: formatDidKeri(aid),
 		sequenceNumber: 0,

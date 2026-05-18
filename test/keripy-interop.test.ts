@@ -22,6 +22,13 @@
  * inception event has `d == i`. keripy defaults its SAID to Blake3-256, so the
  * bridge pins keripy to SHA2-256 when generating events — see the bridge's
  * module docstring. With that pinning the two implementations are byte-exact.
+ *
+ * Non-transferable AIDs: node-keri generates only transferable AIDs but
+ * *verifies* both. The final suite below checks that a non-transferable AID
+ * minted by keripy — a basic prefix whose `i` is the controller's `B`-coded
+ * key, with a single-event KEL and no rotation — is ingested and verified by
+ * node-keri. That direction is one-way by design, so there is no byte-exact
+ * test for it.
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
@@ -29,18 +36,20 @@ import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { interactIdentifier } from '../src/api/interact-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
+import { resolveDid } from '../src/did/resolver';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { sign } from '../src/crypto/ed25519';
 import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
 import { parseDidKeri } from '../src/did/did-keri';
-import type { Aid } from '../src/did/did-keri';
-import { parseKel } from '../src/event/stream';
+import type { Aid, DidKeri } from '../src/did/did-keri';
+import { encodeEventFrame, parseKel } from '../src/event/stream';
 import { utf8Encode } from '../src/bytes/utf8';
 import type { CesrSignature } from '../src/cesr/qualified';
 import {
 	keripyAvailable,
 	keripyUnavailableReason,
 	keripyGenKel,
+	keripyGenNonTransferableKel,
 	keripyVerifyKel,
 	keripySign,
 	keripyVerifySig,
@@ -255,5 +264,157 @@ describeInterop('keripy interop: signed messages', () => {
 			signature: signed.signature as CesrSignature,
 		});
 		expect(ok).toBe(false);
+	});
+});
+
+/**
+ * Non-transferable AIDs are the one case node-keri verifies but does not
+ * generate (see the module docstring). keripy mints a non-transferable AID —
+ * a basic prefix that is the controller's `B`-coded Ed25519 key, with a
+ * single-event KEL that commits to no next key — and these tests prove
+ * node-keri ingests, verifies, and resolves it.
+ */
+describeInterop('keripy interop: non-transferable AIDs', () => {
+	/** Seed for the non-transferable identifier — within [0, 223] as always. */
+	const NT_SEED = 0;
+
+	test('a non-transferable AID minted by keripy is verified by node-keri', () => {
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+
+		// The DID parses under node-keri's strict offline grammar: a
+		// non-transferable AID is a `B`-coded key, not a digest.
+		const parsed = parseDidKeri(generated.did);
+		expect(parsed.aid).toBe(generated.aid);
+
+		// Its single-event KEL replays and re-derives the same AID.
+		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.state.transferable).toBe(false);
+			expect(result.state.aid).toBe(generated.aid);
+			expect(result.state.sequenceNumber).toBe(0);
+			// A non-transferable AID is a basic prefix: it *is* its own
+			// controller key, so the current key equals the AID itself.
+			expect(result.state.currentPublicKey).toBe(generated.aid);
+		}
+	});
+
+	test('node-keri rejects a non-transferable KEL replayed under the wrong AID', () => {
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const other = keripyGenNonTransferableKel(NT_SEED + 32);
+
+		// A structurally valid non-transferable KEL still fails when it does
+		// not derive the AID the caller asked for.
+		const result = verifyKel({
+			aid: other.aid as unknown as Aid,
+			kel: generated.kel,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('INVALID_DID');
+		}
+	});
+
+	test('node-keri rejects a rotation appended to a non-transferable KEL', () => {
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+
+		// Borrow a well-formed rotation frame from a transferable keripy KEL
+		// and append it. A non-transferable identifier commits to no next key,
+		// so the verifier rejects the extra event before even inspecting it.
+		const rotationFrame = encodeEventFrame(parseKel(keripyGenKel(SEEDS).kel)[1]!);
+		const result = verifyKel({
+			aid: generated.aid as unknown as Aid,
+			kel: generated.kel + rotationFrame,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('NON_TRANSFERABLE_NOT_EXTENSIBLE');
+		}
+	});
+
+	test('a message signed by a keripy non-transferable key verifies under node-keri', () => {
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const payload = utf8Encode('non-transferable agent payload — interop');
+
+		// keripy signs `payload` with seed NT_SEED. The raw Ed25519 signature
+		// does not depend on the transferable flag, so this is the very key
+		// the non-transferable KEL makes authoritative.
+		const signed = keripySign(NT_SEED, payload);
+		const ok = verifySignatureWithDid({
+			did: generated.did as DidKeri,
+			kel: generated.kel,
+			payload,
+			signature: signed.signature as CesrSignature,
+		});
+		expect(ok).toBe(true);
+
+		// Guard against vacuity: the same signature must not verify altered bytes.
+		const tampered = verifySignatureWithDid({
+			did: generated.did as DidKeri,
+			kel: generated.kel,
+			payload: utf8Encode('non-transferable agent payload — interop!'),
+			signature: signed.signature as CesrSignature,
+		});
+		expect(tampered).toBe(false);
+	});
+
+	test('a keripy non-transferable signature verifies with no KEL at all', () => {
+		// The canonical non-transferable case: only the DID is exchanged, no
+		// KEL — the `B`-coded AID is itself the signing key. node-keri reads
+		// the key straight from the prefix; `''` is the "no KEL" value.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const payload = utf8Encode('bare non-transferable prefix — interop');
+		const signed = keripySign(NT_SEED, payload);
+
+		const ok = verifySignatureWithDid({
+			did: generated.did as DidKeri,
+			kel: '',
+			payload,
+			signature: signed.signature as CesrSignature,
+		});
+		expect(ok).toBe(true);
+
+		const tampered = verifySignatureWithDid({
+			did: generated.did as DidKeri,
+			kel: '',
+			payload: utf8Encode('bare non-transferable prefix — interop!'),
+			signature: signed.signature as CesrSignature,
+		});
+		expect(tampered).toBe(false);
+	});
+
+	test('node-keri resolves a keripy non-transferable DID with no KEL', () => {
+		// `resolveDid` with the empty-string "no KEL" value: the DID document is
+		// projected straight from the self-certifying `B` prefix.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+
+		const result = resolveDid({ did: generated.did as DidKeri, kel: '' });
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.metadata.state.transferable).toBe(false);
+			expect(result.metadata.state.aid).toBe(generated.aid);
+			expect(result.metadata.eventCount).toBe(0);
+			expect(result.didDocument.id).toBe(generated.did);
+			// The sole verification method is the AID itself, as a JWK.
+			expect(result.didDocument.verificationMethod).toHaveLength(1);
+		}
+	});
+
+	test('node-keri resolves a keripy non-transferable DID from its KEL', () => {
+		// The same AID also resolves the KEL way — replaying its trivial
+		// single-event log — and yields an equivalent document.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+
+		const result = resolveDid({
+			did: generated.did as DidKeri,
+			kel: generated.kel,
+		});
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.metadata.state.transferable).toBe(false);
+			expect(result.metadata.state.aid).toBe(generated.aid);
+			expect(result.metadata.eventCount).toBe(1);
+			expect(result.didDocument.id).toBe(generated.did);
+		}
 	});
 });

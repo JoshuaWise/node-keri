@@ -18,7 +18,7 @@ import {
 	assertPrivateKey,
 	assertPublicKey,
 } from '../crypto/keypair';
-import { KeriState } from '../kel/state';
+import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
@@ -44,13 +44,23 @@ export interface CreateRotationInput {
 export interface CreateRotationResult {
 	/** The signed rotation event, as a CESR stream frame (the wire form). */
 	readonly event: string;
-	readonly state: KeriState;
+	/** Replay-derived state after the rotation — always transferable. */
+	readonly state: TransferableKeriState;
 }
 
 export function createRotationEvent(input: CreateRotationInput): CreateRotationResult {
 	assertPublicKey(input.newCurrentKeyPair.publicKey);
 	assertPrivateKey(input.newCurrentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
+
+	// A non-transferable identifier committed to no next key at inception, so
+	// it cannot be rotated. (node-keri never mints one, but a verified state
+	// for a non-transferable AID can still reach this constructor.)
+	if (input.state.transferable === false) {
+		throw new InvalidArgumentError(
+			'a non-transferable identifier cannot be rotated'
+		);
+	}
 
 	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
 	const newCurrentQb64 = encodePublicKeyEd25519(input.newCurrentKeyPair.publicKey.raw);
@@ -116,7 +126,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 
 	const frame = encodeEventFrame(signEvent(event, input.newCurrentKeyPair.privateKey));
 
-	const newState: KeriState = {
+	const newState: TransferableKeriState = {
 		aid: input.state.aid,
 		did: input.state.did,
 		sequenceNumber: nextSeq,

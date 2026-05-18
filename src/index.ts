@@ -73,6 +73,8 @@ export {
 } from './cesr/encode';
 export {
 	decodePublicKeyEd25519,
+	decodeNonTransferablePublicKeyEd25519,
+	decodeVerificationKeyEd25519,
 	decodeSignatureEd25519,
 	decodeIndexedSignatureEd25519,
 	signatureIndex,
@@ -99,13 +101,18 @@ export type {
 	KeriEventType,
 	KeriEventBase,
 	InceptionEvent,
+	NonTransferableInceptionEvent,
 	RotationEvent,
 	InteractionEvent,
 	KeriEvent,
 	SignedKeriEvent,
 } from './event/types';
 
-export type { KeriState } from './kel/state';
+export type {
+	KeriState,
+	TransferableKeriState,
+	NonTransferableKeriState,
+} from './kel/state';
 
 export {
 	KERI_VERSION_STRING_LENGTH,

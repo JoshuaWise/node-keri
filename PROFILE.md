@@ -4,7 +4,9 @@ This library implements a deliberately narrow subset of KERI. This document defi
 
 ## Scope
 
-The profile covers a **single-controller, transferable `did:keri` identity lifecycle**: JSON events, Ed25519 keys, CESR text primitives, local KEL creation, replay verification, key rotation, interaction events, and DID document generation. Witnesses, transport, and discovery are out of scope by design — they are separable from KERI's core, which is the replay-verifiable key event log. Non-transferable AIDs are not supported.
+The profile covers a **single-controller `did:keri` identity lifecycle**: JSON events, Ed25519 keys, CESR text primitives, local KEL creation, replay verification, key rotation, interaction events, and DID document generation. Witnesses, transport, and discovery are out of scope by design — they are separable from KERI's core, which is the replay-verifiable key event log.
+
+node-keri **generates only transferable AIDs** — self-certifying identifiers that pre-rotate. It **verifies both** transferable and non-transferable AIDs: a non-transferable AID is a basic prefix whose identifier is the controller's `B`-coded Ed25519 key itself, with a single-event KEL and no rotation. There is no API to create one — that direction is verify-only, so a non-transferable AID minted by another implementation (keripy, say) can still be ingested.
 
 ## Supported
 
@@ -14,6 +16,7 @@ The profile covers a **single-controller, transferable `did:keri` identity lifec
 | CESR text primitives                     | Yes    |
 | Ed25519 signing keys                     | Yes    |
 | Self-certifying transferable AIDs        | Yes    |
+| Non-transferable AIDs                    | Verify only — not generated |
 | Single signing key (threshold 1)         | Yes    |
 | Single next-key commitment               | Yes    |
 | Inception (`icp`) events                 | Yes    |
@@ -42,7 +45,7 @@ Every capability below is **outside the profile**. An event that uses one is rej
 | CESR counters / groups           | Excluded except the `-A` controller-signature counter (see [Wire format](#wire-format)) |
 | CBOR / MessagePack serialization | Excluded |
 | Non-Ed25519 keys                 | Excluded |
-| Non-transferable AIDs            | Excluded |
+| Generating non-transferable AIDs | Excluded — they are verified, never minted |
 | HTTP transport, filesystem       | Excluded |
 
 ## Event shapes
@@ -50,12 +53,15 @@ Every capability below is **outside the profile**. An event that uses one is rej
 Three event types are supported: `icp`, `rot`, `ixn`. Excluded-feature fields are pinned to fixed sentinel values, enforced both by the TypeScript types and by the replay validators:
 
 - `kt` (signing threshold) — must be `"1"`.
-- `nt` (next-key threshold) — must be `"1"`.
-- `k` / `n` — arrays of **exactly one** entry. Two or more is multisig.
+- `nt` (next-key threshold) — must be `"1"`, except a non-transferable inception (see below), where it is `"0"`.
+- `k` — an array of **exactly one** key. Two or more is multisig.
+- `n` — an array of **exactly one** next-key digest, except a non-transferable inception, where it is empty.
 - `bt` (witness threshold) — must be `"0"`.
 - `b` (witnesses), `c` (config traits), `br` / `ba` (witness cuts/adds) — must be empty arrays.
 - Inception `a` (seals) — must be empty. To anchor data, use an interaction event, whose `a` is an unconstrained JSON array.
 - An event carrying **any field not named by its type** is rejected.
+
+**Non-transferable inception.** An `icp` whose `i` field is a `B`-coded Ed25519 key (rather than a self-addressing digest) is a non-transferable inception. Its `k` holds that same `B` key, `nt` is `"0"`, and `n` is empty — it commits to no next key. Its AID is the `B` key itself, so `d ≠ i` (unlike a transferable inception, where `d == i`). A non-transferable identifier's KEL is exactly this one event: any `rot` or `ixn` that follows it is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`, since the identifier can never rotate or extend. node-keri verifies these but never generates one.
 
 Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 
@@ -77,19 +83,22 @@ Event top-level fields follow KERI's fixed, type-specific **canonical field orde
 | `rot` | `v t d i s p kt k nt n bt br ba a` |
 | `ixn` | `v t d i s p a`                    |
 
-The event digest (`d`) is a self-addressing identifier (SAID) computed over the canonical event with the digest field(s) replaced by a fixed-length placeholder. For inception, the AID _is_ the SAID — `d` and `i` are identical. The hash algorithm is whatever the digest's own CESR code names — see [Digest algorithms](#digest-algorithms) — so different events in one KEL may use different algorithms; SHA-256 is the default for events this library generates.
+The event digest (`d`) is a self-addressing identifier (SAID) computed over the canonical event with the digest field(s) replaced by a fixed-length placeholder. For a transferable inception the AID _is_ the SAID — `d` and `i` are identical, and both are placeholdered while the SAID is computed. For a non-transferable inception `i` is the controller's key, a fixed input to the digest, so only `d` is placeholdered and `d ≠ i`. The hash algorithm is whatever the digest's own CESR code names — see [Digest algorithms](#digest-algorithms) — so different events in one KEL may use different algorithms; SHA-256 is the default for events this library generates.
 
 ## CESR subset
 
 Qualified text primitives — keys and signatures are Ed25519-only; digests are algorithm-agile:
 
-| Primitive                 | Code         | Qualified length |
-| ------------------------- | ------------ | ---------------- |
-| Ed25519 public key        | `D`          | 44 chars         |
-| Ed25519 signature         | `0B`         | 88 chars         |
-| Ed25519 indexed signature | `A`          | 88 chars         |
-| 256-bit digest            | one char     | 44 chars         |
-| 512-bit digest            | `0`-prefixed | 88 chars         |
+| Primitive                            | Code         | Qualified length |
+| ------------------------------------ | ------------ | ---------------- |
+| Ed25519 public key, transferable     | `D`          | 44 chars         |
+| Ed25519 public key, non-transferable | `B`          | 44 chars         |
+| Ed25519 signature                    | `0B`         | 88 chars         |
+| Ed25519 indexed signature            | `A`          | 88 chars         |
+| 256-bit digest                       | one char     | 44 chars         |
+| 512-bit digest                       | `0`-prefixed | 88 chars         |
+
+The non-transferable key code (`B`) appears only as the `i`/`k` of a non-transferable inception and the `currentPublicKey` of the state it yields; node-keri decodes it but has no encoder for it.
 
 The non-indexed signature (`0B`, a "Cigar") is used for detached signatures over arbitrary payloads. The indexed signature (`A`, a "Siger") carries the index of the signing key within the establishment event's key list, encoded in a 1-character "soft" field after the code — it is the form attached to events in the wire stream. In this single-key profile that index is always 0.
 
@@ -125,10 +134,11 @@ KERI digests are self-describing: a qualified digest's CESR code names its hash 
 
 ## `did:keri` method
 
-- DID syntax: `did:keri:<aid>`, where `<aid>` is the inception event's SAID — a CESR-qualified digest under any registered algorithm (44 chars for a 256-bit digest, 88 for a 512-bit one).
-- The parser is strict and offline: DID-URL components (path, query, fragment) are rejected, and the identifier must be a well-formed AID.
+- DID syntax: `did:keri:<aid>`, where `<aid>` is either a transferable AID — the inception event's SAID, a CESR-qualified digest under any registered algorithm (44 chars for a 256-bit digest, 88 for a 512-bit one) — or a non-transferable AID, a CESR-qualified `B`-coded Ed25519 key (44 chars).
+- The parser is strict and offline: DID-URL components (path, query, fragment) are rejected, and the identifier must be a well-formed AID of either kind.
 - Resolution is local only — the caller supplies the KEL. The library never discovers, fetches, or persists anything.
 - A DID document is a projection of one **verified** key state: it advertises the single currently-authoritative Ed25519 key as a `JsonWebKey2020` verification method, referenced from `authentication` and `assertionMethod`.
+- A non-transferable DID is self-certifying: its key *is* the AID. `verifySignatureWithDid` and `resolveDid` therefore need no KEL for one — `kel` is a required parameter, but the **empty string** `''` is the "no KEL" value, and for a non-transferable DID the key (or DID document) is then derived straight from the prefix. A non-transferable DID may equally be verified or resolved from its trivial single-event KEL by passing that stream instead.
 
 ## Conformance notes
 

@@ -16,7 +16,7 @@
  */
 
 import { base64urlEncode } from '../bytes/base64url';
-import { decodePublicKeyEd25519 } from '../cesr/decode';
+import { decodeVerificationKeyEd25519 } from '../cesr/decode';
 import { DidKeri } from './did-keri';
 import { KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
@@ -114,8 +114,10 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 	}
 
 	// `state.currentPublicKey` is CESR-qualified; the JWK `x` member is the
-	// raw 32-byte Ed25519 key in unpadded base64url.
-	const rawKey = decodePublicKeyEd25519(state.currentPublicKey);
+	// raw 32-byte Ed25519 key in unpadded base64url. The key is transferable
+	// (`D`) or, for a non-transferable AID, non-transferable (`B`) — either way
+	// the raw bytes are a plain Ed25519 public key.
+	const rawKey = decodeVerificationKeyEd25519(state.currentPublicKey);
 	const keyId = did + KEY_FRAGMENT;
 	const verificationMethod: DidVerificationMethod = {
 		id: keyId,

@@ -1,10 +1,14 @@
 /**
  * Local `did:keri` resolution.
  *
- * `resolveDid` is offline by construction: the caller supplies the full KEL,
- * and the library never discovers, fetches, or persists anything. Resolution
- * is exactly "verify this KEL against the DID's AID, then project the
- * verified latest state into a DID document".
+ * `resolveDid` is offline by construction: the caller supplies the KEL, and
+ * the library never discovers, fetches, or persists anything. Resolution is
+ * exactly "verify this KEL against the DID's AID, then project the verified
+ * latest state into a DID document".
+ *
+ * A non-transferable DID is self-certifying — the AID *is* the signing key —
+ * so it resolves with no KEL at all: pass the empty string `''` for `kel` and
+ * the document is projected straight from the prefix.
  *
  * The result uses the library's discriminated `{ ok }` shape rather than the
  * W3C DID Resolution metadata envelope. That keeps it consistent with
@@ -14,8 +18,9 @@
  */
 
 import { verifyKel } from '../api/verify-kel';
+import { CesrPublicKey } from '../cesr/qualified';
 import { parseKel } from '../event/stream';
-import { KeriState } from '../kel/state';
+import { KeriState, NonTransferableKeriState } from '../kel/state';
 import { InvalidArgumentError, KeriVerificationError } from '../profile/errors';
 import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
 import { DidDocument, createDidDocument } from './document';
@@ -23,7 +28,13 @@ import { DidDocument, createDidDocument } from './document';
 export interface ResolveDidInput {
 	/** The `did:keri` DID to resolve. */
 	readonly did: DidKeri;
-	/** The full key event log for the DID's identifier, as a CESR stream. */
+	/**
+	 * The full key event log for the DID's identifier, as a CESR stream.
+	 *
+	 * The **empty string** `''` stands for "no KEL" — valid only for a
+	 * self-certifying non-transferable DID, which resolves straight from its
+	 * prefix. A transferable DID must supply a real, non-empty KEL.
+	 */
 	readonly kel: string;
 	readonly options?: {
 		/** When true, the verified KEL is echoed back in the metadata. */
@@ -54,6 +65,9 @@ export type DidResolutionResult =
  * Any data-level failure — a malformed DID, or a KEL that is empty, tampered,
  * reordered, or for a different identifier — is returned as `{ ok: false }`.
  * Throwing is reserved for a caller that violates the argument contract.
+ *
+ * A non-transferable DID resolves with `kel: ''` (no KEL): it is
+ * self-certifying, so the document is projected straight from the prefix.
  */
 export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	if (input === null || typeof input !== 'object') {
@@ -81,6 +95,12 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		throw err;
 	}
 
+	// A non-transferable DID with no KEL (the empty-string sentinel) is
+	// self-certifying — resolve it straight from the prefix, no replay.
+	if (input.kel === '' && !parsed.transferable) {
+		return resolveBareNonTransferable(parsed);
+	}
+
 	const verification = verifyKel({ aid: parsed.aid, kel: input.kel });
 	if (!verification.ok) {
 		return { ok: false, error: verification.error };
@@ -99,4 +119,27 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		...(input.options?.includeKel ? { kel: input.kel } : {}),
 	};
 	return { ok: true, didDocument, metadata };
+}
+
+/**
+ * Resolve a non-transferable DID that was given no KEL. The AID *is* the
+ * signing key — a `B`-coded basic prefix is self-certifying — so the document
+ * is projected straight from it, with no events to replay.
+ *
+ * There is no KEL, so `metadata.eventCount` is 0 and `metadata.kel` is absent
+ * even when `options.includeKel` is set: there is nothing to echo.
+ */
+function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult {
+	const state: NonTransferableKeriState = {
+		aid: parsed.aid,
+		did: parsed.did,
+		sequenceNumber: 0,
+		// A non-transferable AID *is* its qb64 public key; that is the whole
+		// point of a basic prefix. `lastEventDigest` / `eventType` are absent —
+		// there is no event.
+		currentPublicKey: parsed.aid as unknown as CesrPublicKey,
+		transferable: false,
+	};
+	const didDocument = createDidDocument({ did: parsed.did, state });
+	return { ok: true, didDocument, metadata: { state, eventCount: 0 } };
 }

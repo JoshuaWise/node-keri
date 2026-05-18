@@ -38,7 +38,7 @@ import {
 	MalformedInputError,
 	UnsupportedAlgorithmError,
 } from '../profile/errors';
-import { KeriState } from './state';
+import { KeriState, TransferableKeriState } from './state';
 import { describe, isRecord, checkSignature } from './shape';
 import { validateInceptionShape } from './validate-inception';
 import { validateInteractionShape } from './validate-interaction';
@@ -96,10 +96,20 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 			step = applyInception(aid, event, signature);
 		} else {
 			// `state` is always defined here: index 0 either set it or returned.
+			const prior = state as KeriState;
+			// A non-transferable identifier's KEL ends at inception: it commits
+			// to no next key, so it can neither rotate nor anchor interactions.
+			// Any further event is rejected before its shape is even examined.
+			if (!prior.transferable) {
+				return fail({
+					code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE',
+					eventType: typeof t === 'string' ? t : describe(t),
+				});
+			}
 			if (t === 'rot') {
-				step = applyRotation(state as KeriState, event, signature);
+				step = applyRotation(prior, event, signature);
 			} else if (t === 'ixn') {
-				step = applyInteraction(state as KeriState, event, signature);
+				step = applyInteraction(prior, event, signature);
 			} else {
 				// A second `icp`, or an unknown type, both land here.
 				return fail({
@@ -156,7 +166,15 @@ function readWrapper(signed: unknown):
 	};
 }
 
-/** Verify an inception event and build the initial state. */
+/**
+ * Verify an inception event and build the initial state.
+ *
+ * Handles both AID kinds. The shape pass classifies the event from its `i`
+ * field; the difference here is in two places — how the SAID is recomputed
+ * (`i` is part of the digest input for a non-transferable AID, but a
+ * placeholder for a transferable one, whose AID *is* the SAID) and how the AID
+ * is then derived and checked.
+ */
 function applyInception(
 	aid: Aid,
 	event: Record<string, unknown>,
@@ -164,7 +182,8 @@ function applyInception(
 ): StepResult {
 	const shape = validateInceptionShape(event);
 	if (!shape.ok) return shape;
-	const ie = shape.value;
+	const validated = shape.value;
+	const ie = validated.event;
 
 	// The digest algorithm is read from the event's own `d` code — the shape
 	// pass already confirmed it is a recognized, available digest — and the
@@ -174,11 +193,15 @@ function applyInception(
 	try {
 		const digestCode = digestCodeOf(ie.d);
 		const placeholder = saidPlaceholder(digestCode);
+		// `d` is always self-addressing. `i` is self-addressing only for a
+		// transferable AID, where the AID *is* the SAID; for a non-transferable
+		// AID `i` is the controller's key — a fixed input to the digest, kept
+		// verbatim.
 		const computed = computeEventSaid(
 			{
 				t: 'icp',
 				d: placeholder,
-				i: placeholder,
+				i: validated.transferable ? placeholder : ie.i,
 				s: ie.s,
 				kt: ie.kt,
 				k: ie.k,
@@ -211,17 +234,36 @@ function applyInception(
 	// size falls through to the version check below.
 	if (ie.d !== said) return fail({ code: 'INVALID_EVENT_DIGEST' });
 	if (ie.v !== versionString) return fail({ code: 'NON_CANONICAL_EVENT' });
-	if ((ie.i as string) !== (said as string)) {
-		return fail({
-			code: 'INVALID_DID',
-			message: 'inception `i` is not its own self-addressing digest',
-		});
-	}
-	if ((said as string) !== (aid as string)) {
-		return fail({
-			code: 'INVALID_DID',
-			message: 'inception event does not derive the requested AID',
-		});
+
+	if (validated.transferable) {
+		// The AID is the event's self-addressing digest, recorded in `i`.
+		if ((ie.i as string) !== (said as string)) {
+			return fail({
+				code: 'INVALID_DID',
+				message: 'inception `i` is not its own self-addressing digest',
+			});
+		}
+		if ((said as string) !== (aid as string)) {
+			return fail({
+				code: 'INVALID_DID',
+				message: 'inception event does not derive the requested AID',
+			});
+		}
+	} else {
+		// The AID is a basic prefix: the controller's own signing key, so it
+		// must equal both `i` and the single entry of `k`.
+		if ((ie.i as string) !== (ie.k[0] as string)) {
+			return fail({
+				code: 'INVALID_DID',
+				message: 'non-transferable `i` is not the controller signing key',
+			});
+		}
+		if ((ie.i as string) !== (aid as string)) {
+			return fail({
+				code: 'INVALID_DID',
+				message: 'inception event does not derive the requested AID',
+			});
+		}
 	}
 
 	// Inception is sequence 0 by definition; the shape pass already confirmed
@@ -235,24 +277,31 @@ function applyInception(
 		return fail({ code: 'INVALID_SIGNATURE' });
 	}
 
-	return {
-		ok: true,
-		state: {
-			aid,
-			did: formatDidKeri(aid),
-			sequenceNumber: 0,
-			lastEventDigest: said,
-			currentPublicKey: ie.k[0],
-			nextKeyCommitment: ie.n[0],
-			transferable: true,
-			eventType: 'icp',
-		},
+	const base = {
+		aid,
+		did: formatDidKeri(aid),
+		sequenceNumber: 0,
+		lastEventDigest: said,
+		currentPublicKey: ie.k[0],
+		eventType: 'icp' as const,
 	};
+	if (validated.transferable) {
+		return {
+			ok: true,
+			state: {
+				...base,
+				nextKeyCommitment: validated.event.n[0],
+				transferable: true,
+			},
+		};
+	}
+	// A non-transferable identifier carries no next-key commitment.
+	return { ok: true, state: { ...base, transferable: false } };
 }
 
 /** Verify a rotation event against `state` and produce the rotated state. */
 function applyRotation(
-	state: KeriState,
+	state: TransferableKeriState,
 	event: Record<string, unknown>,
 	signature: CesrIndexedSignature
 ): StepResult {
@@ -361,7 +410,7 @@ function applyRotation(
 
 /** Verify an interaction event against `state`; key material is unchanged. */
 function applyInteraction(
-	state: KeriState,
+	state: TransferableKeriState,
 	event: Record<string, unknown>,
 	signature: CesrIndexedSignature
 ): StepResult {

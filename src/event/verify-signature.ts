@@ -5,7 +5,10 @@
  * just answers "did this exact key sign this exact event".
  */
 
-import { decodeIndexedSignatureEd25519, decodePublicKeyEd25519 } from '../cesr/decode';
+import {
+	decodeIndexedSignatureEd25519,
+	decodeVerificationKeyEd25519,
+} from '../cesr/decode';
 import { CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
 import { verify } from '../crypto/ed25519';
 import { publicKeyFromRaw } from '../crypto/keypair';
@@ -38,7 +41,9 @@ export function verifyEventSignature(
 	if (typeof signature !== 'string') {
 		throw new MalformedInputError('signature must be a CESR-qualified string');
 	}
-	const pkRaw = decodePublicKeyEd25519(publicKey);
+	// `publicKey` may be a transferable (`D`) or non-transferable (`B`) key —
+	// the latter is the signing key of a non-transferable inception event.
+	const pkRaw = decodeVerificationKeyEd25519(publicKey);
 	const sigRaw = decodeIndexedSignatureEd25519(signature).raw;
 	const wrappedKey = publicKeyFromRaw(pkRaw);
 	return verify(wrappedKey, serializeEvent(event), sigRaw);

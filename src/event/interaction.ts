@@ -11,7 +11,7 @@
 import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import { KeriKeyPair, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
-import { KeriState } from '../kel/state';
+import { KeriState, TransferableKeriState } from '../kel/state';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
 import { computeEventSaid, saidPlaceholder } from './digest';
@@ -41,7 +41,8 @@ export interface CreateInteractionInput {
 export interface CreateInteractionResult {
 	/** The signed interaction event, as a CESR stream frame (the wire form). */
 	readonly event: string;
-	readonly state: KeriState;
+	/** Replay-derived state after the interaction — always transferable. */
+	readonly state: TransferableKeriState;
 }
 
 export function createInteractionEvent(
@@ -49,6 +50,15 @@ export function createInteractionEvent(
 ): CreateInteractionResult {
 	assertPublicKey(input.currentKeyPair.publicKey);
 	assertPrivateKey(input.currentKeyPair.privateKey);
+
+	// A non-transferable identifier's KEL ends at inception: it cannot anchor
+	// interaction events. (node-keri never mints one, but a verified state for
+	// a non-transferable AID can still reach this constructor.)
+	if (input.state.transferable === false) {
+		throw new InvalidArgumentError(
+			'a non-transferable identifier cannot anchor interaction events'
+		);
+	}
 
 	const currentQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
 	if (currentQb64 !== input.state.currentPublicKey) {
@@ -108,7 +118,7 @@ export function createInteractionEvent(
 
 	const frame = encodeEventFrame(signEvent(event, input.currentKeyPair.privateKey));
 
-	const newState: KeriState = {
+	const newState: TransferableKeriState = {
 		aid: input.state.aid,
 		did: input.state.did,
 		sequenceNumber: nextSeq,

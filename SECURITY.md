@@ -12,7 +12,7 @@ A `KeriState` is trusted **only** when it was produced by `verifyKel`, by `resol
 
 The verifier enforces all of the following. Each is exercised by the `tamper` and `negative` test suites.
 
-1. **No out-of-profile event is accepted.** Any excluded feature (multisig, witnesses, configuration traits, unknown fields) fails closed with `UNSUPPORTED_FEATURE`. See [PROFILE.md](./PROFILE.md).
+1. **No out-of-profile event is accepted.** Any excluded feature (multisig, witnesses, configuration traits, unknown fields) fails closed with `UNSUPPORTED_FEATURE`. A non-transferable identifier's KEL ends at its inception event — it commits to no next key — so any rotation or interaction appended to it fails closed with `NON_TRANSFERABLE_NOT_EXTENSIBLE`. See [PROFILE.md](./PROFILE.md).
 2. **No unknown cryptographic derivation code is accepted.** CESR primitives outside the supported table are rejected with `INVALID_CESR_CODE`.
 3. **No event digest is trusted without recomputation.** The self-addressing digest is recomputed from the canonical event and compared.
 4. **No signature is trusted without verification** against the key the replay-derived state says is authoritative at that point in the log.

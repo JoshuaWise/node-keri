@@ -11,7 +11,7 @@
 
 import { KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
 import { createInteractionEvent } from '../event/interaction';
-import { KeriState } from '../kel/state';
+import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
 export interface InteractIdentifierInput {
@@ -35,7 +35,7 @@ export interface InteractIdentifierResult {
 	/** The signed interaction event, as a CESR stream frame (the wire form). */
 	readonly interactionEvent: string;
 	/** Replay-equivalent state after applying the interaction. */
-	readonly state: KeriState;
+	readonly state: TransferableKeriState;
 }
 
 /** Anchor data to an identifier with an interaction event. */

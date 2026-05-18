@@ -12,7 +12,7 @@
 import { bytesEqual } from '../bytes/compare';
 import { KeriKeyPair, KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
 import { createRotationEvent } from '../event/rotation';
-import { KeriState } from '../kel/state';
+import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
 export interface RotateIdentifierInput {
@@ -37,7 +37,7 @@ export interface RotateIdentifierResult {
 	/** The signed rotation event, as a CESR stream frame (the wire form). */
 	readonly rotationEvent: string;
 	/** Replay-equivalent state after applying the rotation. */
-	readonly state: KeriState;
+	readonly state: TransferableKeriState;
 }
 
 /** Rotate an identifier's signing key, revealing the pre-rotated key. */
