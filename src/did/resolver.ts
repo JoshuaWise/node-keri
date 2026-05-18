@@ -44,6 +44,12 @@ export interface DidResolutionMetadata {
 	readonly state: KeriState;
 	/** Number of events in the verified KEL. */
 	readonly eventCount: number;
+	/**
+	 * `true` when the identifier has been deactivated — its KEL ends in a
+	 * deactivation event. Resolution still succeeds (the KEL is valid), but the
+	 * `didDocument` is authority-free and the DID must be treated as abandoned.
+	 */
+	readonly deactivated: boolean;
 }
 
 /** Discriminated result of resolving a `did:keri` DID. */
@@ -110,6 +116,7 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	const metadata: DidResolutionMetadata = {
 		state: verification.state,
 		eventCount: parseKel(input.kel).length,
+		deactivated: verification.state.deactivated === true,
 	};
 	return { ok: true, didDocument, metadata };
 }
@@ -133,5 +140,9 @@ function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult 
 		transferable: false,
 	};
 	const didDocument = createDidDocument({ did: parsed.did, state });
-	return { ok: true, didDocument, metadata: { state, eventCount: 0 } };
+	return {
+		ok: true,
+		didDocument,
+		metadata: { state, eventCount: 0, deactivated: false },
+	};
 }

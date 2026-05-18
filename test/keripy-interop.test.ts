@@ -29,11 +29,19 @@
  * key, with a single-event KEL and no rotation — is ingested and verified by
  * node-keri. That direction is one-way by design, so there is no byte-exact
  * test for it.
+ *
+ * Deactivated AIDs: deactivation — a rotation to no next key — is generated
+ * and verified by both implementations, so the last suite exercises it in
+ * both directions, including a byte-exact check. Crucially it also proves the
+ * abandonment is terminal *each way*: an event appended after the deactivation
+ * is rejected by node-keri (`DEACTIVATED_NOT_EXTENSIBLE`) and refused by
+ * keripy (its `Kever` reports the prefix abandoned and the KEL does not grow).
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { interactIdentifier } from '../src/api/interact-identifier';
+import { deactivateIdentifier } from '../src/api/deactivate-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
 import { resolveDid } from '../src/did/resolver';
@@ -42,15 +50,20 @@ import { sign } from '../src/crypto/ed25519';
 import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid, DidKeri } from '../src/did/did-keri';
+import { createInteractionEvent } from '../src/event/interaction';
+import { deriveNextKeyCommitment } from '../src/event/digest';
 import { encodeEventFrame, parseKel } from '../src/event/stream';
 import { utf8Encode } from '../src/bytes/utf8';
 import type { CesrSignature } from '../src/cesr/qualified';
+import type { TransferableKeriState } from '../src/kel/state';
 import {
 	keripyAvailable,
 	keripyUnavailableReason,
 	keripyGenKel,
 	keripyGenNonTransferableKel,
+	keripyGenDeactivatedKel,
 	keripyVerifyKel,
+	keripyVerifyExtension,
 	keripySign,
 	keripyVerifySig,
 } from './interop/bridge';
@@ -416,5 +429,177 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 			expect(result.metadata.eventCount).toBe(1);
 			expect(result.didDocument.id).toBe(generated.did);
 		}
+	});
+});
+
+/**
+ * Deactivation seeds: the inception key and the pre-rotated key the
+ * deactivation event reveals. Two is all a deactivated KEL needs — inception
+ * plus the deactivation rotation.
+ */
+const DEACT_SEEDS = [0, 32];
+
+/**
+ * Build the shared deactivated KEL with node-keri: an inception followed by a
+ * deactivation event (a rotation to no next key). keripy's `gen-deactivated-kel`
+ * builds the structurally identical — and byte-identical — log from the same
+ * seeds.
+ */
+function buildNodeKeriDeactivatedKel() {
+	const [k0, k1] = DEACT_SEEDS.map(seedKeyPair);
+	const id = createIdentifier({ currentKeyPair: k0!, nextKeyPair: k1! });
+	const deact = deactivateIdentifier({
+		state: id.state,
+		currentPrivateKey: k1!.privateKey,
+	});
+	return {
+		did: id.did,
+		aid: id.aid,
+		kel: id.inceptionEvent + deact.deactivationEvent,
+		state: deact.state,
+	};
+}
+
+/**
+ * Forge a well-formed, correctly-signed interaction event chained onto the
+ * last event of `kel`. `createInteractionEvent` is fed a state that *looks*
+ * transferable so it produces a genuine frame — a hostile relay could do
+ * exactly this. Replaying it (under node-keri or keripy) must still reject it
+ * when the KEL it extends ends in a deactivation.
+ *
+ * `signerKeyPair` must be the key the deactivation event revealed — that is
+ * the deactivated identifier's current key, so the forged event is signed by
+ * the key a naive verifier would otherwise accept.
+ */
+function forgePostDeactivationEvent(
+	kel: string,
+	aid: Aid,
+	did: DidKeri,
+	signerKeyPair: ReturnType<typeof seedKeyPair>
+): string {
+	const events = parseKel(kel);
+	const last = events[events.length - 1]!.event;
+	const pretendState: TransferableKeriState = {
+		aid,
+		did,
+		sequenceNumber: Number.parseInt(last.s, 16),
+		lastEventDigest: last.d,
+		currentPublicKey: encodePublicKeyEd25519(signerKeyPair.publicKey.raw),
+		// Any commitment will do — the event never gets far enough to be
+		// checked against it; replay rejects it for extending a closed KEL.
+		nextKeyCommitment: deriveNextKeyCommitment(seedKeyPair(64).publicKey),
+		transferable: true,
+		eventType: 'rot',
+	};
+	return createInteractionEvent({
+		state: pretendState,
+		currentKeyPair: signerKeyPair,
+		data: [],
+	}).event;
+}
+
+/**
+ * Deactivation — a rotation to zero next keys — is generated and verified by
+ * both implementations. These tests cross it both ways, byte-exact, and prove
+ * the abandonment is terminal on each side: no event survives being appended
+ * to a deactivated KEL.
+ */
+describeInterop('keripy interop: deactivated AIDs', () => {
+	test('a deactivated KEL minted by node-keri is accepted by keripy', () => {
+		const { aid, kel, state } = buildNodeKeriDeactivatedKel();
+
+		const result = keripyVerifyKel(aid, kel);
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			// keripy replayed inception + deactivation and stopped at sn 1.
+			expect(result.sn).toBe(1);
+			expect(result.said).toBe(state.lastEventDigest);
+			// The deactivation revealed seed 32; keripy committed it as the
+			// (now final) current key.
+			expect(result.currentKeys).toEqual([state.currentPublicKey]);
+		}
+	});
+
+	test('a deactivated KEL minted by keripy is verified by node-keri', () => {
+		const generated = keripyGenDeactivatedKel(DEACT_SEEDS);
+
+		const parsed = parseDidKeri(generated.did);
+		expect(parsed.aid).toBe(generated.aid);
+
+		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.state.deactivated).toBe(true);
+			expect(result.state.transferable).toBe(false);
+			expect(result.state.eventType).toBe('rot');
+			expect(result.state.sequenceNumber).toBe(1);
+			expect(result.state.aid).toBe(generated.aid);
+		}
+	});
+
+	test('node-keri and keripy produce byte-identical deactivated KEL streams', () => {
+		// As with the icp/rot/ixn/rot KEL: from the same seeds the two
+		// implementations independently emit the same CESR stream, the
+		// deactivation event and its indexed signature included.
+		const { kel } = buildNodeKeriDeactivatedKel();
+		const generated = keripyGenDeactivatedKel(DEACT_SEEDS);
+
+		expect(kel).toEqual(generated.kel);
+	});
+
+	test('node-keri rejects an event appended to a keripy deactivated KEL', () => {
+		const generated = keripyGenDeactivatedKel(DEACT_SEEDS);
+		// Seed 32 is the key keripy's deactivation event revealed.
+		const extension = forgePostDeactivationEvent(
+			generated.kel,
+			generated.aid as unknown as Aid,
+			generated.did as DidKeri,
+			seedKeyPair(32)
+		);
+
+		const result = verifyKel({
+			aid: generated.aid as unknown as Aid,
+			kel: generated.kel + extension,
+		});
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('DEACTIVATED_NOT_EXTENSIBLE');
+		}
+	});
+
+	test('keripy rejects an event appended to a node-keri deactivated KEL', () => {
+		const { aid, did, kel } = buildNodeKeriDeactivatedKel();
+		// Seed 32 is the key node-keri's deactivation event revealed.
+		const extension = forgePostDeactivationEvent(kel, aid, did, seedKeyPair(32));
+
+		const result = keripyVerifyExtension(aid, kel, extension);
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			// keripy committed inception + deactivation (sn 0, 1) and refused
+			// to advance past the deactivation — the KEL did not grow.
+			expect(result.rejected).toBe(true);
+			expect(result.snBefore).toBe(1);
+			expect(result.snAfter).toBe(1);
+		}
+	});
+
+	test('node-keri will not verify a signature for a keripy-deactivated DID', () => {
+		const generated = keripyGenDeactivatedKel(DEACT_SEEDS);
+		const payload = utf8Encode('message from a deactivated identity — interop');
+
+		// keripy signs with seed 32 — the key the deactivation event revealed,
+		// the last key the identifier ever had. It must still not verify: the
+		// DID is abandoned, so node-keri trusts no key for it.
+		const signed = keripySign(32, payload);
+		const ok = verifySignatureWithDid({
+			did: generated.did as DidKeri,
+			kel: generated.kel,
+			payload,
+			signature: signed.signature as CesrSignature,
+		});
+		expect(ok).toBe(false);
 	});
 });

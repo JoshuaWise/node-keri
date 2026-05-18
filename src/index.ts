@@ -103,6 +103,7 @@ export type {
 	InceptionEvent,
 	NonTransferableInceptionEvent,
 	RotationEvent,
+	DeactivationEvent,
 	InteractionEvent,
 	KeriEvent,
 	SignedKeriEvent,
@@ -112,6 +113,7 @@ export type {
 	KeriState,
 	TransferableKeriState,
 	NonTransferableKeriState,
+	DeactivatedKeriState,
 } from './kel/state';
 
 export {
@@ -132,6 +134,12 @@ export type { CreateInceptionInput, CreateInceptionResult } from './event/incept
 export { createRotationEvent } from './event/rotation';
 export type { CreateRotationInput, CreateRotationResult } from './event/rotation';
 
+export { createDeactivationEvent } from './event/deactivation';
+export type {
+	CreateDeactivationInput,
+	CreateDeactivationResult,
+} from './event/deactivation';
+
 export { createInteractionEvent } from './event/interaction';
 export type {
 	CreateInteractionInput,
@@ -149,6 +157,12 @@ export type {
 	RotateIdentifierInput,
 	RotateIdentifierResult,
 } from './api/rotate-identifier';
+
+export { deactivateIdentifier } from './api/deactivate-identifier';
+export type {
+	DeactivateIdentifierInput,
+	DeactivateIdentifierResult,
+} from './api/deactivate-identifier';
 
 export { interactIdentifier } from './api/interact-identifier';
 export type {

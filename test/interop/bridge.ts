@@ -149,6 +149,11 @@ export type VerifyKelResult =
 	| { ok: true; aid: string; sn: number; said: string; currentKeys: string[] }
 	| { ok: false; error: string };
 
+/** Response of the `verify-extension` bridge command. */
+export type VerifyExtensionResult =
+	| { ok: true; snBefore: number; snAfter: number; rejected: boolean }
+	| { ok: false; error: string };
+
 /** Response of the `sign` bridge command. */
 export interface SignResult {
 	ok: true;
@@ -211,9 +216,34 @@ export function keripyGenNonTransferableKel(seed: number): GenKelResult {
 	return runBridge<GenKelResult>('gen-nt-kel', { seed });
 }
 
+/**
+ * Generate a KEL ending in a *deactivation* event with keripy, returning it as
+ * a CESR stream. The KEL is `[icp, deactivation]` derived from the two seeds.
+ */
+export function keripyGenDeactivatedKel(seeds: number[]): GenKelResult {
+	return runBridge<GenKelResult>('gen-deactivated-kel', { seeds });
+}
+
 /** Replay a node-keri CESR-stream KEL through keripy's verifier. */
 export function keripyVerifyKel(aid: string, kel: string): VerifyKelResult {
 	return runBridge<VerifyKelResult>('verify-kel', { aid, kel });
+}
+
+/**
+ * Replay `kel` through keripy, then feed it `extension` and report whether
+ * keripy refused to extend the KEL — the expected outcome when `kel` ends in
+ * a deactivation event.
+ */
+export function keripyVerifyExtension(
+	aid: string,
+	kel: string,
+	extension: string
+): VerifyExtensionResult {
+	return runBridge<VerifyExtensionResult>('verify-extension', {
+		aid,
+		kel,
+		extension,
+	});
 }
 
 /** Sign a payload with keripy's deterministic Ed25519 signer. */

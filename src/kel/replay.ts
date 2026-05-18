@@ -97,12 +97,15 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 		} else {
 			// `state` is always defined here: index 0 either set it or returned.
 			const prior = state as KeriState;
-			// A non-transferable identifier's KEL ends at inception: it commits
-			// to no next key, so it can neither rotate nor anchor interactions.
-			// Any further event is rejected before its shape is even examined.
+			// A non-transferable identifier's KEL ends at inception, and a
+			// deactivated one ends at its deactivation event: neither commits
+			// to a next key, so neither can rotate or anchor interactions. Any
+			// further event is rejected before its shape is even examined.
 			if (!prior.transferable) {
 				return fail({
-					code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE',
+					code: prior.deactivated
+						? 'DEACTIVATED_NOT_EXTENSIBLE'
+						: 'NON_TRANSFERABLE_NOT_EXTENSIBLE',
 					eventType: typeof t === 'string' ? t : describe(t),
 				});
 			}
@@ -299,7 +302,12 @@ function applyInception(
 	return { ok: true, state: { ...base, transferable: false } };
 }
 
-/** Verify a rotation event against `state` and produce the rotated state. */
+/**
+ * Verify a `rot` event against `state` and produce the next state — an
+ * ordinary rotation yields a rotated `TransferableKeriState`, while a
+ * deactivation (empty `nt`/`n`) yields a terminal `DeactivatedKeriState` that
+ * the replay loop will refuse to extend.
+ */
 function applyRotation(
 	state: TransferableKeriState,
 	event: Record<string, unknown>,
@@ -307,7 +315,8 @@ function applyRotation(
 ): StepResult {
 	const shape = validateRotationShape(event);
 	if (!shape.ok) return shape;
-	const re = shape.value;
+	const validated = shape.value;
+	const re = validated.event;
 
 	let said: CesrDigest;
 	let versionString: string;
@@ -389,8 +398,27 @@ function applyRotation(
 	}
 
 	// A rotation is authorized by the key it reveals, not the outgoing key.
+	// This holds for a deactivation too: it still reveals the pre-rotated key.
 	if (!verifyEventSignature(re, re.k[0], signature)) {
 		return fail({ code: 'INVALID_SIGNATURE' });
+	}
+
+	if (validated.deactivation) {
+		// A deactivation commits to no next key: the identifier is abandoned
+		// and the KEL ends here. The state carries no `nextKeyCommitment`.
+		return {
+			ok: true,
+			state: {
+				aid: state.aid,
+				did: state.did,
+				sequenceNumber: seq,
+				lastEventDigest: said,
+				currentPublicKey: re.k[0],
+				transferable: false,
+				deactivated: true,
+				eventType: 'rot',
+			},
+		};
 	}
 
 	return {
@@ -401,7 +429,7 @@ function applyRotation(
 			sequenceNumber: seq,
 			lastEventDigest: said,
 			currentPublicKey: re.k[0],
-			nextKeyCommitment: re.n[0],
+			nextKeyCommitment: validated.event.n[0],
 			transferable: true,
 			eventType: 'rot',
 		},

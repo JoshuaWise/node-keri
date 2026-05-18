@@ -51,12 +51,13 @@ export function createInteractionEvent(
 	assertPublicKey(input.currentKeyPair.publicKey);
 	assertPrivateKey(input.currentKeyPair.privateKey);
 
-	// A non-transferable identifier's KEL ends at inception: it cannot anchor
-	// interaction events. (node-keri never mints one, but a verified state for
-	// a non-transferable AID can still reach this constructor.)
+	// An identifier whose KEL has ended cannot anchor interaction events —
+	// whether it ended at a non-transferable inception or at a deactivation.
 	if (input.state.transferable === false) {
 		throw new InvalidArgumentError(
-			'a non-transferable identifier cannot anchor interaction events'
+			input.state.deactivated
+				? 'a deactivated identifier cannot anchor interaction events'
+				: 'a non-transferable identifier cannot anchor interaction events'
 		);
 	}
 

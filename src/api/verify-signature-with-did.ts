@@ -18,10 +18,10 @@
  *
  * It returns `false` — never throws — for every *data-level* failure: a
  * malformed DID, a non-verifying KEL, a KEL belonging to a different
- * identifier, an empty KEL for a transferable DID, a malformed signature, or a
- * genuine signature mismatch. All of those are untrusted-input outcomes a
- * caller routinely sees. Throwing is reserved for a caller that violates the
- * argument contract outright.
+ * identifier, a KEL for a deactivated (abandoned) identifier, an empty KEL for
+ * a transferable DID, a malformed signature, or a genuine signature mismatch.
+ * All of those are untrusted-input outcomes a caller routinely sees. Throwing
+ * is reserved for a caller that violates the argument contract outright.
  */
 
 import {
@@ -121,6 +121,10 @@ export function verifySignatureWithDid(input: VerifySignatureWithDidInput): bool
 		// construction and decoding it cannot fail.
 		const verification = verifyKel({ aid: parsed.aid, kel: input.kel });
 		if (!verification.ok) return false;
+		// A deactivated identifier has been abandoned: it makes no key
+		// authoritative, so nothing verifies against it — even a signature its
+		// last key produced before deactivation is no longer trusted.
+		if (verification.state.deactivated) return false;
 		publicKeyRaw = decodeVerificationKeyEd25519(verification.state.currentPublicKey);
 	}
 

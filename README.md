@@ -1,6 +1,6 @@
 # keri
 
-A pure, synchronous, Node.js library for the **[KERI](https://keri.one/) identity lifecycle**. Create, rotate, and verify `did:keri` identifiers using cryptographically verifiable append-only key event logs (KEL).
+A pure, synchronous, Node.js library for the **[KERI](https://keri.one/) identity lifecycle**. Create, rotate, deactivate, and verify `did:keri` identifiers using cryptographically verifiable append-only key event logs (KEL).
 
 Basically, KERI let's you create unique [DIDs](https://www.w3.org/TR/did-1.0/) (decentralized identifiers) which are cryptographically bound to a private key. You can rotate your keys without changing your DID, and other people can verify that the new keys are in-fact owned by the same DID owner as the previous keys. All of this is possible without any centralized service or shared blockchain. Even if your current keys are stolen or their crypto algorithm is cracked, you can rotate your keys to regain control of your identity.
 
@@ -193,6 +193,21 @@ function interactIdentifier(input: {
 
 Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256).
 
+#### `deactivateIdentifier`
+
+```ts
+function deactivateIdentifier(input: {
+	state: KeriState;
+	currentPrivateKey: KeriPrivateKey;
+	digestCode?: string;
+}): {
+	deactivationEvent: string;
+	state: DeactivatedKeriState;
+};
+```
+
+Permanently abandon an identifier. Per the `did:keri` method, deactivation is a rotation to zero forward (next) controlling keys: the event is a `rot` with `nt: "0"` and an empty `n`. `currentPrivateKey` is the pre-rotation key being revealed — exactly as for `rotateIdentifier`, its public half must reproduce the prior next-key commitment. Because the event commits to no next key, it is the **final** event of the KEL: `verifyKel` rejects anything appended after it with `DEACTIVATED_NOT_EXTENSIBLE`, and `verifySignatureWithDid` no longer trusts the DID. The returned `state` has `deactivated === true` and `transferable === false`. **This step is irreversible.**
+
 #### `verifyKel`
 
 ```ts
@@ -205,6 +220,8 @@ function verifyKel(input: {
 Replay a key event log — a CESR stream — from inception and reconstruct the latest authoritative state. The stream is first parsed into its events (a framing defect is reported as `MALFORMED_STREAM`); then every event's structure, self-addressing digest, version string, sequence number, previous-event link, rotation commitment, and signature is recomputed and checked, and the inception event must derive exactly `aid`. **The returned `state` is the only `KeriState` a caller may treat as verified.** Never throws for a malformed or hostile KEL — that is returned as `{ ok: false }`.
 
 `verifyKel` accepts both transferable and non-transferable AIDs. A non-transferable AID — a basic prefix that is the controller's `B`-coded Ed25519 key — has a single-event KEL and cannot rotate; an event appended after its inception is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`. `state.transferable` discriminates the two, and `state.nextKeyCommitment` is present only when it is `true`. node-keri verifies non-transferable AIDs but does not generate them.
+
+A KEL that ends in a deactivation event (see `deactivateIdentifier`) verifies normally, and its `state` has `deactivated === true` and `transferable === false`; any event appended after the deactivation is rejected with `DEACTIVATED_NOT_EXTENSIBLE`.
 
 #### `verifySignatureWithDid`
 
@@ -222,7 +239,7 @@ The message verification primitive. Establishes the key `did` makes authoritativ
 - With a **non-empty `kel`** (a CESR stream), the key is whatever replaying that KEL yields — it must verify and belong to the DID's AID. A transferable DID can be verified only this way.
 - With an **empty `kel`**, the DID must be a **non-transferable** AID: a `B`-coded basic prefix is self-certifying, so the key is read straight from the AID. (A non-transferable identifier may have no KEL at all.)
 
-Returns `false` for every data-level failure: a malformed DID, an empty or non-verifying KEL for a transferable DID, a KEL for a different identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads.
+Returns `false` for every data-level failure: a malformed DID, an empty or non-verifying KEL for a transferable DID, a KEL for a different identifier, a KEL for a deactivated identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads.
 
 ### DID surface
 
@@ -238,7 +255,7 @@ function resolveDid(input: {
 	| { ok: false; error: KeriVerificationError };
 ```
 
-Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `metadata` carries the verified `state` and `eventCount`, plus the KEL itself when `options.includeKel` is set. Any data-level failure is returned as `{ ok: false }`.
+Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `metadata` carries the verified `state`, `eventCount`, and `deactivated` flag, plus the KEL itself when `options.includeKel` is set. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still resolves with `ok: true` — its `didDocument` is authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`) and `metadata.deactivated` is `true`.
 
 A non-transferable DID resolves with the **empty string** `''` for `kel`: it is self-certifying, so the document is projected straight from the prefix. (`eventCount` is then 0, and `metadata.kel` is absent even under `includeKel` — there is no KEL to echo.) A non-transferable DID may also be resolved from its trivial single-event KEL by passing that stream.
 
@@ -366,6 +383,7 @@ type KeriVerificationError =
 	| { code: 'UNSUPPORTED_FEATURE'; feature: string }
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
 	| { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
+	| { code: 'DEACTIVATED_NOT_EXTENSIBLE'; eventType: string }
 	| { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
 	| { code: 'INVALID_PREVIOUS_DIGEST' }
 	| { code: 'INVALID_EVENT_DIGEST' }
@@ -386,8 +404,8 @@ Alongside the functions above, the package exports the full type surface:
 - **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrIndexedSignature`, `CesrDigest` (compile-time branded strings).
 - **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
-- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `NonTransferableInceptionEvent`, `RotationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
-- **State** — `KeriState`, the replay-derived, trusted summary of an identifier — a discriminated union of `TransferableKeriState` and `NonTransferableKeriState` on the `transferable` field.
+- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `NonTransferableInceptionEvent`, `RotationEvent`, `DeactivationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
+- **State** — `KeriState`, the replay-derived, trusted summary of an identifier — a discriminated union of `TransferableKeriState`, `NonTransferableKeriState`, and `DeactivatedKeriState` on the `transferable` field (the two `transferable: false` members are told apart by `deactivated`).
 - **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`, `DidResolutionMetadata`.
 - **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyKelResult`, and so on).
 - **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `DEFAULT_DIGEST_CODE`, `DIGEST_CODES`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.

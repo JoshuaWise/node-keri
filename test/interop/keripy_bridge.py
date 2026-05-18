@@ -6,15 +6,23 @@ JSON request body is read from stdin, and a JSON response is written to stdout.
 
 It uses the reference KERI implementation (keripy, the `keri` PyPI package) to:
 
-  * `gen-kel`    - build a KEL (icp, rot, ixn, rot) with keripy and emit it as
-                   a CESR stream (the wire form node-keri's `verifyKel` reads).
-  * `gen-nt-kel` - build a single-event KEL for a *non-transferable* AID with
-                   keripy and emit it as a CESR stream. node-keri verifies
-                   these (it does not generate them).
-  * `verify-kel` - replay a node-keri-produced CESR stream through keripy's
-                   `Kevery` and report whether keripy's verifier accepts it.
-  * `sign`       - sign a payload with keripy's Ed25519 signer.
-  * `verify-sig` - verify a detached Ed25519 signature with keripy.
+  * `gen-kel`              - build a KEL (icp, rot, ixn, rot) with keripy and
+                             emit it as a CESR stream (the wire form
+                             node-keri's `verifyKel` reads).
+  * `gen-nt-kel`           - build a single-event KEL for a *non-transferable*
+                             AID with keripy and emit it as a CESR stream.
+                             node-keri verifies these (it does not generate
+                             them).
+  * `gen-deactivated-kel`  - build a KEL ending in a *deactivation* event (a
+                             rotation to no next key) with keripy.
+  * `verify-kel`           - replay a node-keri-produced CESR stream through
+                             keripy's `Kevery` and report whether keripy's
+                             verifier accepts it.
+  * `verify-extension`     - replay a KEL, then confirm keripy refuses a
+                             trailing event — used to prove a deactivated
+                             identifier's KEL cannot be extended.
+  * `sign`                 - sign a payload with keripy's Ed25519 signer.
+  * `verify-sig`           - verify a detached Ed25519 signature with keripy.
 
 Profile alignment notes
 -----------------------
@@ -206,6 +214,53 @@ def _cmd_gen_nt_kel(req):
     }
 
 
+def _cmd_gen_deactivated_kel(req):
+    """Build a KEL ending in a deactivation event, entirely with keripy.
+
+    Request : {"seeds": [s0, s1], optional, default [0, 32]}
+    Response: {"aid", "did", "kel": "<CESR stream>"}
+
+    The KEL is two events: an inception, then a *deactivation* — a rotation
+    that reveals the pre-rotated key s1 (so it is authorized exactly like an
+    ordinary rotation) but commits to NO next key (`nt="0"`, empty `n`). That
+    terminates the identifier: keripy's own `Kever` then has empty `ndigers`,
+    so `.transferable` is false and any further event is refused.
+
+    As elsewhere the event SAID is pinned to SHA2-256, so node-keri can
+    recompute it; from the same two seeds node-keri's `deactivateIdentifier`
+    produces a byte-identical stream.
+    """
+    seeds = req.get("seeds", [0, 32])
+    if len(seeds) != 2:
+        raise ValueError("gen-deactivated-kel requires exactly 2 seeds")
+    s0, s1 = (_signer(s) for s in seeds)
+
+    # Inception: keys=[s0], pre-rotation commitment to s1. d == i (SHA2-256).
+    icp = dict(v=_vs(), t=Ilks.icp, d="", i="", s="0", kt="1",
+               k=[s0.verfer.qb64], nt="1", n=[_ndig(s1)],
+               bt="0", b=[], c=[], a=[])
+    icp_s = _said_keri(icp, also_pre=True)
+    pre = icp_s.pre
+
+    # Deactivation: reveal s1, but commit to no next key (nt="0", n=[]).
+    # Signed by the revealed key s1, exactly like an ordinary rotation.
+    dea = dict(v=_vs(), t=Ilks.rot, d="", i=pre, s="1", p=icp_s.said, kt="1",
+               k=[s1.verfer.qb64], nt="0", n=[],
+               bt="0", br=[], ba=[], a=[])
+    dea_s = _said_keri(dea)
+
+    def frame(serder, signer):
+        siger = signer.sign(ser=serder.raw, index=0)
+        return eventing.messagize(serder, sigers=[siger])
+
+    stream = b"".join([frame(icp_s, s0), frame(dea_s, s1)])
+    return {
+        "aid": pre,
+        "did": f"did:keri:{pre}",
+        "kel": bytes(stream).decode("utf-8"),
+    }
+
+
 def _cmd_verify_kel(req):
     """Replay a node-keri CESR-stream KEL through keripy's `Kevery` verifier.
 
@@ -242,6 +297,53 @@ def _cmd_verify_kel(req):
         db.close(clear=True)
 
 
+def _cmd_verify_extension(req):
+    """Replay a KEL through keripy, then check it refuses a trailing event.
+
+    Request : {"aid", "kel": "<valid CESR stream>", "extension": "<one frame>"}
+    Response: {"ok": true, "snBefore", "snAfter", "rejected"} — `rejected` is
+              true when keripy did NOT advance the KEL past `extension`.
+
+    This proves abandonment is terminal in the keripy direction: once a KEL
+    ends in a deactivation event, keripy's `Kever` reports the prefix as
+    non-transferable/abandoned and discards any further event, so the committed
+    sequence number does not move.
+    """
+    aid = req["aid"]
+    kel = req["kel"]
+    extension = req["extension"]
+
+    db = basing.Baser(name="interop", temp=True, reopen=True)
+    try:
+        kvy = Kevery(db=db, lax=False, local=True)
+        parsing.Parser(kvy=kvy).parse(ims=bytearray(kel.encode("utf-8")))
+        kever = kvy.kevers.get(aid)
+        if kever is None:
+            return {"ok": False,
+                    "error": f"keripy did not accept the base KEL for {aid}"}
+        sn_before = kever.sn
+
+        # Feed the trailing event. keripy must refuse to apply it to an
+        # abandoned identifier; whether that surfaces as a discarded message
+        # or a raised error, the committed KEL is left unchanged. Swallow any
+        # exception and read the sequence number back to see what stuck.
+        try:
+            parsing.Parser(kvy=kvy).parse(
+                ims=bytearray(extension.encode("utf-8")))
+        except Exception:
+            pass
+        sn_after = kvy.kevers[aid].sn
+
+        return {
+            "ok": True,
+            "snBefore": sn_before,
+            "snAfter": sn_after,
+            "rejected": sn_after == sn_before,
+        }
+    finally:
+        db.close(clear=True)
+
+
 def _cmd_sign(req):
     """Sign a payload with keripy's deterministic Ed25519 signer.
 
@@ -269,7 +371,9 @@ def _cmd_verify_sig(req):
 _COMMANDS = {
     "gen-kel": _cmd_gen_kel,
     "gen-nt-kel": _cmd_gen_nt_kel,
+    "gen-deactivated-kel": _cmd_gen_deactivated_kel,
     "verify-kel": _cmd_verify_kel,
+    "verify-extension": _cmd_verify_extension,
     "sign": _cmd_sign,
     "verify-sig": _cmd_verify_sig,
 }

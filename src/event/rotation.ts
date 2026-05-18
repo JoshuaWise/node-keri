@@ -53,12 +53,14 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	assertPrivateKey(input.newCurrentKeyPair.privateKey);
 	assertPublicKey(input.nextPublicKey);
 
-	// A non-transferable identifier committed to no next key at inception, so
-	// it cannot be rotated. (node-keri never mints one, but a verified state
-	// for a non-transferable AID can still reach this constructor.)
+	// An identifier that committed to no next key cannot be rotated — whether
+	// it never had one (a non-transferable AID) or gave it up (a deactivated
+	// one). To deactivate a live identifier, use `createDeactivationEvent`.
 	if (input.state.transferable === false) {
 		throw new InvalidArgumentError(
-			'a non-transferable identifier cannot be rotated'
+			input.state.deactivated
+				? 'a deactivated identifier cannot be rotated'
+				: 'a non-transferable identifier cannot be rotated'
 		);
 	}
 

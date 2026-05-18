@@ -22,6 +22,7 @@ node-keri **generates only transferable AIDs** — self-certifying identifiers t
 | Inception (`icp`) events                 | Yes    |
 | Rotation (`rot`) events                  | Yes    |
 | Interaction (`ixn`) events               | Yes    |
+| Deactivation (rotation to no next key)   | Yes    |
 | Local KEL replay & verification          | Yes    |
 | Deterministic event digesting (SAID)     | Yes    |
 | Pluggable 256-/512-bit digest algorithms | Yes    |
@@ -53,15 +54,17 @@ Every capability below is **outside the profile**. An event that uses one is rej
 Three event types are supported: `icp`, `rot`, `ixn`. Excluded-feature fields are pinned to fixed sentinel values, enforced both by the TypeScript types and by the replay validators:
 
 - `kt` (signing threshold) — must be `"1"`.
-- `nt` (next-key threshold) — must be `"1"`, except a non-transferable inception (see below), where it is `"0"`.
+- `nt` (next-key threshold) — must be `"1"`, except a non-transferable inception or a deactivation `rot` (both see below), where it is `"0"`.
 - `k` — an array of **exactly one** key. Two or more is multisig.
-- `n` — an array of **exactly one** next-key digest, except a non-transferable inception, where it is empty.
+- `n` — an array of **exactly one** next-key digest, except a non-transferable inception or a deactivation `rot`, where it is empty.
 - `bt` (witness threshold) — must be `"0"`.
 - `b` (witnesses), `c` (config traits), `br` / `ba` (witness cuts/adds) — must be empty arrays.
 - Inception `a` (seals) — must be empty. To anchor data, use an interaction event, whose `a` is an unconstrained JSON array.
 - An event carrying **any field not named by its type** is rejected.
 
 **Non-transferable inception.** An `icp` whose `i` field is a `B`-coded Ed25519 key (rather than a self-addressing digest) is a non-transferable inception. Its `k` holds that same `B` key, `nt` is `"0"`, and `n` is empty — it commits to no next key. Its AID is the `B` key itself, so `d ≠ i` (unlike a transferable inception, where `d == i`). A non-transferable identifier's KEL is exactly this one event: any `rot` or `ixn` that follows it is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`, since the identifier can never rotate or extend. node-keri verifies these but never generates one.
+
+**Deactivation.** A `rot` whose `nt` is `"0"` and whose `n` is empty is a *deactivation* — the `did:keri` abandonment operation, a rotation to zero forward controlling keys. It is otherwise an ordinary rotation: `k` still holds the single revealed pre-rotated key, which reproduces the prior next-key commitment and signs the event. Committing to no next key makes it terminal — it is the last event of the KEL, and any `rot` or `ixn` that follows is rejected with `DEACTIVATED_NOT_EXTENSIBLE`. The replayed `KeriState` is then `deactivated` and no longer `transferable`. Unlike non-transferable AIDs, node-keri both generates (`deactivateIdentifier`) and verifies deactivations.
 
 Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 

@@ -49,7 +49,14 @@ export interface DidVerificationMethod {
 	};
 }
 
-/** A `did:keri` DID document reflecting one verified key state. */
+/**
+ * A `did:keri` DID document reflecting one verified key state.
+ *
+ * For a *deactivated* identifier the document is empty of authority:
+ * `verificationMethod`, `authentication`, and `assertionMethod` are all empty
+ * arrays and `service` is absent. An abandoned identifier makes no key
+ * authoritative — see `createDidDocument`.
+ */
 export interface DidDocument {
 	readonly '@context': readonly string[];
 	readonly id: string;
@@ -92,6 +99,11 @@ const KEY_FRAGMENT = '#key-0';
  * signing key currently authoritative per the replayed KEL. Earlier keys are
  * not retained — a DID document describes present control, while history
  * lives in the KEL.
+ *
+ * A *deactivated* identifier is the exception: it has been abandoned, so it
+ * makes no key authoritative. Its document carries no verification method and
+ * no verification relationships, and any `services` are dropped. A consumer
+ * should additionally treat `deactivated` resolution metadata as decisive.
  */
 export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 	if (input === null || typeof input !== 'object') {
@@ -111,6 +123,19 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 		throw new InvalidArgumentError(
 			'createDidDocument: `did` does not match `state.did`'
 		);
+	}
+
+	// A deactivated identifier is abandoned: project an authority-free
+	// document. There is no key to advertise and nothing to point a
+	// verification relationship at.
+	if (state.deactivated) {
+		return {
+			'@context': [...DID_CONTEXT],
+			id: did,
+			verificationMethod: [],
+			authentication: [],
+			assertionMethod: [],
+		};
 	}
 
 	// `state.currentPublicKey` is CESR-qualified; the JWK `x` member is the

@@ -90,6 +90,33 @@ export interface RotationEvent extends KeriEventBase {
 	a: readonly [];
 }
 
+/**
+ * Deactivation of a transferable identifier.
+ *
+ * A deactivation is a rotation that commits to *no* next key — `nt` is `"0"`
+ * and `n` is empty. It still reveals the pre-rotated key in `k` (so the event
+ * is authorized exactly like an ordinary rotation: the revealed key reproduces
+ * the prior next-key commitment and signs the event), but by committing to
+ * nothing it permanently terminates the identifier. No further event can ever
+ * be appended — the KEL ends here. This is how a `did:keri` DID is abandoned.
+ *
+ * Structurally it is a `rot` event; only `nt`/`n` distinguish it from a
+ * `RotationEvent`, just as `nt`/`n` distinguish a `NonTransferableInceptionEvent`
+ * from an `InceptionEvent`.
+ */
+export interface DeactivationEvent extends KeriEventBase {
+	t: 'rot';
+	p: CesrDigest;
+	kt: '1';
+	k: readonly [CesrPublicKey];
+	nt: '0';
+	n: readonly [];
+	bt: '0';
+	br: readonly [];
+	ba: readonly [];
+	a: readonly [];
+}
+
 export interface InteractionEvent extends KeriEventBase {
 	t: 'ixn';
 	p: CesrDigest;
@@ -100,6 +127,7 @@ export type KeriEvent =
 	| InceptionEvent
 	| NonTransferableInceptionEvent
 	| RotationEvent
+	| DeactivationEvent
 	| InteractionEvent;
 
 /**

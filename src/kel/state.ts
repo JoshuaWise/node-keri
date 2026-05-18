@@ -33,6 +33,12 @@ interface KeriStateBase {
  */
 export interface TransferableKeriState extends KeriStateBase {
 	readonly transferable: true;
+	/**
+	 * Never `true` for a transferable state — a live identifier is not
+	 * deactivated. Declared so `deactivated` is a field of every `KeriState`
+	 * and can be read without first narrowing the union.
+	 */
+	readonly deactivated?: false;
 	/** SAID of the most-recently applied event; the next event's `p`. */
 	readonly lastEventDigest: CesrDigest;
 	/** Pre-rotated commitment that the next rotation must reveal a key for. */
@@ -52,6 +58,12 @@ export interface TransferableKeriState extends KeriStateBase {
 export interface NonTransferableKeriState extends KeriStateBase {
 	readonly transferable: false;
 	/**
+	 * Never `true` for a non-transferable basic prefix: it was never extensible
+	 * in the first place, so "deactivated" does not apply. Declared so
+	 * `deactivated` is a field of every `KeriState`.
+	 */
+	readonly deactivated?: false;
+	/**
 	 * SAID of the inception event — present when this AID was verified from a
 	 * (trivial, single-event) KEL, absent for a bare non-transferable AID
 	 * resolved with no KEL at all.
@@ -62,9 +74,31 @@ export interface NonTransferableKeriState extends KeriStateBase {
 }
 
 /**
+ * State of a *deactivated* identifier — a transferable AID that was abandoned
+ * by a deactivation event (a rotation committing to no next key). Like a
+ * non-transferable identifier it can never extend its KEL again, so it is not
+ * `transferable`; unlike one, it was minted as a self-addressing AID and has a
+ * real multi-event KEL behind it. `deactivated` is `true` to tell the two
+ * apart. There is no `nextKeyCommitment`: the identifier committed to nothing.
+ */
+export interface DeactivatedKeriState extends KeriStateBase {
+	readonly transferable: false;
+	readonly deactivated: true;
+	/** SAID of the deactivation event — the final event of the KEL. */
+	readonly lastEventDigest: CesrDigest;
+	/** Always `'rot'`: a deactivation is a rotation event. */
+	readonly eventType: 'rot';
+}
+
+/**
  * Replay-derived state of an identifier — a discriminated union on
  * `transferable`. Narrow on that field to reach `nextKeyCommitment` (and the
  * always-present `lastEventDigest` / `eventType`), which exist only for a
- * transferable identifier.
+ * transferable identifier. The two `transferable: false` members — a bare
+ * non-transferable basic prefix and a deactivated identifier — are told apart
+ * by `deactivated`, which is readable on any `KeriState`.
  */
-export type KeriState = TransferableKeriState | NonTransferableKeriState;
+export type KeriState =
+	| TransferableKeriState
+	| NonTransferableKeriState
+	| DeactivatedKeriState;

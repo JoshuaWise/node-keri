@@ -37,6 +37,7 @@ export type KeriVerificationError =
 	| { code: 'UNSUPPORTED_FEATURE'; feature: string }
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
 	| { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
+	| { code: 'DEACTIVATED_NOT_EXTENSIBLE'; eventType: string }
 	| { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
 	| { code: 'INVALID_PREVIOUS_DIGEST' }
 	| { code: 'INVALID_EVENT_DIGEST' }
