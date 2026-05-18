@@ -225,18 +225,6 @@ describe('resolveDid', () => {
 		expect(result.didDocument.id).toBe(did);
 		expect(result.metadata.eventCount).toBe(3);
 		expect(result.metadata.state.sequenceNumber).toBe(2);
-		expect(result.metadata.kel).toBeUndefined();
-	});
-
-	test('echoes the KEL back only when includeKel is set', () => {
-		const { did, kel } = buildKel();
-		const result = resolveDid({
-			did,
-			kel,
-			options: { includeKel: true },
-		});
-		if (!result.ok) throw new Error('expected resolution to succeed');
-		expect(result.metadata.kel).toBe(kel);
 	});
 
 	test('returns INVALID_DID for a malformed DID rather than throwing', () => {
@@ -291,11 +279,9 @@ describe('resolveDid', () => {
 		// so it resolves with no KEL. The all-zero key is a valid one.
 		const ntAid = 'B' + 'A'.repeat(43);
 		const ntDid = `${DID_KERI_PREFIX}${ntAid}`;
-		// `includeKel` is set, but a bare resolution has no KEL to echo.
 		const result = resolveDid({
 			did: ntDid as never,
 			kel: '',
-			options: { includeKel: true },
 		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -306,7 +292,6 @@ describe('resolveDid', () => {
 		// A non-transferable AID *is* its own signing key.
 		expect(result.metadata.state.currentPublicKey).toBe(ntAid);
 		expect(result.metadata.eventCount).toBe(0);
-		expect(result.metadata.kel).toBeUndefined();
 	});
 
 	test('throws on an argument-contract violation', () => {

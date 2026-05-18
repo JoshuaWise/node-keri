@@ -36,10 +36,6 @@ export interface ResolveDidInput {
 	 * prefix. A transferable DID must supply a real, non-empty KEL.
 	 */
 	readonly kel: string;
-	readonly options?: {
-		/** When true, the verified KEL is echoed back in the metadata. */
-		readonly includeKel?: boolean;
-	};
 }
 
 /** Side information about a successful resolution. */
@@ -48,8 +44,6 @@ export interface DidResolutionMetadata {
 	readonly state: KeriState;
 	/** Number of events in the verified KEL. */
 	readonly eventCount: number;
-	/** The verified KEL (CESR stream) — present only when `options.includeKel` was set. */
-	readonly kel?: string;
 }
 
 /** Discriminated result of resolving a `did:keri` DID. */
@@ -116,7 +110,6 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	const metadata: DidResolutionMetadata = {
 		state: verification.state,
 		eventCount: parseKel(input.kel).length,
-		...(input.options?.includeKel ? { kel: input.kel } : {}),
 	};
 	return { ok: true, didDocument, metadata };
 }
@@ -126,8 +119,7 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
  * signing key — a `B`-coded basic prefix is self-certifying — so the document
  * is projected straight from it, with no events to replay.
  *
- * There is no KEL, so `metadata.eventCount` is 0 and `metadata.kel` is absent
- * even when `options.includeKel` is set: there is nothing to echo.
+ * There is no KEL, so `metadata.eventCount` is 0.
  */
 function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult {
 	const state: NonTransferableKeriState = {

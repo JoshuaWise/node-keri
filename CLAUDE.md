@@ -236,9 +236,6 @@ function parseDidKeri(did: string): ParsedDidKeri;
 function resolveDid(input: {
     did: DidKeri;
     kel: string;
-    options?: {
-        includeKel?: boolean;
-    };
 }): DidResolutionResult;
 ```
 
