@@ -14,9 +14,11 @@ export function base64urlEncode(bytes: Uint8Array): string {
 /**
  * The 64-character base64url alphabet, in value order. Index `i` is the
  * character for the 6-bit value `i`. Used by `intToB64` / `b64ToInt`, which
- * encode small integers — CESR signature/counter indices — as base64 text.
+ * encode small integers — CESR signature/counter indices — as base64 text,
+ * and by the CESR digest registry as the character set of every code.
  */
-const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+export const B64_ALPHABET =
+	'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 /**
  * Encode a non-negative integer as exactly `length` base64url characters,

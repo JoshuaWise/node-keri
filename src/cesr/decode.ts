@@ -14,20 +14,11 @@ import {
 } from './codes';
 
 /**
- * Reverse of `encodeMatter`. Validates that:
- *   - the input is a string of exactly `spec.fs` characters,
- *   - the leading `spec.hs` characters equal the expected code,
- *   - the trailing characters decode under the standard base64url alphabet
- *     and round-trip canonically (this is enforced by `base64urlDecode`),
- *   - the leading `spec.ps` "pad" bytes of the decoded payload are zero.
- *
- * The last check is what catches non-canonical encodings: the high bits of
- * the first base64 character after the code prefix must be zero, because we
- * replaced exactly `ps` zero bytes with the code. If those bits aren't zero,
- * the original prefix concealed bits that a canonical encoder would have
- * placed elsewhere — a malleable form.
+ * Confirm `qb64` is a string of exactly `spec.fs` characters whose leading
+ * `spec.hs` characters are `spec.code`. On a code mismatch the error names the
+ * actual known primitive, when one is recognized, to clarify a wrong-type call.
  */
-function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
+function checkMatterPrefix(spec: CesrCodeSpec, qb64: string): void {
 	if (typeof qb64 !== 'string') {
 		throw new MalformedInputError(`${spec.label} must be a string`);
 	}
@@ -48,9 +39,24 @@ function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
 			`expected ${spec.label} code '${spec.code}', got '${found}'`
 		);
 	}
-	// `hs === ps` for every plain code, so substituting the prefix with `ps`
-	// copies of 'A' yields a valid base64url string of length `fs`.
-	const substituted = 'A'.repeat(spec.ps) + qb64.slice(spec.hs);
+}
+
+/**
+ * Decode the payload after a `prefixChars`-character prefix: substitute the
+ * prefix with `spec.ps` copies of 'A', base64url-decode, and confirm the
+ * leading `spec.ps` pad bytes are zero.
+ *
+ * That last check catches non-canonical encodings: the high bits of the first
+ * base64 character after the code must be zero, because the encoder replaced
+ * exactly `ps` zero bytes with the code. If they aren't, the prefix concealed
+ * bits a canonical encoder would have placed elsewhere — a malleable form.
+ */
+function decodePayload(
+	spec: CesrCodeSpec,
+	qb64: string,
+	prefixChars: number
+): Uint8Array {
+	const substituted = 'A'.repeat(spec.ps) + qb64.slice(prefixChars);
 	const decoded = base64urlDecode(substituted);
 	for (let i = 0; i < spec.ps; i++) {
 		if (decoded[i] !== 0) {
@@ -62,47 +68,25 @@ function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
 	return decoded.slice(spec.ps);
 }
 
+/** Reverse of `encodeMatter`: validate the code prefix, then decode the payload. */
+function decodeMatter(spec: CesrCodeSpec, qb64: string): Uint8Array {
+	checkMatterPrefix(spec, qb64);
+	// `hs === ps` for every plain code, so dropping the `hs`-char prefix.
+	return decodePayload(spec, qb64, spec.hs);
+}
+
 /**
  * Reverse of `encodeIndexedSignatureEd25519`. An indexed primitive's prefix is
  * `hs` code characters plus `ss` "soft" characters carrying the index, and
- * together they are `ps` long — so the substitution drops `hs + ss` characters
- * and prepends `ps` copies of 'A'. The index is read from the soft field.
+ * together they are `ps` long. The index is read from the soft field.
  */
 function decodeIndexedMatter(
 	spec: CesrCodeSpec,
 	qb64: string
 ): { raw: Uint8Array; index: number } {
-	if (typeof qb64 !== 'string') {
-		throw new MalformedInputError(`${spec.label} must be a string`);
-	}
-	if (qb64.length !== spec.fs) {
-		throw new MalformedInputError(
-			`${spec.label} must be ${spec.fs} characters, got ${qb64.length}`
-		);
-	}
-	if (qb64.slice(0, spec.hs) !== spec.code) {
-		const found = qb64.slice(0, spec.hs);
-		const alternative = findKnownCodeAt(qb64);
-		if (alternative && alternative.code !== spec.code) {
-			throw new MalformedInputError(
-				`expected ${spec.label} (code '${spec.code}'), got ${alternative.label} (code '${alternative.code}')`
-			);
-		}
-		throw new MalformedInputError(
-			`expected ${spec.label} code '${spec.code}', got '${found}'`
-		);
-	}
+	checkMatterPrefix(spec, qb64);
 	const index = b64ToInt(qb64.slice(spec.hs, spec.hs + spec.ss));
-	const substituted = 'A'.repeat(spec.ps) + qb64.slice(spec.hs + spec.ss);
-	const decoded = base64urlDecode(substituted);
-	for (let i = 0; i < spec.ps; i++) {
-		if (decoded[i] !== 0) {
-			throw new MalformedInputError(
-				`non-canonical ${spec.label}: leading pad bits must be zero`
-			);
-		}
-	}
-	return { raw: decoded.slice(spec.ps), index };
+	return { raw: decodePayload(spec, qb64, spec.hs + spec.ss), index };
 }
 
 /**

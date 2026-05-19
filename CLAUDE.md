@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file guides Claude Code when working with the "keri" repository.
+This file guides Claude Code when working with the "keri" repository. Note that Claude Code is often run in a sandbox, so Claude should always use `--runInBand` when running tests to avoid crashing due to memory exhaustion.
 
 Below is a practical implementation plan for a **pure, synchronous TypeScript KERI lifecycle library**.
 
@@ -233,10 +233,7 @@ KERI’s key-event state machine establishes ordering by chaining each non-incep
 ```ts
 function parseDidKeri(did: string): ParsedDidKeri;
 
-function resolveDid(input: {
-    did: DidKeri;
-    kel: string;
-}): DidResolutionResult;
+function resolveDid(input: { did: DidKeri; kel: string }): DidResolutionResult;
 ```
 
 Resolution should be local only. The caller supplies the KEL.
@@ -441,7 +438,7 @@ wrapper. Each event frame is:
 
 The event's version string `v` declares its byte length, so frames are
 self-delimiting; a KEL is its frames concatenated in order, with no separators.
-Controller signatures are CESR *indexed* signatures ("Siger", code `A`) carrying
+Controller signatures are CESR _indexed_ signatures ("Siger", code `A`) carrying
 a key index — always 0 in this single-key profile. Detached payload signatures
 (`verifySignatureWithDid`) stay non-indexed (`0B`, "Cigar"). A stream that is
 not well-framed is rejected by `verifyKel` with `MALFORMED_STREAM`.
@@ -965,7 +962,7 @@ export {
     generateKeyPair,
     createIdentifier,
     rotateIdentifier,
-    createInteractionEvent,
+    interactIdentifier,
     deactivateIdentifier,
     verifyKel,
     parseDidKeri,

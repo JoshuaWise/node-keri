@@ -36,6 +36,7 @@
  */
 
 import { createHash, getHashes } from 'node:crypto';
+import { B64_ALPHABET } from '../bytes/base64url';
 import {
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
@@ -78,13 +79,6 @@ export const DIGEST_CODES = Object.freeze({
 export const DEFAULT_DIGEST_CODE: string = DIGEST_CODES.SHA2_256;
 
 /**
- * The 64-character base64url alphabet — the character set of every CESR
- * derivation code.
- */
-const CESR_CODE_ALPHABET =
-	'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-
-/**
  * CESR codes claimed by this profile's non-digest primitives — the Ed25519
  * verification keys and signatures. The digest registry is pre-keyed with
  * every digest code *except* these, so a key or signature code can never be
@@ -105,10 +99,10 @@ const RESERVED_NON_DIGEST_CODES: ReadonlySet<string> = new Set([
  */
 function validDigestCodes(): string[] {
 	const codes: string[] = [];
-	for (const ch of CESR_CODE_ALPHABET) {
+	for (const ch of B64_ALPHABET) {
 		if (!RESERVED_NON_DIGEST_CODES.has(ch)) codes.push(ch);
 	}
-	for (const ch of CESR_CODE_ALPHABET) {
+	for (const ch of B64_ALPHABET) {
 		const code = '0' + ch;
 		if (!RESERVED_NON_DIGEST_CODES.has(code)) codes.push(code);
 	}

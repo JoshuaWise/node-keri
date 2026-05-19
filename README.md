@@ -8,7 +8,7 @@ Basically, KERI let's you create unique [DIDs](https://www.w3.org/TR/did-1.0/) (
 
 **In practice, this means you can have your own persistent "account" in decentralized, peer-to-peer networks. An obvious use-case is in agent-to-agent communication.**
 
-This is a **deterministic state-machine library**, not an authentication framework. It has no dependencies, performs no I/O, and is entirely synchronous. The caller is respinsible for secure storage and networking; the library just owns the cryptographic lifecycle. The supported subset is the **KERI Direct JSON Profile v1** — see [PROFILE.md](./PROFILE.md) for the exact conformance boundary and [SECURITY.md](./SECURITY.md) for the trust model and security invariants.
+This is a **deterministic state-machine library**, not an authentication framework. It has no dependencies, performs no I/O, and is entirely synchronous. The caller is responsible for secure storage and networking; the library just owns the cryptographic lifecycle. Not all KERI features are supported; the supported subset is the **KERI Direct JSON Profile v1** — see [PROFILE.md](./PROFILE.md) for the exact conformance boundary and [SECURITY.md](./SECURITY.md) for the trust model and security invariants.
 
 ## Installation
 
@@ -119,7 +119,7 @@ this string form. To inspect an event's structured shape, parse a frame with
 `signatureIndex` — are exported for low-level use.
 
 Detached signatures over arbitrary payloads (as in `verifySignatureWithDid`)
-are *not* indexed: they use the non-indexed `0B` "Cigar" form produced by
+are _not_ indexed: they use the non-indexed `0B` "Cigar" form produced by
 `encodeSignatureEd25519`.
 
 ## API reference

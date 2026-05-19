@@ -26,8 +26,12 @@ export interface CreateInteractionInput {
 	/**
 	 * Optional anchored data. Each entry is canonicalized as JSON, so it must
 	 * obey the canonical-JSON rules (no NaN, no functions, plain objects only,
-	 * etc.). An empty `a` is permitted and is the right choice when the event
-	 * is purely a "heartbeat" advancing the sequence.
+	 * etc.). Numbers must additionally be safe integers: a value outside the
+	 * safe-integer range does not round-trip to stable bytes, so it cannot be
+	 * digested reproducibly — carry larger or fractional values as strings.
+	 * See `canonicalizeJson` for the full number policy. An empty `a` is
+	 * permitted and is the right choice when the event is purely a "heartbeat"
+	 * advancing the sequence.
 	 */
 	readonly data?: readonly unknown[];
 	/**

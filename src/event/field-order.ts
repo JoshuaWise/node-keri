@@ -52,7 +52,7 @@ export function toCanonicalEvent(event: object): Record<string, unknown> {
 	}
 	const ordered: Record<string, unknown> = {};
 	for (const key of order) {
-		if (Object.prototype.hasOwnProperty.call(fields, key)) {
+		if (Object.hasOwn(fields, key)) {
 			ordered[key] = fields[key];
 		}
 	}

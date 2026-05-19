@@ -16,6 +16,14 @@ import { CanonicalJsonError } from '../profile/errors';
  *   - Numbers must be finite. `NaN`, `Infinity`, `-Infinity`, and `-0`
  *     are rejected because their JSON representations are either invalid
  *     or implementation-defined.
+ *   - Number serialization is whatever `JSON.stringify` produces, so it is
+ *     only *deterministic* — and therefore only safe to digest — for integers
+ *     within the safe-integer range. A number outside that range, or a
+ *     non-canonical numeric literal on the wire (`1e3`, `1.0`, leading-zero
+ *     forms), does not round-trip to the same bytes a producer emitted, so an
+ *     event carrying one fails replay as `NON_CANONICAL_EVENT`. Anchored
+ *     application data (an interaction event's `a`) should therefore confine
+ *     numbers to safe integers, or carry larger/fractional values as strings.
  *   - `undefined`, functions, symbols, and BigInt are rejected at every
  *     position (including object values, where `JSON.stringify` would
  *     normally drop them silently).
