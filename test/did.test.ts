@@ -217,14 +217,15 @@ describe('createDidDocument', () => {
 });
 
 describe('resolveDid', () => {
-	test('resolves a valid DID + KEL to a DID document and verified state', () => {
+	test('resolves a valid DID + KEL to verified state, projectable to a document', () => {
 		const { did, kel } = buildKel();
 		const result = resolveDid({ did, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.didDocument.id).toBe(did);
 		// Three events (icp + 2 more) ⇒ the last is at sequence number 2.
 		expect(result.state.lastSequenceNumber).toBe(2);
+		// The verified state projects into a document for the same DID.
+		expect(createDidDocument({ state: result.state }).id).toBe(did);
 	});
 
 	test('returns INVALID_DID for a malformed DID rather than throwing', () => {
@@ -285,8 +286,9 @@ describe('resolveDid', () => {
 		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.didDocument.id).toBe(ntDid);
-		expect(result.didDocument.verificationMethod).toHaveLength(1);
+		const doc = createDidDocument({ state: result.state });
+		expect(doc.id).toBe(ntDid);
+		expect(doc.verificationMethod).toHaveLength(1);
 		expect(result.state.transferable).toBe(false);
 		expect(result.state.aid).toBe(ntAid);
 		expect(result.state.deactivated).toBe(false);

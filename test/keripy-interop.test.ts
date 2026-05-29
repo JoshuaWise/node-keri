@@ -45,6 +45,7 @@ import { deactivateIdentifier } from '../src/api/deactivate-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
 import { resolveDid } from '../src/did/resolver';
+import { createDidDocument } from '../src/did/document';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { sign } from '../src/crypto/ed25519';
 import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
@@ -406,7 +407,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 	});
 
 	test('node-keri resolves a keripy non-transferable DID with no KEL', () => {
-		// `resolveDid` with the empty-string "no KEL" value: the DID document is
+		// `resolveDid` with the empty-string "no KEL" value: the state is
 		// projected straight from the self-certifying `B` prefix.
 		const generated = keripyGenNonTransferableKel(NT_SEED);
 
@@ -417,9 +418,10 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 			expect(result.state.aid).toBe(generated.aid);
 			// Resolved bare from the prefix: no event-derived fields.
 			expect(result.state.lastEventDigest).toBeUndefined();
-			expect(result.didDocument.id).toBe(generated.did);
+			const doc = createDidDocument({ state: result.state });
+			expect(doc.id).toBe(generated.did);
 			// The sole verification method is the AID itself, as a JWK.
-			expect(result.didDocument.verificationMethod).toHaveLength(1);
+			expect(doc.verificationMethod).toHaveLength(1);
 		}
 	});
 
@@ -440,7 +442,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 			// which is what distinguishes this from the bare resolution above.
 			expect(result.state.lastEventDigest).toBeDefined();
 			expect(result.state.lastEventType).toBe('icp');
-			expect(result.didDocument.id).toBe(generated.did);
+			expect(createDidDocument({ state: result.state }).id).toBe(generated.did);
 		}
 	});
 });

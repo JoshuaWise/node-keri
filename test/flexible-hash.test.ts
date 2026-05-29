@@ -384,10 +384,13 @@ describe('the DID surface under a 512-bit AID', () => {
 		expect(doc.verificationMethod[0]!.id).toBe(`${id.did}#key-0`);
 		expect(doc.verificationMethod[0]!.controller).toBe(id.did);
 
-		// Local resolution of the same DID reproduces that document.
+		// Local resolution of the same DID yields a state that reproduces that
+		// document.
 		const resolution = resolveDid({ did: id.did, kel: id.inceptionEvent });
 		expect(resolution.ok).toBe(true);
-		if (resolution.ok) expect(resolution.didDocument.id).toBe(id.did);
+		if (resolution.ok) {
+			expect(createDidDocument({ state: resolution.state }).id).toBe(id.did);
+		}
 	});
 });
 

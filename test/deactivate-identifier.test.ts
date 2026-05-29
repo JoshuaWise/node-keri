@@ -312,10 +312,12 @@ describe('DID surface — a deactivated DID', () => {
 		expect(result.state.deactivated).toBe(true);
 		// Two events (icp + deactivating rot) ⇒ the last is at sequence number 1.
 		expect(result.state.lastSequenceNumber).toBe(1);
-		expect(result.didDocument.verificationMethod).toEqual([]);
-		expect(result.didDocument.authentication).toEqual([]);
-		expect(result.didDocument.assertionMethod).toEqual([]);
-		expect(result.didDocument.id).toBe(id.did);
+		// The verified deactivated state projects to an authority-free document.
+		const doc = createDidDocument({ state: result.state });
+		expect(doc.verificationMethod).toEqual([]);
+		expect(doc.authentication).toEqual([]);
+		expect(doc.assertionMethod).toEqual([]);
+		expect(doc.id).toBe(id.did);
 	});
 
 	test('createDidDocument projects a deactivated state with no key', () => {

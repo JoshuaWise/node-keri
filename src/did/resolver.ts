@@ -3,12 +3,12 @@
  *
  * `resolveDid` is offline by construction: the caller supplies the KEL, and
  * the library never discovers, fetches, or persists anything. Resolution is
- * exactly "verify this KEL against the DID's AID, then project the verified
- * latest state into a DID document".
+ * exactly "verify this KEL against the DID's AID and return the verified
+ * latest state". Projecting that state into a DID document is a separate,
+ * caller-driven step: `createDidDocument(state)`.
  *
  * A non-transferable DID is self-certifying — the AID *is* the signing key —
- * so it resolves with no KEL at all: pass the empty string `''` for `kel` and
- * the document is projected straight from the prefix.
+ * so it resolves with no KEL at all: pass the empty string `''` for `kel`.
  *
  * The result uses the library's discriminated `{ ok }` shape rather than the
  * W3C DID Resolution metadata envelope. That keeps it consistent with
@@ -22,7 +22,6 @@ import { CesrPublicKey } from '../cesr/qualified';
 import { KeriState, NonTransferableKeriState } from '../kel/state';
 import { InvalidArgumentError, KeriVerificationError } from '../profile/errors';
 import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
-import { DidDocument, createDidDocument } from './document';
 
 export interface ResolveDidInput {
 	/** The `did:keri` DID to resolve. */
@@ -39,21 +38,22 @@ export interface ResolveDidInput {
 
 /** Discriminated result of resolving a `did:keri` DID. */
 export type DidResolutionResult =
-	| { ok: true; didDocument: DidDocument; state: KeriState }
+	| { ok: true; state: KeriState }
 	| { ok: false; error: KeriVerificationError };
 
 /**
  * Resolve a `did:keri` DID against a caller-supplied KEL.
  *
- * On success the `didDocument` reflects the latest *verified* key state and
- * `state` is the only `KeriState` the caller may treat as trusted — it carries
- * the `deactivated` flag and (via `sequenceNumber`) the KEL length directly.
- * Any data-level failure — a malformed DID, or a KEL that is empty, tampered,
- * reordered, or for a different identifier — is returned as `{ ok: false }`.
- * Throwing is reserved for a caller that violates the argument contract.
+ * On success `state` is the only `KeriState` the caller may treat as trusted —
+ * it carries the `deactivated` flag and (via `lastSequenceNumber`) the KEL
+ * length directly. Project it into a W3C DID document with
+ * `createDidDocument(state)` when one is needed. Any data-level failure — a
+ * malformed DID, or a KEL that is empty, tampered, reordered, or for a
+ * different identifier — is returned as `{ ok: false }`. Throwing is reserved
+ * for a caller that violates the argument contract.
  *
  * A non-transferable DID resolves with `kel: ''` (no KEL): it is
- * self-certifying, so the document is projected straight from the prefix.
+ * self-certifying, so the state is projected straight from the prefix.
  */
 export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 	if (input === null || typeof input !== 'object') {
@@ -92,18 +92,13 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		return { ok: false, error: verification.error };
 	}
 
-	const didDocument = createDidDocument({
-		did: parsed.did,
-		state: verification.state,
-	});
-
-	return { ok: true, didDocument, state: verification.state };
+	return { ok: true, state: verification.state };
 }
 
 /**
  * Resolve a non-transferable DID that was given no KEL. The AID *is* the
- * signing key — a `B`-coded basic prefix is self-certifying — so the document
- * is projected straight from it, with no events to replay.
+ * signing key — a `B`-coded basic prefix is self-certifying — so the state is
+ * projected straight from it, with no events to replay.
  *
  * There is no KEL: the returned `state` omits `lastEventDigest` / `eventType`,
  * which is what distinguishes a bare AID from one verified from a single-event
@@ -121,6 +116,5 @@ function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult 
 		transferable: false,
 		deactivated: false,
 	};
-	const didDocument = createDidDocument({ did: parsed.did, state });
-	return { ok: true, didDocument, state };
+	return { ok: true, state };
 }
