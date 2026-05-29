@@ -143,6 +143,7 @@ function createIdentifier(input?: {
 	currentKeyPair?: KeriKeyPair;
 	nextKeyPair?: KeriKeyPair;
 	digestCode?: string;
+	establishmentOnly?: boolean;
 }): {
 	did: DidKeri;
 	aid: Aid;
@@ -158,6 +159,8 @@ Mint a new transferable `did:keri` identifier. Generates fresh current and next 
 `inceptionEvent` is the signed event in its **CESR stream** wire form — see [Wire format](#wire-format). A KEL is built by concatenating these event strings in order.
 
 `digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to SHA-256 (`I`). See [Digest algorithms](#digest-algorithms).
+
+Set `establishmentOnly: true` to mint an **establishment-only** identifier — see [Establishment-only identifiers](#establishment-only-identifiers). It defaults to `false`.
 
 #### `rotateIdentifier`
 
@@ -191,7 +194,25 @@ function interactIdentifier(input: {
 };
 ```
 
-Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256).
+Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256). Throws `InvalidArgumentError` for an [establishment-only](#establishment-only-identifiers) identifier, which by construction accepts no interaction events.
+
+#### Establishment-only identifiers
+
+KERI lets an inception event declare that its KEL will only ever carry **establishment events** — `icp` and `rot`, the events that change key state — and never interaction (`ixn`) events. This is the `EO` ("establishment only") configuration trait, set in the inception event's `c` field. It is a useful hardening choice for an identifier whose sole purpose is to anchor key rotations: it removes interaction events as an attack surface and makes the key history the entire history.
+
+Pass `establishmentOnly: true` to `createIdentifier` to set the trait:
+
+```ts
+const id = createIdentifier({ establishmentOnly: true });
+```
+
+The trait is **inception-only and permanent**: it is declared once, at inception, and every later event inherits it unchanged — there is no event that turns it off. From then on:
+
+- `interactIdentifier` (and the low-level `createInteractionEvent`) throw `InvalidArgumentError` for the identifier — there is no valid interaction event to construct.
+- `verifyKel` rejects any `ixn` appended to the KEL out of band with the `ESTABLISHMENT_ONLY_NO_INTERACTION` verification error, exactly as it rejects an event appended after a deactivation.
+- Rotation is unaffected — an establishment-only identifier rotates normally with `rotateIdentifier`, and may still be deactivated.
+
+The flag rides along on the verified state: `state.establishmentOnly` is `true` for such an identifier (and absent otherwise). node-keri both generates and verifies the `EO` trait, including on KELs produced by keripy.
 
 #### `deactivateIdentifier`
 
@@ -384,6 +405,7 @@ type KeriVerificationError =
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
 	| { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
 	| { code: 'DEACTIVATED_NOT_EXTENSIBLE'; eventType: string }
+	| { code: 'ESTABLISHMENT_ONLY_NO_INTERACTION'; eventType: string }
 	| { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
 	| { code: 'INVALID_PREVIOUS_DIGEST' }
 	| { code: 'INVALID_EVENT_DIGEST' }
