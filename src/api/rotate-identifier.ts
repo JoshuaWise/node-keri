@@ -10,7 +10,12 @@
  */
 
 import { bytesEqual } from '../bytes/compare';
-import { KeriKeyPair, KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
+import {
+	KeriPrivateKey,
+	KeriPublicKey,
+	assertPublicKey,
+	keyPairFromPrivateKey,
+} from '../crypto/keypair';
 import { createRotationEvent } from '../event/rotation';
 import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
@@ -23,8 +28,12 @@ export interface RotateIdentifierInput {
 	 * `state.nextKeyCommitment`; otherwise the rotation is rejected.
 	 */
 	readonly currentPrivateKey: KeriPrivateKey;
-	/** Freshly chosen pre-rotation keypair for the *next* rotation. */
-	readonly nextKeyPair: KeriKeyPair;
+	/**
+	 * Public half of the freshly chosen pre-rotation key for the *next*
+	 * rotation. Only its digest is committed now; the caller keeps the matching
+	 * private half to rotate again later.
+	 */
+	readonly nextPublicKey: KeriPublicKey;
 	/**
 	 * CESR digest code for the rotation event's SAID and new next-key
 	 * commitment. Defaults to SHA-256 (`I`). The prior commitment is always
@@ -45,25 +54,25 @@ export function rotateIdentifier(input: RotateIdentifierInput): RotateIdentifier
 	if (input === null || typeof input !== 'object') {
 		throw new InvalidArgumentError('rotateIdentifier requires an input object');
 	}
-	if (input.nextKeyPair === null || typeof input.nextKeyPair !== 'object') {
-		throw new InvalidArgumentError('rotateIdentifier requires a `nextKeyPair`');
-	}
+	// Assert before touching `.raw` below so a malformed key surfaces as
+	// InvalidArgumentError rather than a TypeError.
+	assertPublicKey(input.nextPublicKey);
 
 	// `keyPairFromPrivateKey` asserts the argument is a KeriPrivateKey.
 	const newCurrentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
 
 	// Same independence requirement as inception: the new signing key and the
 	// freshly committed next key must differ, or pre-rotation buys nothing.
-	if (bytesEqual(newCurrentKeyPair.publicKey.raw, input.nextKeyPair.publicKey.raw)) {
+	if (bytesEqual(newCurrentKeyPair.publicKey.raw, input.nextPublicKey.raw)) {
 		throw new InvalidArgumentError(
-			'the rotated-to key and nextKeyPair must be distinct keys'
+			'the rotated-to key and nextPublicKey must be distinct keys'
 		);
 	}
 
 	const { event, state } = createRotationEvent({
 		state: input.state,
 		newCurrentKeyPair,
-		nextPublicKey: input.nextKeyPair.publicKey,
+		nextPublicKey: input.nextPublicKey,
 		digestCode: input.digestCode,
 	});
 

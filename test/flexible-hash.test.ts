@@ -120,8 +120,8 @@ describe('CESR — encode/decode of flexible digest codes', () => {
 describe('generation under a chosen digest algorithm', () => {
 	test('a SHA3-256 identifier is 44 chars and verifies', () => {
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x10)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x11)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x10)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x11)).publicKey,
 			digestCode: DIGEST_CODES.SHA3_256,
 		});
 		expect(id.aid.startsWith('H')).toBe(true);
@@ -138,8 +138,8 @@ describe('generation under a chosen digest algorithm', () => {
 
 	test('a SHA2-512 identifier produces an 88-char AID that parses and verifies', () => {
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x12)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x13)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x12)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x13)).publicKey,
 			digestCode: DIGEST_CODES.SHA2_512,
 		});
 		expect(id.aid.startsWith('0G')).toBe(true);
@@ -156,8 +156,8 @@ describe('generation under a chosen digest algorithm', () => {
 	test('requesting an unavailable algorithm throws', () => {
 		expect(() =>
 			createIdentifier({
-				currentKeyPair: keyPairFromSeed(fillSeed(0x14)),
-				nextKeyPair: keyPairFromSeed(fillSeed(0x15)),
+				currentPrivateKey: keyPairFromSeed(fillSeed(0x14)).privateKey,
+				nextPublicKey: keyPairFromSeed(fillSeed(0x15)).publicKey,
 				digestCode: DIGEST_CODES.BLAKE3_256, // `E` — not registered
 			})
 		).toThrow(UnsupportedAlgorithmError);
@@ -165,8 +165,8 @@ describe('generation under a chosen digest algorithm', () => {
 
 	test('the default (no digestCode) stays SHA-256', () => {
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x16)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x17)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x16)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x17)).publicKey,
 		});
 		expect(id.aid.startsWith('I')).toBe(true);
 		expect(decodeDigest(id.aid).code).toBe('I');
@@ -181,7 +181,10 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		const k2 = keyPairFromSeed(fillSeed(0x32));
 		const k3 = keyPairFromSeed(fillSeed(0x33));
 
-		const icp = createIdentifier({ currentKeyPair: k0, nextKeyPair: k1 });
+		const icp = createIdentifier({
+			currentPrivateKey: k0.privateKey,
+			nextPublicKey: k1.publicKey,
+		});
 		const ixn1 = interactIdentifier({
 			state: icp.state,
 			currentPrivateKey: k0.privateKey,
@@ -191,7 +194,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		const rot1 = rotateIdentifier({
 			state: ixn1.state,
 			currentPrivateKey: k1.privateKey,
-			nextKeyPair: k2,
+			nextPublicKey: k2.publicKey,
 			digestCode: DIGEST_CODES.SHA2_512,
 		});
 		const ixn2 = interactIdentifier({
@@ -203,7 +206,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		const rot2 = rotateIdentifier({
 			state: ixn2.state,
 			currentPrivateKey: k2.privateKey,
-			nextKeyPair: k3,
+			nextPublicKey: k3.publicKey,
 			digestCode: DIGEST_CODES.SHA3_512,
 		});
 
@@ -297,8 +300,8 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 		digestAlgorithms['E'] = { name: 'Blake3-256 (stub)', hash: blake3Stub };
 
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x40)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x41)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x40)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x41)).publicKey,
 			digestCode: 'E',
 		});
 		expect(id.aid.startsWith('E')).toBe(true);
@@ -315,8 +318,8 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 		// Build the KEL while `E` is registered...
 		digestAlgorithms['E'] = { name: 'Blake3-256 (stub)', hash: blake3Stub };
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x42)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x43)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x42)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x43)).publicKey,
 			digestCode: 'E',
 		});
 		const aid = id.aid as Aid;
@@ -335,8 +338,8 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 		// Mint a KEL while `E` works...
 		digestAlgorithms['E'] = { name: 'Blake3-256 (stub)', hash: blake3Stub };
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x44)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x45)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x44)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x45)).publicKey,
 			digestCode: 'E',
 		});
 		const aid = id.aid as Aid;
@@ -361,8 +364,8 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 describe('the DID surface under a 512-bit AID', () => {
 	test('createDidDocument and resolveDid handle an 88-char AID', () => {
 		const id = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x50)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x51)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x50)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x51)).publicKey,
 			digestCode: DIGEST_CODES.SHA2_512,
 		});
 		expect(id.aid.length).toBe(88);
@@ -394,11 +397,14 @@ describe('a SAID re-encoded under a different algorithm', () => {
 		const k0 = keyPairFromSeed(fillSeed(0x60));
 		const k1 = keyPairFromSeed(fillSeed(0x61));
 		const k2 = keyPairFromSeed(fillSeed(0x62));
-		const icp = createIdentifier({ currentKeyPair: k0, nextKeyPair: k1 });
+		const icp = createIdentifier({
+			currentPrivateKey: k0.privateKey,
+			nextPublicKey: k1.publicKey,
+		});
 		const rot = rotateIdentifier({
 			state: icp.state,
 			currentPrivateKey: k1.privateKey,
-			nextKeyPair: k2,
+			nextPublicKey: k2.publicKey,
 		});
 
 		const signedRot = parseSignedEvent(rot.rotationEvent);

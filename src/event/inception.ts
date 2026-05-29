@@ -33,12 +33,6 @@ export interface CreateInceptionInput {
 	/** Public half of the next keypair — only the digest is committed now. */
 	readonly nextPublicKey: KeriPublicKey;
 	/**
-	 * CESR digest code for this event's SAID and next-key commitment.
-	 * Defaults to SHA-256 (`I`). Any code with a registered implementation
-	 * (see `digestAlgorithms`) is accepted; an unavailable one throws.
-	 */
-	readonly digestCode?: string;
-	/**
 	 * Set the `EO` ("establishment only") configuration trait on the inception
 	 * event. The resulting identifier accepts only establishment events
 	 * (`icp`, `rot`) in its KEL — `interactIdentifier` and
@@ -47,6 +41,12 @@ export interface CreateInceptionInput {
 	 * unchanged by every later event of the KEL. Defaults to `false`.
 	 */
 	readonly establishmentOnly?: boolean;
+	/**
+	 * CESR digest code for this event's SAID and next-key commitment.
+	 * Defaults to SHA-256 (`I`). Any code with a registered implementation
+	 * (see `digestAlgorithms`) is accepted; an unavailable one throws.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateInceptionResult {

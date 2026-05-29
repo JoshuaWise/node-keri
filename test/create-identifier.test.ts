@@ -12,32 +12,45 @@ function fillSeed(byte: number): Uint8Array {
 const SEED_CURRENT = fillSeed(0x10);
 const SEED_NEXT = fillSeed(0x11);
 
-describe('createIdentifier — with supplied keypairs', () => {
+describe('createIdentifier', () => {
 	test('produces a consistent did/aid/event/state bundle', () => {
 		const currentKeyPair = keyPairFromSeed(SEED_CURRENT);
 		const nextKeyPair = keyPairFromSeed(SEED_NEXT);
 
-		const result = createIdentifier({ currentKeyPair, nextKeyPair });
+		const result = createIdentifier({
+			currentPrivateKey: currentKeyPair.privateKey,
+			nextPublicKey: nextKeyPair.publicKey,
+		});
 
 		expect(result.did).toBe(formatDidKeri(result.aid));
 		expect(result.aid).toBe(result.state.aid);
 		expect(result.did).toBe(result.state.did);
-		expect(result.currentKeyPair).toBe(currentKeyPair);
-		expect(result.nextKeyPair).toBe(nextKeyPair);
 		const inception = parseSignedEvent(result.inceptionEvent);
 		expect(inception.event.t).toBe('icp');
 		expect(inception.event.s).toBe('0');
 		expect(result.state.sequenceNumber).toBe(0);
 	});
 
+	test('returns no key material — the caller already holds it', () => {
+		const result = createIdentifier({
+			currentPrivateKey: keyPairFromSeed(SEED_CURRENT).privateKey,
+			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
+		});
+		expect(result).not.toHaveProperty('currentKeyPair');
+		expect(result).not.toHaveProperty('nextKeyPair');
+		expect(Object.keys(result).sort()).toEqual(
+			['aid', 'did', 'inceptionEvent', 'state'].sort()
+		);
+	});
+
 	test('is deterministic for fixed seeds', () => {
 		const a = createIdentifier({
-			currentKeyPair: keyPairFromSeed(SEED_CURRENT),
-			nextKeyPair: keyPairFromSeed(SEED_NEXT),
+			currentPrivateKey: keyPairFromSeed(SEED_CURRENT).privateKey,
+			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
 		});
 		const b = createIdentifier({
-			currentKeyPair: keyPairFromSeed(SEED_CURRENT),
-			nextKeyPair: keyPairFromSeed(SEED_NEXT),
+			currentPrivateKey: keyPairFromSeed(SEED_CURRENT).privateKey,
+			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
 		});
 		expect(b.did).toBe(a.did);
 		expect(b.inceptionEvent).toEqual(a.inceptionEvent);
@@ -45,8 +58,8 @@ describe('createIdentifier — with supplied keypairs', () => {
 
 	test('the inception event verifies as a one-event KEL', () => {
 		const result = createIdentifier({
-			currentKeyPair: keyPairFromSeed(SEED_CURRENT),
-			nextKeyPair: keyPairFromSeed(SEED_NEXT),
+			currentPrivateKey: keyPairFromSeed(SEED_CURRENT).privateKey,
+			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
 		});
 		const verified = verifyKel({
 			aid: result.aid,
@@ -57,30 +70,30 @@ describe('createIdentifier — with supplied keypairs', () => {
 		// Replayed state must match the state returned by the constructor.
 		expect(verified.state).toEqual(result.state);
 	});
-});
 
-describe('createIdentifier — generated keypairs', () => {
-	test('generates fresh keys when none are supplied', () => {
-		const result = createIdentifier();
-		expect(result.currentKeyPair.publicKey.raw).toHaveLength(32);
-		expect(result.nextKeyPair.publicKey.raw).toHaveLength(32);
-		const verified = verifyKel({
-			aid: result.aid,
-			kel: result.inceptionEvent,
+	test('two distinct keypairs mint distinct identifiers', () => {
+		const a = createIdentifier({
+			currentPrivateKey: generateKeyPair().privateKey,
+			nextPublicKey: generateKeyPair().publicKey,
 		});
+		const b = createIdentifier({
+			currentPrivateKey: generateKeyPair().privateKey,
+			nextPublicKey: generateKeyPair().publicKey,
+		});
+		expect(a.did).not.toBe(b.did);
+		const verified = verifyKel({ aid: a.aid, kel: a.inceptionEvent });
 		expect(verified.ok).toBe(true);
-	});
-
-	test('two no-argument calls mint distinct identifiers', () => {
-		expect(createIdentifier().did).not.toBe(createIdentifier().did);
 	});
 });
 
 describe('createIdentifier — rejects bad input', () => {
-	test('throws when current and next keypairs are identical', () => {
+	test('throws when the current and next keys are identical', () => {
 		const keyPair = keyPairFromSeed(SEED_CURRENT);
 		expect(() =>
-			createIdentifier({ currentKeyPair: keyPair, nextKeyPair: keyPair })
+			createIdentifier({
+				currentPrivateKey: keyPair.privateKey,
+				nextPublicKey: keyPair.publicKey,
+			})
 		).toThrow(InvalidArgumentError);
 	});
 
@@ -88,8 +101,8 @@ describe('createIdentifier — rejects bad input', () => {
 		const seed = fillSeed(0x55);
 		expect(() =>
 			createIdentifier({
-				currentKeyPair: keyPairFromSeed(seed),
-				nextKeyPair: keyPairFromSeed(seed),
+				currentPrivateKey: keyPairFromSeed(seed).privateKey,
+				nextPublicKey: keyPairFromSeed(seed).publicKey,
 			})
 		).toThrow(/distinct keys/);
 	});
@@ -99,11 +112,29 @@ describe('createIdentifier — rejects bad input', () => {
 		expect(() => createIdentifier('nope' as never)).toThrow(InvalidArgumentError);
 	});
 
-	test('rejects a malformed keypair', () => {
+	test('throws when required keys are missing', () => {
+		expect(() => createIdentifier({} as never)).toThrow(InvalidArgumentError);
 		expect(() =>
 			createIdentifier({
-				currentKeyPair: {} as never,
-				nextKeyPair: generateKeyPair(),
+				currentPrivateKey: generateKeyPair().privateKey,
+			} as never)
+		).toThrow(InvalidArgumentError);
+	});
+
+	test('rejects a malformed current private key', () => {
+		expect(() =>
+			createIdentifier({
+				currentPrivateKey: {} as never,
+				nextPublicKey: generateKeyPair().publicKey,
+			})
+		).toThrow(InvalidArgumentError);
+	});
+
+	test('rejects a malformed next public key', () => {
+		expect(() =>
+			createIdentifier({
+				currentPrivateKey: generateKeyPair().privateKey,
+				nextPublicKey: {} as never,
 			})
 		).toThrow(InvalidArgumentError);
 	});

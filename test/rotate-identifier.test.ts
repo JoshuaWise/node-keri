@@ -15,7 +15,14 @@ const K2 = () => keyPairFromSeed(fillSeed(0x22));
 const K3 = () => keyPairFromSeed(fillSeed(0x23));
 
 function freshIdentifier() {
-	return createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+	const currentKeyPair = K0();
+	const nextKeyPair = K1();
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
+	});
+	// Thread the keypairs through so callers can rotate to the pre-rotated key.
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 describe('rotateIdentifier', () => {
@@ -24,7 +31,7 @@ describe('rotateIdentifier', () => {
 		const rotation = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 
 		const rotEvent = parseSignedEvent(rotation.rotationEvent).event;
@@ -39,7 +46,7 @@ describe('rotateIdentifier', () => {
 		const rotation = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		const verified = verifyKel({
 			aid: id.aid,
@@ -55,12 +62,12 @@ describe('rotateIdentifier', () => {
 		const rot1 = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		const rot2 = rotateIdentifier({
 			state: rot1.state,
 			currentPrivateKey: K2().privateKey,
-			nextKeyPair: K3(),
+			nextPublicKey: K3().publicKey,
 		});
 		expect(parseSignedEvent(rot2.rotationEvent).event.s).toBe('2');
 		const verified = verifyKel({
@@ -79,18 +86,18 @@ describe('rotateIdentifier — rejects bad input', () => {
 				state: id.state,
 				// K2, not the pre-rotated K1 — does not match `n[0]`.
 				currentPrivateKey: K2().privateKey,
-				nextKeyPair: K3(),
+				nextPublicKey: K3().publicKey,
 			})
 		).toThrow(InvalidArgumentError);
 	});
 
-	test('throws when the rotated-to key equals nextKeyPair', () => {
+	test('throws when the rotated-to key equals nextPublicKey', () => {
 		const id = freshIdentifier();
 		expect(() =>
 			rotateIdentifier({
 				state: id.state,
 				currentPrivateKey: id.nextKeyPair.privateKey,
-				nextKeyPair: K1(),
+				nextPublicKey: K1().publicKey,
 			})
 		).toThrow(/distinct keys/);
 	});
@@ -99,7 +106,7 @@ describe('rotateIdentifier — rejects bad input', () => {
 		expect(() => rotateIdentifier(null as never)).toThrow(InvalidArgumentError);
 	});
 
-	test('throws when nextKeyPair is missing', () => {
+	test('throws when nextPublicKey is missing', () => {
 		const id = freshIdentifier();
 		expect(() =>
 			rotateIdentifier({
@@ -109,13 +116,24 @@ describe('rotateIdentifier — rejects bad input', () => {
 		).toThrow(InvalidArgumentError);
 	});
 
+	test('throws when nextPublicKey is not a public key', () => {
+		const id = freshIdentifier();
+		expect(() =>
+			rotateIdentifier({
+				state: id.state,
+				currentPrivateKey: id.nextKeyPair.privateKey,
+				nextPublicKey: {} as never,
+			})
+		).toThrow(InvalidArgumentError);
+	});
+
 	test('throws when currentPrivateKey is not a private key', () => {
 		const id = freshIdentifier();
 		expect(() =>
 			rotateIdentifier({
 				state: id.state,
 				currentPrivateKey: id.nextKeyPair.publicKey as never,
-				nextKeyPair: K2(),
+				nextPublicKey: K2().publicKey,
 			})
 		).toThrow(InvalidArgumentError);
 	});

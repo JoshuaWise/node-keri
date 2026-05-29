@@ -112,11 +112,14 @@ const ANCHOR = { kind: 'announce', ref: 'interop' };
 function buildNodeKeriKel() {
 	const [k0, k1, k2, k3] = SEEDS.map(seedKeyPair);
 
-	const icp = createIdentifier({ currentKeyPair: k0, nextKeyPair: k1 });
+	const icp = createIdentifier({
+		currentPrivateKey: k0!.privateKey,
+		nextPublicKey: k1!.publicKey,
+	});
 	const rot1 = rotateIdentifier({
 		state: icp.state,
 		currentPrivateKey: k1!.privateKey,
-		nextKeyPair: k2!,
+		nextPublicKey: k2!.publicKey,
 	});
 	const ixn = interactIdentifier({
 		state: rot1.state,
@@ -126,7 +129,7 @@ function buildNodeKeriKel() {
 	const rot2 = rotateIdentifier({
 		state: ixn.state,
 		currentPrivateKey: k2!.privateKey,
-		nextKeyPair: k3!,
+		nextPublicKey: k3!.publicKey,
 	});
 
 	const kel =
@@ -243,8 +246,8 @@ describeInterop('keripy interop: signed messages', () => {
 		// node-keri's identifier whose current (and only) key is seed 0 — the
 		// same key keripy signs with below.
 		const id = createIdentifier({
-			currentKeyPair: seedKeyPair(0),
-			nextKeyPair: seedKeyPair(32),
+			currentPrivateKey: seedKeyPair(0).privateKey,
+			nextPublicKey: seedKeyPair(32).publicKey,
 		});
 
 		const signed = keripySign(0, message);
@@ -264,8 +267,8 @@ describeInterop('keripy interop: signed messages', () => {
 
 	test('node-keri rejects a keripy signature over a different payload', () => {
 		const id = createIdentifier({
-			currentKeyPair: seedKeyPair(0),
-			nextKeyPair: seedKeyPair(32),
+			currentPrivateKey: seedKeyPair(0).privateKey,
+			nextPublicKey: seedKeyPair(32).publicKey,
 		});
 		const signed = keripySign(0, message);
 
@@ -447,7 +450,10 @@ const DEACT_SEEDS = [0, 32];
  */
 function buildNodeKeriDeactivatedKel() {
 	const [k0, k1] = DEACT_SEEDS.map(seedKeyPair);
-	const id = createIdentifier({ currentKeyPair: k0!, nextKeyPair: k1! });
+	const id = createIdentifier({
+		currentPrivateKey: k0!.privateKey,
+		nextPublicKey: k1!.publicKey,
+	});
 	const deact = deactivateIdentifier({
 		state: id.state,
 		currentPrivateKey: k1!.privateKey,

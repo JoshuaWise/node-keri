@@ -2,21 +2,24 @@
  * `createIdentifier` — the high-level entry point for minting a new
  * transferable `did:keri` identifier.
  *
- * It is a thin, ergonomic wrapper over `createInceptionEvent`: it supplies
- * fresh Ed25519 keypairs when the caller does not, and returns everything a
- * caller needs to keep — the DID, both keypairs, the signed inception event,
- * and the replay-derived initial state — in one object.
+ * It is a thin, ergonomic wrapper over `createInceptionEvent`: the caller
+ * supplies the minimal key material the inception event actually consumes —
+ * the current signing key's *private* half (its public half is derived) and
+ * the pre-rotation key's *public* half (only its digest is committed) — and
+ * gets back the DID, the signed inception event, and the replay-derived
+ * initial state.
  *
- * The caller is responsible for storing the returned key material. The
- * library holds no state of its own.
+ * The caller already holds the key material it passed in, so this returns
+ * none of its own. Keep the current private key to sign with and the
+ * pre-rotation private key to rotate to later. The library holds no state.
  */
 
 import { bytesEqual } from '../bytes/compare';
 import {
-	KeriKeyPair,
-	assertPrivateKey,
+	KeriPrivateKey,
+	KeriPublicKey,
 	assertPublicKey,
-	generateKeyPair,
+	keyPairFromPrivateKey,
 } from '../crypto/keypair';
 import { Aid, DidKeri } from '../did/did-keri';
 import { createInceptionEvent } from '../event/inception';
@@ -24,17 +27,17 @@ import { TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
 export interface CreateIdentifierInput {
-	/** Current signing keypair. A fresh one is generated when omitted. */
-	readonly currentKeyPair?: KeriKeyPair;
-	/** Pre-rotation keypair. A fresh one is generated when omitted. */
-	readonly nextKeyPair?: KeriKeyPair;
 	/**
-	 * CESR digest code for the inception event's SAID, AID, and next-key
-	 * commitment. Defaults to SHA-256 (`I`). Pass another code — see
-	 * `DIGEST_CODES` and `digestAlgorithms` — to mint an identifier under a
-	 * different hash; requesting an unavailable algorithm throws.
+	 * Private half of the current signing key. Required — its public half is
+	 * derived here and disclosed as `k[0]`, and it signs the inception event.
 	 */
-	readonly digestCode?: string;
+	readonly currentPrivateKey: KeriPrivateKey;
+	/**
+	 * Public half of the pre-rotation key. Required — only its digest is
+	 * committed now (`n[0]`); the caller keeps the matching private half to
+	 * rotate to later.
+	 */
+	readonly nextPublicKey: KeriPublicKey;
 	/**
 	 * Mint an *establishment-only* identifier — inception sets the `EO`
 	 * configuration trait and the resulting KEL will accept only `icp` and
@@ -43,15 +46,18 @@ export interface CreateIdentifierInput {
 	 * to `false`.
 	 */
 	readonly establishmentOnly?: boolean;
+	/**
+	 * CESR digest code for the inception event's SAID, AID, and next-key
+	 * commitment. Defaults to SHA-256 (`I`). Pass another code — see
+	 * `DIGEST_CODES` and `digestAlgorithms` — to mint an identifier under a
+	 * different hash; requesting an unavailable algorithm throws.
+	 */
+	readonly digestCode?: string;
 }
 
 export interface CreateIdentifierResult {
 	readonly did: DidKeri;
 	readonly aid: Aid;
-	/** The current signing keypair — supplied or freshly generated. */
-	readonly currentKeyPair: KeriKeyPair;
-	/** The pre-rotation keypair — its private half is needed to rotate later. */
-	readonly nextKeyPair: KeriKeyPair;
 	/** The signed inception event, as a CESR stream frame — the KEL's wire form. */
 	readonly inceptionEvent: string;
 	/** Replay-derived initial state (sequence 0) — always transferable. */
@@ -67,46 +73,39 @@ export interface CreateIdentifierResult {
  * a parameter that silently does nothing, this profile omits it — anchor
  * application data with an interaction event instead.
  */
-export function createIdentifier(
-	input: CreateIdentifierInput = {}
-): CreateIdentifierResult {
+export function createIdentifier(input: CreateIdentifierInput): CreateIdentifierResult {
 	if (input === null || typeof input !== 'object') {
 		throw new InvalidArgumentError('createIdentifier requires an input object');
 	}
 
-	const currentKeyPair = input.currentKeyPair ?? generateKeyPair();
-	const nextKeyPair = input.nextKeyPair ?? generateKeyPair();
-
-	// Validate keypair shape before touching `.publicKey.raw` below, so a
-	// malformed keypair surfaces as InvalidArgumentError rather than a
-	// TypeError. `createInceptionEvent` re-asserts, but only after this point.
-	assertPublicKey(currentKeyPair?.publicKey);
-	assertPrivateKey(currentKeyPair?.privateKey);
-	assertPublicKey(nextKeyPair?.publicKey);
-	assertPrivateKey(nextKeyPair?.privateKey);
+	// Derive the current keypair from its private half. `keyPairFromPrivateKey`
+	// asserts the argument is a KeriPrivateKey, so a missing or malformed
+	// current key surfaces as InvalidArgumentError here.
+	const currentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
+	// Assert before touching `.raw` below so a malformed next key likewise
+	// surfaces as InvalidArgumentError rather than a TypeError.
+	assertPublicKey(input.nextPublicKey);
 
 	// Pre-rotation is only meaningful if the next key is independent of the
 	// current one: reusing the same key means the next-key digest reveals the
 	// active signing key and a rotation commits to nothing new. The event
 	// constructors do not enforce this, so the ergonomic API does.
-	if (bytesEqual(currentKeyPair.publicKey.raw, nextKeyPair.publicKey.raw)) {
+	if (bytesEqual(currentKeyPair.publicKey.raw, input.nextPublicKey.raw)) {
 		throw new InvalidArgumentError(
-			'currentKeyPair and nextKeyPair must be distinct keys'
+			'currentPrivateKey and nextPublicKey must be distinct keys'
 		);
 	}
 
 	const { event, state } = createInceptionEvent({
 		currentKeyPair,
-		nextPublicKey: nextKeyPair.publicKey,
-		digestCode: input.digestCode,
+		nextPublicKey: input.nextPublicKey,
 		establishmentOnly: input.establishmentOnly,
+		digestCode: input.digestCode,
 	});
 
 	return {
 		did: state.did,
 		aid: state.aid,
-		currentKeyPair,
-		nextKeyPair,
 		inceptionEvent: event,
 		state,
 	};

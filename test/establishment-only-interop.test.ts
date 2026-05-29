@@ -66,19 +66,19 @@ function buildNodeKeriEoKel() {
 	const [k0, k1, k2, k3] = SEEDS.map(seedKeyPair);
 
 	const icp = createIdentifier({
-		currentKeyPair: k0!,
-		nextKeyPair: k1!,
+		currentPrivateKey: k0!.privateKey,
+		nextPublicKey: k1!.publicKey,
 		establishmentOnly: true,
 	});
 	const rot1 = rotateIdentifier({
 		state: icp.state,
 		currentPrivateKey: k1!.privateKey,
-		nextKeyPair: k2!,
+		nextPublicKey: k2!.publicKey,
 	});
 	const rot2 = rotateIdentifier({
 		state: rot1.state,
 		currentPrivateKey: k2!.privateKey,
-		nextKeyPair: k3!,
+		nextPublicKey: k3!.publicKey,
 	});
 
 	const kel = icp.inceptionEvent + rot1.rotationEvent + rot2.rotationEvent;

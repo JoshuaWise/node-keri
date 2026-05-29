@@ -20,7 +20,14 @@ const K2 = () => keyPairFromSeed(fillSeed(0x32));
 const PAYLOAD = utf8Encode('agent-to-agent message body');
 
 function newIdentifier() {
-	return createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+	const currentKeyPair = K0();
+	const nextKeyPair = K1();
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
+	});
+	// Thread the keypairs through so callers can sign with / rotate to them.
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 describe('verifySignatureWithDid — accepts a valid signature', () => {
@@ -44,7 +51,7 @@ describe('verifySignatureWithDid — accepts a valid signature', () => {
 		const rotation = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		const kel = id.inceptionEvent + rotation.rotationEvent;
 
@@ -119,8 +126,8 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 	test('false when the KEL belongs to a different identifier', () => {
 		const idA = newIdentifier();
 		const idB = createIdentifier({
-			currentKeyPair: K1(),
-			nextKeyPair: K2(),
+			currentPrivateKey: K1().privateKey,
+			nextPublicKey: K2().publicKey,
 		});
 		const signature = encodeSignatureEd25519(
 			sign(idA.currentKeyPair.privateKey, PAYLOAD)

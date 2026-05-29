@@ -131,9 +131,10 @@ describe('controller-signature counter', () => {
 });
 
 describe('event-frame codec', () => {
+	const k1 = keyPairFromSeed(fillSeed(0x12));
 	const id = createIdentifier({
-		currentKeyPair: keyPairFromSeed(fillSeed(0x11)),
-		nextKeyPair: keyPairFromSeed(fillSeed(0x12)),
+		currentPrivateKey: keyPairFromSeed(fillSeed(0x11)).privateKey,
+		nextPublicKey: k1.publicKey,
 	});
 
 	test('a constructor frame round-trips through parse and re-encode', () => {
@@ -152,8 +153,8 @@ describe('event-frame codec', () => {
 	test('parseKel splits a concatenated multi-event stream', () => {
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: keyPairFromSeed(fillSeed(0x13)),
+			currentPrivateKey: k1.privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x13)).publicKey,
 		});
 		const stream = id.inceptionEvent + rot.rotationEvent;
 		const events = parseKel(stream);
@@ -187,8 +188,8 @@ describe('event-frame codec', () => {
 
 describe('encodeEventFrame — robust serialization', () => {
 	const id = createIdentifier({
-		currentKeyPair: keyPairFromSeed(fillSeed(0x21)),
-		nextKeyPair: keyPairFromSeed(fillSeed(0x22)),
+		currentPrivateKey: keyPairFromSeed(fillSeed(0x21)).privateKey,
+		nextPublicKey: keyPairFromSeed(fillSeed(0x22)).publicKey,
 	});
 	const signed = parseSignedEvent(id.inceptionEvent);
 

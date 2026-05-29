@@ -39,7 +39,14 @@ const K3 = () => keyPairFromSeed(fillSeed(0x53));
 
 /** A fresh transferable identifier whose current/next keys are K0/K1. */
 function freshIdentifier() {
-	return createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+	const currentKeyPair = K0();
+	const nextKeyPair = K1();
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
+	});
+	// Thread the keypairs through so callers can sign with / rotate to them.
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 describe('deactivateIdentifier — constructs the deactivation event', () => {
@@ -127,7 +134,7 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 		const rot = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		const deact = deactivateIdentifier({
 			state: rot.state,
@@ -267,7 +274,7 @@ describe('deactivation closes the lifecycle API', () => {
 			rotateIdentifier({
 				state: deact.state,
 				currentPrivateKey: K2().privateKey,
-				nextKeyPair: K3(),
+				nextPublicKey: K3().publicKey,
 			})
 		).toThrow(/deactivated identifier cannot be rotated/);
 	});

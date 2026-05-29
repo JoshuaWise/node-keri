@@ -37,11 +37,15 @@ const K3 = () => keyPairFromSeed(fillSeed(0x63));
 
 /** A fresh establishment-only identifier whose current/next keys are K0/K1. */
 function freshEoIdentifier() {
-	return createIdentifier({
-		currentKeyPair: K0(),
-		nextKeyPair: K1(),
+	const currentKeyPair = K0();
+	const nextKeyPair = K1();
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
 		establishmentOnly: true,
 	});
+	// Thread the keypairs through so callers can sign with / rotate to them.
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 describe('createIdentifier — establishment-only', () => {
@@ -62,7 +66,10 @@ describe('createIdentifier — establishment-only', () => {
 	});
 
 	test('a non-EO identifier has no `establishmentOnly` flag and an empty `c`', () => {
-		const id = createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+		const id = createIdentifier({
+			currentPrivateKey: K0().privateKey,
+			nextPublicKey: K1().publicKey,
+		});
 		expect(id.state.establishmentOnly).toBeUndefined();
 		const event = parseSignedEvent(id.inceptionEvent).event as unknown as {
 			c: readonly unknown[];
@@ -141,7 +148,7 @@ describe('interactIdentifier — refuses an EO state', () => {
 		const rot = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		expect(rot.state.establishmentOnly).toBe(true);
 		expect(() =>
@@ -160,7 +167,7 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		const rot = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		expect(rot.state.establishmentOnly).toBe(true);
 	});
@@ -172,12 +179,12 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		const rot1 = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: k2,
+			nextPublicKey: k2.publicKey,
 		});
 		const rot2 = rotateIdentifier({
 			state: rot1.state,
 			currentPrivateKey: k2.privateKey,
-			nextKeyPair: k3,
+			nextPublicKey: k3.publicKey,
 		});
 
 		const verified = verifyKel({
@@ -222,8 +229,8 @@ describe('verifyKel — rejects out-of-band ixn appended to an EO KEL', () => {
 		// `ixn` is byte-compatible — apart from its `i`, which we rewrite — and
 		// the only reason replay rejects it is the EO trait on the prior state.
 		const nonEo = createIdentifier({
-			currentKeyPair: K0(),
-			nextKeyPair: K1(),
+			currentPrivateKey: K0().privateKey,
+			nextPublicKey: K1().publicKey,
 		});
 		const ixn = createInteractionEvent({
 			state: nonEo.state,
@@ -260,7 +267,10 @@ describe('verifyKel — rejects out-of-band ixn appended to an EO KEL', () => {
 
 describe('verifyKel — configuration traits boundary', () => {
 	test('rejects an inception whose `c` carries an unknown trait', () => {
-		const id = createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+		const id = createIdentifier({
+			currentPrivateKey: K0().privateKey,
+			nextPublicKey: K1().publicKey,
+		});
 		const parsed = parseSignedEvent(id.inceptionEvent);
 		// Splice in `c: ['DND']` — a real KERI trait, but one outside this profile.
 		const tampered = reframe(
@@ -274,7 +284,10 @@ describe('verifyKel — configuration traits boundary', () => {
 	});
 
 	test('rejects an inception whose `c` carries `EO` plus another trait', () => {
-		const id = createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+		const id = createIdentifier({
+			currentPrivateKey: K0().privateKey,
+			nextPublicKey: K1().publicKey,
+		});
 		const parsed = parseSignedEvent(id.inceptionEvent);
 		const tampered = reframe(
 			{
@@ -290,7 +303,10 @@ describe('verifyKel — configuration traits boundary', () => {
 	});
 
 	test('rejects an inception whose `c` is not an array', () => {
-		const id = createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+		const id = createIdentifier({
+			currentPrivateKey: K0().privateKey,
+			nextPublicKey: K1().publicKey,
+		});
 		const parsed = parseSignedEvent(id.inceptionEvent);
 		const tampered = reframe(
 			{ ...(parsed.event as unknown as Record<string, unknown>), c: 'EO' },

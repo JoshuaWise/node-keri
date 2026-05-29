@@ -31,10 +31,13 @@ function fillSeed(byte: number): Uint8Array {
 
 /** A valid identifier reused across cases that need real material. */
 function sample() {
-	return createIdentifier({
-		currentKeyPair: keyPairFromSeed(fillSeed(0x80)),
-		nextKeyPair: keyPairFromSeed(fillSeed(0x81)),
+	const currentKeyPair = keyPairFromSeed(fillSeed(0x80));
+	const nextKeyPair = keyPairFromSeed(fillSeed(0x81));
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
 	});
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 /** The parsed (in-memory) inception event of a `sample()`-style identifier. */

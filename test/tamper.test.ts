@@ -55,7 +55,10 @@ function buildKel() {
 	const k2 = keyPairFromSeed(fillSeed(0x62));
 	const k3 = keyPairFromSeed(fillSeed(0x63));
 
-	const id = createIdentifier({ currentKeyPair: k0, nextKeyPair: k1 });
+	const id = createIdentifier({
+		currentPrivateKey: k0.privateKey,
+		nextPublicKey: k1.publicKey,
+	});
 	const ixn1 = createInteractionEvent({
 		state: id.state,
 		currentKeyPair: k0,
@@ -64,7 +67,7 @@ function buildKel() {
 	const rot1 = rotateIdentifier({
 		state: ixn1.state,
 		currentPrivateKey: k1.privateKey,
-		nextKeyPair: k2,
+		nextPublicKey: k2.publicKey,
 	});
 	// After rot1 the authoritative key is k1 (the key it revealed), so the
 	// interaction that follows must be signed by k1, not the next key.
@@ -76,7 +79,7 @@ function buildKel() {
 	const rot2 = rotateIdentifier({
 		state: ixn2.state,
 		currentPrivateKey: k2.privateKey,
-		nextKeyPair: k3,
+		nextPublicKey: k3.publicKey,
 	});
 
 	// The constructors return wire-form frames; parse them back so each event
@@ -341,8 +344,8 @@ describe('tamper — structural mutation of the log', () => {
 	test("appending another identifier's inception event fails", () => {
 		const { aid, events } = buildKel();
 		const intruder = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x70)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x71)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x70)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x71)).publicKey,
 		});
 		// A second `icp` past sequence 0 is not a valid continuation event.
 		expectRejected(
@@ -355,8 +358,8 @@ describe('tamper — structural mutation of the log', () => {
 	test('verifying the KEL against the wrong AID fails', () => {
 		const { events } = buildKel();
 		const other = createIdentifier({
-			currentKeyPair: keyPairFromSeed(fillSeed(0x72)),
-			nextKeyPair: keyPairFromSeed(fillSeed(0x73)),
+			currentPrivateKey: keyPairFromSeed(fillSeed(0x72)).privateKey,
+			nextPublicKey: keyPairFromSeed(fillSeed(0x73)).publicKey,
 		});
 		expectRejected(other.aid, frameKel(events), 'INVALID_DID');
 	});

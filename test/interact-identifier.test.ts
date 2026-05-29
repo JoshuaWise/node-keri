@@ -15,7 +15,14 @@ const K1 = () => keyPairFromSeed(fillSeed(0x41));
 const K2 = () => keyPairFromSeed(fillSeed(0x42));
 
 function freshIdentifier() {
-	return createIdentifier({ currentKeyPair: K0(), nextKeyPair: K1() });
+	const currentKeyPair = K0();
+	const nextKeyPair = K1();
+	const result = createIdentifier({
+		currentPrivateKey: currentKeyPair.privateKey,
+		nextPublicKey: nextKeyPair.publicKey,
+	});
+	// Thread the keypairs through so callers can sign with / rotate to them.
+	return { ...result, currentKeyPair, nextKeyPair };
 }
 
 describe('interactIdentifier', () => {
@@ -69,7 +76,7 @@ describe('interactIdentifier', () => {
 		const rot = rotateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
-			nextKeyPair: K2(),
+			nextPublicKey: K2().publicKey,
 		});
 		// After rotation the authoritative key is the revealed K1.
 		const ixn = interactIdentifier({
