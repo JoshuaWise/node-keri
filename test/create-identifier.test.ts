@@ -1,5 +1,5 @@
 import { createIdentifier } from '../src/api/create-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { generateKeyPair, keyPairFromSeed } from '../src/crypto/keypair';
 import { formatDidKeri } from '../src/did/did-keri';
 import { parseSignedEvent } from '../src/event/stream';
@@ -25,7 +25,7 @@ describe('createIdentifier', () => {
 		expect(result.did).toBe(formatDidKeri(result.aid));
 		expect(result.aid).toBe(result.state.aid);
 		expect(result.did).toBe(result.state.did);
-		const inception = parseSignedEvent(result.inceptionEvent);
+		const inception = parseSignedEvent(result.event);
 		expect(inception.event.t).toBe('icp');
 		expect(inception.event.s).toBe('0');
 		expect(result.state.lastSequenceNumber).toBe(0);
@@ -39,7 +39,7 @@ describe('createIdentifier', () => {
 		expect(result).not.toHaveProperty('currentKeyPair');
 		expect(result).not.toHaveProperty('nextKeyPair');
 		expect(Object.keys(result).sort()).toEqual(
-			['aid', 'did', 'inceptionEvent', 'state'].sort()
+			['aid', 'did', 'event', 'state'].sort()
 		);
 	});
 
@@ -53,7 +53,7 @@ describe('createIdentifier', () => {
 			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
 		});
 		expect(b.did).toBe(a.did);
-		expect(b.inceptionEvent).toEqual(a.inceptionEvent);
+		expect(b.event).toEqual(a.event);
 	});
 
 	test('the inception event verifies as a one-event KEL', () => {
@@ -61,9 +61,9 @@ describe('createIdentifier', () => {
 			currentPrivateKey: keyPairFromSeed(SEED_CURRENT).privateKey,
 			nextPublicKey: keyPairFromSeed(SEED_NEXT).publicKey,
 		});
-		const verified = verifyKel({
+		const verified = verifyIdentifier({
 			aid: result.aid,
-			kel: result.inceptionEvent,
+			kel: result.event,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -81,7 +81,7 @@ describe('createIdentifier', () => {
 			nextPublicKey: generateKeyPair().publicKey,
 		});
 		expect(a.did).not.toBe(b.did);
-		const verified = verifyKel({ aid: a.aid, kel: a.inceptionEvent });
+		const verified = verifyIdentifier({ aid: a.aid, kel: a.event });
 		expect(verified.ok).toBe(true);
 	});
 });

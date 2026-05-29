@@ -3,7 +3,8 @@
 // Three layers are exported: the foundation (bytes, crypto, CESR, canonical
 // JSON), the event lifecycle building blocks plus the KEL replay verifier,
 // and the high-level identifier API — `createIdentifier`, `rotateIdentifier`,
-// `interactIdentifier`, `verifyKel`, the `did:keri` surface, and
+// `interactOnIdentifier`, `verifyIdentifier`, the `did:keri` surface
+// (`verifyDid`, `createDidDocument`), and `verifySignature` /
 // `verifySignatureWithDid` for signed message verification.
 //
 // See PROFILE.md for the conformance boundary and SECURITY.md for the trust
@@ -154,17 +155,23 @@ export type {
 	DeactivateIdentifierResult,
 } from './api/deactivate-identifier';
 
-export { interactIdentifier } from './api/interact-identifier';
+export { interactOnIdentifier } from './api/interact-on-identifier';
 export type {
-	InteractIdentifierInput,
-	InteractIdentifierResult,
-} from './api/interact-identifier';
+	InteractOnIdentifierInput,
+	InteractOnIdentifierResult,
+} from './api/interact-on-identifier';
 
-export { verifyKel } from './api/verify-kel';
-export type { VerifyKelInput, VerifyKelResult } from './api/verify-kel';
+export { verifyIdentifier } from './api/verify-identifier';
+export type {
+	VerifyIdentifierInput,
+	VerifyIdentifierResult,
+} from './api/verify-identifier';
 
-export { verifySignatureWithDid } from './api/verify-signature-with-did';
-export type { VerifySignatureWithDidInput } from './api/verify-signature-with-did';
+export { verifySignature } from './api/verify-signature';
+export type { VerifySignatureInput } from './api/verify-signature';
+
+export { verifySignatureWithDid } from './did/verify-signature-with-did';
+export type { VerifySignatureWithDidInput } from './did/verify-signature-with-did';
 
 export { createDidDocument } from './did/document';
 export type {
@@ -175,5 +182,5 @@ export type {
 	DidServiceEndpoint,
 } from './did/document';
 
-export { resolveDid } from './did/resolver';
-export type { ResolveDidInput, DidResolutionResult } from './did/resolver';
+export { verifyDid } from './did/verify-did';
+export type { VerifyDidInput, VerifyDidResult } from './did/verify-did';

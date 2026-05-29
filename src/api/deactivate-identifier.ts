@@ -4,7 +4,7 @@
  *
  * Per the `did:keri` method, deactivation is a rotation to zero forward
  * (next) controlling keys: it terminates the ability to recover the identifier
- * and marks it abandoned. After it, the KEL is closed — `verifyKel` rejects
+ * and marks it abandoned. After it, the KEL is closed — `verifyIdentifier` rejects
  * any further event, and `verifySignatureWithDid` no longer trusts the DID.
  *
  * It wraps `createDeactivationEvent`. Like `rotateIdentifier`, it takes the
@@ -39,7 +39,7 @@ export interface DeactivateIdentifierInput {
 
 export interface DeactivateIdentifierResult {
 	/** The signed deactivation event, as a CESR stream frame (the wire form). */
-	readonly deactivationEvent: string;
+	readonly event: string;
 	/** Replay-equivalent state after the deactivation — always deactivated. */
 	readonly state: DeactivatedKeriState;
 }
@@ -47,8 +47,8 @@ export interface DeactivateIdentifierResult {
 /**
  * Permanently deactivate an identifier by rotating to zero next keys.
  *
- * The returned `deactivationEvent` is the final frame of the identifier's KEL;
- * append it as the last event. The returned `state` has `deactivated === true`
+ * The returned `event` is the final frame of the identifier's KEL; append it
+ * as the last event. The returned `state` has `deactivated === true`
  * and `transferable === false` — it cannot be rotated, interacted with, or
  * deactivated again.
  */
@@ -70,5 +70,5 @@ export function deactivateIdentifier(
 		digestCode: input.digestCode,
 	});
 
-	return { deactivationEvent: event, state };
+	return { event, state };
 }

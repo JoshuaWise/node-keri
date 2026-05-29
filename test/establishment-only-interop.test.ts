@@ -22,7 +22,7 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { encodePublicKeyEd25519 } from '../src/cesr/encode';
 import { parseDidKeri } from '../src/did/did-keri';
@@ -81,7 +81,7 @@ function buildNodeKeriEoKel() {
 		nextPublicKey: k3!.publicKey,
 	});
 
-	const kel = icp.inceptionEvent + rot1.rotationEvent + rot2.rotationEvent;
+	const kel = icp.event + rot1.event + rot2.event;
 	return { did: icp.did, aid: icp.aid, kel, finalState: rot2.state };
 }
 
@@ -125,7 +125,7 @@ describeInterop('keripy interop: establishment-only KELs', () => {
 		const parsed = parseDidKeri(generated.did);
 		expect(parsed.aid).toBe(generated.aid);
 
-		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		const result = verifyIdentifier({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.lastSequenceNumber).toBe(2);
@@ -163,7 +163,7 @@ describeInterop('keripy interop: establishment-only enforcement', () => {
 		expect(inception.c).toEqual(['EO']);
 		expect((events[1]!.event as unknown as { t: string }).t).toBe('ixn');
 
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: generated.aid as unknown as Aid,
 			kel: generated.kel,
 		});

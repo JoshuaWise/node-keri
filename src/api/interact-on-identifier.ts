@@ -1,12 +1,12 @@
 /**
- * `interactIdentifier` — the high-level entry point for anchoring data to an
+ * `interactOnIdentifier` — the high-level entry point for anchoring data to an
  * identifier with an interaction event.
  *
  * It wraps `createInteractionEvent`. Like `rotateIdentifier`, it accepts the
  * bare private key of the currently authoritative signing key and derives the
  * public half itself — so the high-level API is uniform: every wrapper takes
- * a `currentPrivateKey` and returns its event under a `*Event`-named field,
- * never a full keypair and never the generic `signedEvent`.
+ * a `currentPrivateKey` and returns its signed event as the wire-form `event`
+ * string, never a full keypair.
  */
 
 import { KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
@@ -14,7 +14,7 @@ import { createInteractionEvent } from '../event/interaction';
 import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 
-export interface InteractIdentifierInput {
+export interface InteractOnIdentifierInput {
 	/** Trusted state from the prior event — output of a create/rotate/interact. */
 	readonly state: KeriState;
 	/**
@@ -31,19 +31,19 @@ export interface InteractIdentifierInput {
 	readonly digestCode?: string;
 }
 
-export interface InteractIdentifierResult {
+export interface InteractOnIdentifierResult {
 	/** The signed interaction event, as a CESR stream frame (the wire form). */
-	readonly interactionEvent: string;
+	readonly event: string;
 	/** Replay-equivalent state after applying the interaction. */
 	readonly state: TransferableKeriState;
 }
 
 /** Anchor data to an identifier with an interaction event. */
-export function interactIdentifier(
-	input: InteractIdentifierInput
-): InteractIdentifierResult {
+export function interactOnIdentifier(
+	input: InteractOnIdentifierInput
+): InteractOnIdentifierResult {
 	if (input === null || typeof input !== 'object') {
-		throw new InvalidArgumentError('interactIdentifier requires an input object');
+		throw new InvalidArgumentError('interactOnIdentifier requires an input object');
 	}
 
 	// `keyPairFromPrivateKey` asserts the argument is a KeriPrivateKey; the
@@ -58,5 +58,5 @@ export function interactIdentifier(
 		digestCode: input.digestCode,
 	});
 
-	return { interactionEvent: event, state };
+	return { event, state };
 }

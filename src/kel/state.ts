@@ -3,7 +3,7 @@
  *
  * `KeriState` summarizes everything a verifier needs to reason about the
  * latest authoritative key material for a given AID. It is *not* a generic
- * "user-supplied" object: only `verifyKel` (Milestone 4) and the event
+ * "user-supplied" object: only `verifyIdentifier` (Milestone 4) and the event
  * constructors in this milestone may produce one. Functions that consume a
  * state should treat it as trusted within the calling process and do not
  * re-validate signatures against it.

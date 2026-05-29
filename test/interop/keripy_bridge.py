@@ -8,7 +8,7 @@ It uses the reference KERI implementation (keripy, the `keri` PyPI package) to:
 
   * `gen-kel`              - build a KEL (icp, rot, ixn, rot) with keripy and
                              emit it as a CESR stream (the wire form
-                             node-keri's `verifyKel` reads).
+                             node-keri's `verifyIdentifier` reads).
   * `gen-nt-kel`           - build a single-event KEL for a *non-transferable*
                              AID with keripy and emit it as a CESR stream.
                              node-keri verifies these (it does not generate
@@ -134,7 +134,7 @@ def _cmd_gen_kel(req):
 
     The KEL is emitted as a CESR stream — each event's JSON followed by a `-A`
     counter and the controller's indexed signature ("Siger", code `A`) — which
-    is exactly the wire form node-keri's `verifyKel` consumes.
+    is exactly the wire form node-keri's `verifyIdentifier` consumes.
     """
     seeds = req.get("seeds", [0, 32, 64, 96])
     if len(seeds) != 4:

@@ -10,10 +10,10 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { interactIdentifier } from '../src/api/interact-identifier';
+import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { deactivateIdentifier } from '../src/api/deactivate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
-import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
+import { verifyIdentifier } from '../src/api/verify-identifier';
+import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { utf8Encode } from '../src/bytes/utf8';
 import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
@@ -23,7 +23,7 @@ import { createInteractionEvent } from '../src/event/interaction';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { parseSignedEvent } from '../src/event/stream';
 import { createDidDocument } from '../src/did/document';
-import { resolveDid } from '../src/did/resolver';
+import { verifyDid } from '../src/did/verify-did';
 import { KeriState, TransferableKeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { reframe } from './kel-stream';
@@ -57,8 +57,10 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
 
-		const event = parseSignedEvent(deact.deactivationEvent)
-			.event as unknown as Record<string, unknown>;
+		const event = parseSignedEvent(deact.event).event as unknown as Record<
+			string,
+			unknown
+		>;
 		expect(event.t).toBe('rot');
 		expect(event.s).toBe('1');
 		expect(event.nt).toBe('0');
@@ -142,8 +144,8 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 			currentPrivateKey: K2().privateKey,
 		});
 
-		const kel = id.inceptionEvent + rot.rotationEvent + deact.deactivationEvent;
-		const result = verifyKel({ aid: id.aid, kel });
+		const kel = id.event + rot.event + deact.event;
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
@@ -152,7 +154,7 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 
 	test('deactivates after an interaction event', () => {
 		const id = freshIdentifier();
-		const ixn = interactIdentifier({
+		const ixn = interactOnIdentifier({
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
 			data: [{ note: 'last words' }],
@@ -162,8 +164,8 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
 
-		const kel = id.inceptionEvent + ixn.interactionEvent + deact.deactivationEvent;
-		const result = verifyKel({ aid: id.aid, kel });
+		const kel = id.event + ixn.event + deact.event;
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
@@ -171,16 +173,16 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 	});
 });
 
-describe('verifyKel — replays a deactivated KEL', () => {
+describe('verifyIdentifier — replays a deactivated KEL', () => {
 	test('verifies a KEL ending in a deactivation event', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
-		const kel = id.inceptionEvent + deact.deactivationEvent;
+		const kel = id.event + deact.event;
 
-		const result = verifyKel({ aid: id.aid, kel });
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.transferable).toBe(false);
@@ -218,8 +220,8 @@ describe('verifyKel — replays a deactivated KEL', () => {
 			data: [],
 		});
 
-		const kel = id.inceptionEvent + deact.deactivationEvent + appended.event;
-		const result = verifyKel({ aid: id.aid, kel });
+		const kel = id.event + deact.event + appended.event;
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('DEACTIVATED_NOT_EXTENSIBLE');
@@ -231,16 +233,16 @@ describe('verifyKel — replays a deactivated KEL', () => {
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
-		const signed = parseSignedEvent(deact.deactivationEvent);
+		const signed = parseSignedEvent(deact.event);
 		// `nt: "0"` but a non-empty `n` is a contradiction the shape pass
 		// rejects: a deactivation commits to no next key.
 		const tampered = {
 			...(signed.event as unknown as Record<string, unknown>),
 			n: [deriveNextKeyCommitment(K2().publicKey)],
 		};
-		const kel = id.inceptionEvent + reframe(tampered, signed.signatures);
+		const kel = id.event + reframe(tampered, signed.signatures);
 
-		const result = verifyKel({ aid: id.aid, kel });
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -252,15 +254,15 @@ describe('verifyKel — replays a deactivated KEL', () => {
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
-		const signed = parseSignedEvent(deact.deactivationEvent);
+		const signed = parseSignedEvent(deact.event);
 		// Mutate the sequence number, leaving the SAID/signature stale.
 		const tampered = {
 			...(signed.event as unknown as Record<string, unknown>),
 			s: '2',
 		};
-		const kel = id.inceptionEvent + reframe(tampered, signed.signatures);
+		const kel = id.event + reframe(tampered, signed.signatures);
 
-		const result = verifyKel({ aid: id.aid, kel });
+		const result = verifyIdentifier({ aid: id.aid, kel });
 		expect(result.ok).toBe(false);
 	});
 });
@@ -288,7 +290,7 @@ describe('deactivation closes the lifecycle API', () => {
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: deact.state,
 				currentPrivateKey: K1().privateKey,
 				data: [],
@@ -298,15 +300,15 @@ describe('deactivation closes the lifecycle API', () => {
 });
 
 describe('DID surface — a deactivated DID', () => {
-	test('resolveDid reports deactivation and an authority-free document', () => {
+	test('verifyDid reports deactivation and an authority-free document', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
-		const kel = id.inceptionEvent + deact.deactivationEvent;
+		const kel = id.event + deact.event;
 
-		const result = resolveDid({ did: id.did, kel });
+		const result = verifyDid({ did: id.did, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
@@ -339,7 +341,7 @@ describe('DID surface — a deactivated DID', () => {
 			state: id.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 		});
-		const kel = id.inceptionEvent + deact.deactivationEvent;
+		const kel = id.event + deact.event;
 
 		const payload = utf8Encode('message from an abandoned identity');
 		// Sign with the key the deactivation event reveals — the only key in

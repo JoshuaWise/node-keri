@@ -222,7 +222,7 @@ function parseFrameAt(
  * A framing defect — a bad version string, a truncated event, an unsupported
  * counter, a short signature — is returned as `{ ok: false, message }`. The
  * events themselves are *not* semantically validated here: that is the replay
- * verifier's job. This is the entry point `verifyKel` uses, so a malformed
+ * verifier's job. This is the entry point `verifyIdentifier` uses, so a malformed
  * wire form becomes a `MALFORMED_STREAM` verification result, not an
  * exception.
  */
@@ -253,7 +253,7 @@ export function parseStreamResult(stream: string): ParseStreamResult {
  * signed events. Throws `MalformedInputError` on a framing defect.
  *
  * This is a low-level inspection helper: the events it returns are structural
- * only and carry no verification guarantee — pass the stream to `verifyKel`
+ * only and carry no verification guarantee — pass the stream to `verifyIdentifier`
  * for that.
  */
 export function parseKel(stream: string): SignedKeriEvent[] {

@@ -1,11 +1,12 @@
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
+import { deactivateIdentifier } from '../src/api/deactivate-identifier';
+import { verifySignature } from '../src/api/verify-signature';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
 import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed } from '../src/crypto/keypair';
-import type { DidKeri } from '../src/did/did-keri';
+import type { Aid } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
 
@@ -30,19 +31,14 @@ function newIdentifier() {
 	return { ...result, currentKeyPair, nextKeyPair };
 }
 
-describe('verifySignatureWithDid — accepts a valid signature', () => {
+describe('verifySignature — accepts a valid signature', () => {
 	test('verifies a payload signed by the current key', () => {
 		const id = newIdentifier();
 		const signature = encodeSignatureEd25519(
 			sign(id.currentKeyPair.privateKey, PAYLOAD)
 		);
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
-				kel: id.event,
-				payload: PAYLOAD,
-				signature,
-			})
+			verifySignature({ aid: id.aid, kel: id.event, payload: PAYLOAD, signature })
 		).toBe(true);
 	});
 
@@ -57,37 +53,27 @@ describe('verifySignatureWithDid — accepts a valid signature', () => {
 
 		const byNewKey = encodeSignatureEd25519(sign(id.nextKeyPair.privateKey, PAYLOAD));
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
-				kel,
-				payload: PAYLOAD,
-				signature: byNewKey,
-			})
+			verifySignature({ aid: id.aid, kel, payload: PAYLOAD, signature: byNewKey })
 		).toBe(true);
 
 		const byOldKey = encodeSignatureEd25519(
 			sign(id.currentKeyPair.privateKey, PAYLOAD)
 		);
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
-				kel,
-				payload: PAYLOAD,
-				signature: byOldKey,
-			})
+			verifySignature({ aid: id.aid, kel, payload: PAYLOAD, signature: byOldKey })
 		).toBe(false);
 	});
 });
 
-describe('verifySignatureWithDid — rejects invalid signatures', () => {
+describe('verifySignature — rejects invalid signatures', () => {
 	test('false for a tampered payload', () => {
 		const id = newIdentifier();
 		const signature = encodeSignatureEd25519(
 			sign(id.currentKeyPair.privateKey, PAYLOAD)
 		);
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
+			verifySignature({
+				aid: id.aid,
 				kel: id.event,
 				payload: utf8Encode('a different message'),
 				signature,
@@ -102,8 +88,8 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		);
 		raw[0] = raw[0]! ^ 0xff;
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
+			verifySignature({
+				aid: id.aid,
 				kel: id.event,
 				payload: PAYLOAD,
 				signature: encodeSignatureEd25519(raw),
@@ -114,8 +100,8 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 	test('false for a structurally malformed signature string', () => {
 		const id = newIdentifier();
 		expect(
-			verifySignatureWithDid({
-				did: id.did,
+			verifySignature({
+				aid: id.aid,
 				kel: id.event,
 				payload: PAYLOAD,
 				signature: 'not-a-cesr-signature' as never,
@@ -133,46 +119,11 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 			sign(idA.currentKeyPair.privateKey, PAYLOAD)
 		);
 		expect(
-			verifySignatureWithDid({
-				did: idB.did,
-				kel: idA.event,
-				payload: PAYLOAD,
-				signature,
-			})
+			verifySignature({ aid: idB.aid, kel: idA.event, payload: PAYLOAD, signature })
 		).toBe(false);
 	});
 
-	test('false for a malformed DID', () => {
-		const id = newIdentifier();
-		const signature = encodeSignatureEd25519(
-			sign(id.currentKeyPair.privateKey, PAYLOAD)
-		);
-		expect(
-			verifySignatureWithDid({
-				did: 'did:web:example.com' as never,
-				kel: id.event,
-				payload: PAYLOAD,
-				signature,
-			})
-		).toBe(false);
-	});
-
-	test('false for a KEL that does not verify', () => {
-		const id = newIdentifier();
-		const signature = encodeSignatureEd25519(
-			sign(id.currentKeyPair.privateKey, PAYLOAD)
-		);
-		expect(
-			verifySignatureWithDid({
-				did: id.did,
-				kel: '',
-				payload: PAYLOAD,
-				signature,
-			})
-		).toBe(false);
-	});
-
-	test('false for a transferable DID given the empty-string "no KEL" value', () => {
+	test('false for a transferable AID given the empty-string "no KEL" value', () => {
 		const id = newIdentifier();
 		const signature = encodeSignatureEd25519(
 			sign(id.currentKeyPair.privateKey, PAYLOAD)
@@ -180,97 +131,89 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 		// A transferable identifier's key state lives in its KEL; the
 		// empty-string "no KEL" value leaves nothing to establish the key from.
 		expect(
-			verifySignatureWithDid({ did: id.did, kel: '', payload: PAYLOAD, signature })
+			verifySignature({ aid: id.aid, kel: '', payload: PAYLOAD, signature })
 		).toBe(false);
+	});
+
+	test('false once the identifier has been deactivated', () => {
+		const id = newIdentifier();
+		const deact = deactivateIdentifier({
+			state: id.state,
+			currentPrivateKey: id.nextKeyPair.privateKey,
+		});
+		const kel = id.event + deact.event;
+		// The deactivation reveals (and is signed by) the pre-rotated key; even a
+		// signature it produced is no longer trusted once abandoned.
+		const signature = encodeSignatureEd25519(sign(id.nextKeyPair.privateKey, PAYLOAD));
+		expect(verifySignature({ aid: id.aid, kel, payload: PAYLOAD, signature })).toBe(
+			false
+		);
 	});
 });
 
-describe('verifySignatureWithDid — non-transferable DID', () => {
+describe('verifySignature — non-transferable AID', () => {
 	// A non-transferable AID *is* the signing key — a `B`-coded basic prefix,
 	// self-certifying, so it verifies with the empty-string "no KEL" value.
-	// node-keri has no `B` encoder, so build one by swapping the code char of
-	// a `D` key: same raw bytes, the non-transferable derivation code.
+	// node-keri has no `B` encoder, so build one by swapping the code char of a
+	// `D` key: same raw bytes, the non-transferable derivation code.
 	const kp = keyPairFromSeed(fillSeed(0x44));
-	const ntDid = ('did:keri:B'
-		+ encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as DidKeri;
+	const ntAid = ('B' + encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as Aid;
 
 	test('verifies a signature with the empty-string "no KEL" value', () => {
 		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
 		expect(
-			verifySignatureWithDid({ did: ntDid, kel: '', payload: PAYLOAD, signature })
+			verifySignature({ aid: ntAid, kel: '', payload: PAYLOAD, signature })
 		).toBe(true);
-	});
-
-	test('false for a tampered payload', () => {
-		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
-		expect(
-			verifySignatureWithDid({
-				did: ntDid,
-				kel: '',
-				payload: utf8Encode('a different message'),
-				signature,
-			})
-		).toBe(false);
 	});
 
 	test('false for a signature by a different key', () => {
 		const other = keyPairFromSeed(fillSeed(0x45));
 		const signature = encodeSignatureEd25519(sign(other.privateKey, PAYLOAD));
 		expect(
-			verifySignatureWithDid({ did: ntDid, kel: '', payload: PAYLOAD, signature })
+			verifySignature({ aid: ntAid, kel: '', payload: PAYLOAD, signature })
 		).toBe(false);
 	});
 
 	test('false when given a malformed KEL instead of the empty string', () => {
-		// A non-empty `kel` is always replayed — even for a non-transferable
-		// DID — so a bogus one fails rather than being silently ignored.
+		// A non-empty `kel` is always replayed — even for a non-transferable AID —
+		// so a bogus one fails rather than being silently ignored.
 		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
 		expect(
-			verifySignatureWithDid({
-				did: ntDid,
-				kel: 'not-a-real-kel',
-				payload: PAYLOAD,
-				signature,
-			})
+			verifySignature({ aid: ntAid, kel: 'not-a-real-kel', payload: PAYLOAD, signature })
 		).toBe(false);
 	});
 });
 
-describe('verifySignatureWithDid — argument contract', () => {
+describe('verifySignature — argument contract', () => {
 	const id = newIdentifier();
 	const signature = encodeSignatureEd25519(sign(id.currentKeyPair.privateKey, PAYLOAD));
-	const base = {
-		did: id.did,
-		kel: id.event,
-		payload: PAYLOAD,
-		signature,
-	};
+	const base = { aid: id.aid, kel: id.event, payload: PAYLOAD, signature };
 
 	test('throws on a non-object input', () => {
-		expect(() => verifySignatureWithDid(null as never)).toThrow(InvalidArgumentError);
+		expect(() => verifySignature(null as never)).toThrow(InvalidArgumentError);
 	});
 
-	test('throws when did is not a string', () => {
-		expect(() => verifySignatureWithDid({ ...base, did: 42 as never })).toThrow(
+	test('throws when aid is not a non-empty string', () => {
+		expect(() => verifySignature({ ...base, aid: '' as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('throws when kel is not a string', () => {
-		expect(() => verifySignatureWithDid({ ...base, kel: {} as never })).toThrow(
+		expect(() => verifySignature({ ...base, kel: {} as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('throws when payload is not a Uint8Array', () => {
-		expect(() =>
-			verifySignatureWithDid({ ...base, payload: 'text' as never })
-		).toThrow(InvalidArgumentError);
+		expect(() => verifySignature({ ...base, payload: 'text' as never })).toThrow(
+			InvalidArgumentError
+		);
 	});
 
 	test('throws when signature is not a string', () => {
-		expect(() =>
-			verifySignatureWithDid({ ...base, signature: 123 as never })
-		).toThrow(InvalidArgumentError);
+		expect(() => verifySignature({ ...base, signature: 123 as never })).toThrow(
+			InvalidArgumentError
+		);
 	});
 });

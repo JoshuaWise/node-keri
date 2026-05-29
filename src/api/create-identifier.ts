@@ -41,7 +41,7 @@ export interface CreateIdentifierInput {
 	/**
 	 * Mint an *establishment-only* identifier — inception sets the `EO`
 	 * configuration trait and the resulting KEL will accept only `icp` and
-	 * `rot` events. `interactIdentifier` will refuse the identifier from then
+	 * `rot` events. `interactOnIdentifier` will refuse the identifier from then
 	 * on, and an `ixn` appended out of band is rejected on replay. Defaults
 	 * to `false`.
 	 */
@@ -59,7 +59,7 @@ export interface CreateIdentifierResult {
 	readonly did: DidKeri;
 	readonly aid: Aid;
 	/** The signed inception event, as a CESR stream frame — the KEL's wire form. */
-	readonly inceptionEvent: string;
+	readonly event: string;
 	/** Replay-derived initial state (sequence 0) — always transferable. */
 	readonly state: TransferableKeriState;
 }
@@ -106,7 +106,7 @@ export function createIdentifier(input: CreateIdentifierInput): CreateIdentifier
 	return {
 		did: state.did,
 		aid: state.aid,
-		inceptionEvent: event,
+		event,
 		state,
 	};
 }

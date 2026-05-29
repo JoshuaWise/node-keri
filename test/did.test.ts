@@ -7,8 +7,8 @@ import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
 import { DID_KERI_PREFIX, formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { createDidDocument } from '../src/did/document';
-import { resolveDid } from '../src/did/resolver';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyDid } from '../src/did/verify-did';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
 
@@ -111,7 +111,7 @@ describe('parseDidKeri', () => {
 describe('createDidDocument', () => {
 	test('projects a verified state into a minimal DID document', () => {
 		const { aid, did, kel, keys } = buildKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 
@@ -145,7 +145,7 @@ describe('createDidDocument', () => {
 
 	test('reflects the latest signing key after rotation', () => {
 		const { aid, kel, keys } = buildKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		const doc = createDidDocument({ state: result.state });
@@ -160,7 +160,7 @@ describe('createDidDocument', () => {
 
 	test('includes and normalizes caller-supplied services', () => {
 		const { aid, did, kel } = buildKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		const doc = createDidDocument({
@@ -184,7 +184,7 @@ describe('createDidDocument', () => {
 
 	test('accepts a matching `did` and rejects a mismatched one', () => {
 		const { aid, did, kel } = buildKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		expect(() => createDidDocument({ state: result.state, did })).not.toThrow();
@@ -198,7 +198,7 @@ describe('createDidDocument', () => {
 
 	test('rejects a malformed service entry', () => {
 		const { aid, kel } = buildKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		if (!result.ok) throw new Error('expected a valid KEL');
 
 		expect(() =>
@@ -216,10 +216,10 @@ describe('createDidDocument', () => {
 	});
 });
 
-describe('resolveDid', () => {
+describe('verifyDid', () => {
 	test('resolves a valid DID + KEL to verified state, projectable to a document', () => {
 		const { did, kel } = buildKel();
-		const result = resolveDid({ did, kel });
+		const result = verifyDid({ did, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		// Three events (icp + 2 more) ⇒ the last is at sequence number 2.
@@ -230,7 +230,7 @@ describe('resolveDid', () => {
 
 	test('returns INVALID_DID for a malformed DID rather than throwing', () => {
 		const { kel } = buildKel();
-		const result = resolveDid({
+		const result = verifyDid({
 			did: 'did:keri:not-a-real-aid' as never,
 			kel,
 		});
@@ -249,7 +249,7 @@ describe('resolveDid', () => {
 			} as SignedKeriEvent['event'],
 			signatures: events[1]!.signatures,
 		};
-		const result = resolveDid({ did, kel: frameKel(tampered) });
+		const result = verifyDid({ did, kel: frameKel(tampered) });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
@@ -261,7 +261,7 @@ describe('resolveDid', () => {
 			currentKeyPair: keyPairFromSeed(fillSeed(0x90)),
 			nextPublicKey: keyPairFromSeed(fillSeed(0x91)).publicKey,
 		});
-		const result = resolveDid({ did: other.state.did, kel });
+		const result = verifyDid({ did: other.state.did, kel });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error.code).toBe('INVALID_DID');
@@ -269,7 +269,7 @@ describe('resolveDid', () => {
 
 	test('rejects an empty KEL for a transferable DID', () => {
 		const { did } = buildKel();
-		const result = resolveDid({ did, kel: '' });
+		const result = verifyDid({ did, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.error).toEqual({ code: 'EMPTY_KEL' });
@@ -280,7 +280,7 @@ describe('resolveDid', () => {
 		// so it resolves with no KEL. The all-zero key is a valid one.
 		const ntAid = 'B' + 'A'.repeat(43);
 		const ntDid = `${DID_KERI_PREFIX}${ntAid}`;
-		const result = resolveDid({
+		const result = verifyDid({
 			did: ntDid as never,
 			kel: '',
 		});
@@ -305,7 +305,7 @@ describe('resolveDid', () => {
 
 	test('throws on an argument-contract violation', () => {
 		const { did } = buildKel();
-		expect(() => resolveDid({ did, kel: 123 as never })).toThrow(
+		expect(() => verifyDid({ did, kel: 123 as never })).toThrow(
 			InvalidArgumentError
 		);
 	});

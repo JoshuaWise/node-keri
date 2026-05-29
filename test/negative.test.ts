@@ -4,18 +4,18 @@
  * This consolidates the failure-mode contract of every exported entry point
  * not already covered by its own dedicated suite, plus the profile-boundary
  * checks: an event carrying any feature the KERI Direct JSON Profile excludes
- * must be rejected by `verifyKel` with `UNSUPPORTED_FEATURE` — the library
+ * must be rejected by `verifyIdentifier` with `UNSUPPORTED_FEATURE` — the library
  * fails closed, never silently accepting an out-of-profile event.
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { decodeDigestSha256 } from '../src/cesr/decode';
 import { canonicalizeJson } from '../src/event/canonical-json';
 import { keyPairFromPrivateKey, keyPairFromSeed } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
 import { formatDidKeri, parseDidKeri } from '../src/did/did-keri';
-import { resolveDid } from '../src/did/resolver';
+import { verifyDid } from '../src/did/verify-did';
 import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
 import {
@@ -42,7 +42,7 @@ function sample() {
 
 /** The parsed (in-memory) inception event of a `sample()`-style identifier. */
 function inceptionOf(id: ReturnType<typeof sample>): SignedKeriEvent {
-	return parseSignedEvent(id.inceptionEvent);
+	return parseSignedEvent(id.event);
 }
 
 /** Clone a signed event, replacing fields of the inner event object. */
@@ -90,42 +90,42 @@ describe('negative — formatDidKeri', () => {
 	});
 });
 
-describe('negative — verifyKel argument contract', () => {
+describe('negative — verifyIdentifier argument contract', () => {
 	test('throws on a non-object input', () => {
-		expect(() => verifyKel(null as never)).toThrow(InvalidArgumentError);
+		expect(() => verifyIdentifier(null as never)).toThrow(InvalidArgumentError);
 	});
 
 	test('throws when aid is missing', () => {
-		expect(() => verifyKel({ kel: '' } as never)).toThrow(InvalidArgumentError);
+		expect(() => verifyIdentifier({ kel: '' } as never)).toThrow(InvalidArgumentError);
 	});
 
 	test('throws when kel is not a string', () => {
-		expect(() => verifyKel({ aid: sample().aid, kel: {} as never })).toThrow(
+		expect(() => verifyIdentifier({ aid: sample().aid, kel: {} as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('returns EMPTY_KEL (not a throw) for an empty log', () => {
-		const result = verifyKel({ aid: sample().aid, kel: '' });
+		const result = verifyIdentifier({ aid: sample().aid, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('EMPTY_KEL');
 	});
 });
 
-describe('negative — resolveDid', () => {
+describe('negative — verifyDid', () => {
 	test('throws on a non-object input', () => {
-		expect(() => resolveDid(null as never)).toThrow(InvalidArgumentError);
+		expect(() => verifyDid(null as never)).toThrow(InvalidArgumentError);
 	});
 
 	test('throws when kel is not a string', () => {
-		expect(() => resolveDid({ did: sample().did, kel: 123 as never })).toThrow(
+		expect(() => verifyDid({ did: sample().did, kel: 123 as never })).toThrow(
 			InvalidArgumentError
 		);
 	});
 
 	test('returns INVALID_DID (not a throw) for a malformed DID', () => {
-		const result = resolveDid({ did: 'did:web:x' as never, kel: '' });
+		const result = verifyDid({ did: 'did:web:x' as never, kel: '' });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('INVALID_DID');
@@ -196,12 +196,12 @@ describe('negative — canonical JSON', () => {
 
 describe('negative — profile boundary fails closed', () => {
 	// Each case patches a single field of an otherwise-valid inception event
-	// to an out-of-profile value, then asserts verifyKel rejects it as an
+	// to an out-of-profile value, then asserts verifyIdentifier rejects it as an
 	// unsupported feature. The shape pass runs before digest recomputation,
 	// so the diagnosis is the specific UNSUPPORTED_FEATURE — not a generic
 	// digest mismatch.
 	function expectUnsupported(event: SignedKeriEvent, aid = sample().aid) {
-		const result = verifyKel({ aid, kel: frameKel([event]) });
+		const result = verifyIdentifier({ aid, kel: frameKel([event]) });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('UNSUPPORTED_FEATURE');

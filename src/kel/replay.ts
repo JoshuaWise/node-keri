@@ -48,8 +48,8 @@ import { validateInteractionShape } from './validate-interaction';
 import { validateRotationShape } from './validate-rotation';
 
 /** Discriminated result of verifying an entire KEL. */
-export type VerifyKelResult =
-	| { ok: true; state: KeriState; eventCount: number }
+export type VerifyIdentifierResult =
+	| { ok: true; state: KeriState }
 	| { ok: false; error: KeriVerificationError };
 
 /** Internal per-event outcome: a fresh state, or the error that stopped us. */
@@ -59,7 +59,7 @@ type StepResult =
 
 /**
  * Build a failure result. Typed as the bare `{ ok: false }` arm — which is
- * common to both `StepResult` and `VerifyKelResult` — so `replayKel` and the
+ * common to both `StepResult` and `VerifyIdentifierResult` — so `replayKel` and the
  * per-event `apply*` helpers can all `return fail(...)` directly.
  */
 function fail(error: KeriVerificationError): { ok: false; error: KeriVerificationError } {
@@ -106,7 +106,7 @@ function checkCanonicalBytes(
  * belong to; the inception event must derive exactly that AID, otherwise the
  * KEL — however internally consistent — is for a different identifier.
  */
-export function replayKel(aid: Aid, kel: string): VerifyKelResult {
+export function replayKel(aid: Aid, kel: string): VerifyIdentifierResult {
 	const parsed = parseStreamResult(kel);
 	if (!parsed.ok) {
 		return fail({ code: 'MALFORMED_STREAM', message: parsed.message });
@@ -176,7 +176,7 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 		state = step.state;
 	}
 
-	return { ok: true, state: state as KeriState, eventCount: frames.length };
+	return { ok: true, state: state as KeriState };
 }
 
 /** Unwrap a SignedKeriEvent: confirm the event object and single signature. */

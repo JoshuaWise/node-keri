@@ -4,9 +4,9 @@
  * A KERI DID document is a *projection* of verified key state: it carries no
  * history, only the single currently-authoritative signing key. The input
  * `state` must be a replay-verified `KeriState` — the type produced by
- * `verifyKel` (or, within the same process, by the event constructors).
+ * `verifyIdentifier` (or, within the same process, by the event constructors).
  * Building a document straight from unverified events is deliberately not
- * possible through this function; `resolveDid` is the entry point that
+ * possible through this function; `verifyDid` is the entry point that
  * verifies a KEL first and only then projects its result here.
  *
  * The document follows the W3C DID Core data model with a single Ed25519

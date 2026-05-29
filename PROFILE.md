@@ -32,7 +32,7 @@ node-keri **generates only transferable AIDs** — self-certifying identifiers t
 
 ## Excluded — and rejected
 
-Every capability below is **outside the profile**. An event that uses one is rejected by `verifyKel` with `UNSUPPORTED_FEATURE`; an out-of-profile CESR primitive is rejected with `INVALID_CESR_CODE`. The profile fails closed.
+Every capability below is **outside the profile**. An event that uses one is rejected by `verifyIdentifier` with `UNSUPPORTED_FEATURE`; an out-of-profile CESR primitive is rejected with `INVALID_CESR_CODE`. The profile fails closed.
 
 | Capability                       | Status   |
 | -------------------------------- | -------- |
@@ -73,7 +73,7 @@ An `icp` whose `c` field is `["EO"]` declares the *establishment-only* configura
 
 The trait is *inception only*: it appears in `icp` and only in `icp`, and is inherited unchanged by every later event of the KEL through the replay-derived state. Rotation, interaction, and deactivation events do not (and cannot) carry a `c` field, so the trait is set once and never changes.
 
-Enforcement is symmetric: `createInteractionEvent` and `interactIdentifier` refuse a state whose `establishmentOnly` flag is set with `InvalidArgumentError`, and `verifyKel` rejects an `ixn` appended out of band to such a KEL with `ESTABLISHMENT_ONLY_NO_INTERACTION`. `EO` on a non-transferable inception is redundant (the KEL is already non-extensible) and is rejected with `UNSUPPORTED_FEATURE`. Pass `establishmentOnly: true` to `createIdentifier` to mint one. The trait does not block deactivation — a deactivation is a rotation, and an EO identifier may still be abandoned.
+Enforcement is symmetric: `createInteractionEvent` and `interactOnIdentifier` refuse a state whose `establishmentOnly` flag is set with `InvalidArgumentError`, and `verifyIdentifier` rejects an `ixn` appended out of band to such a KEL with `ESTABLISHMENT_ONLY_NO_INTERACTION`. `EO` on a non-transferable inception is redundant (the KEL is already non-extensible) and is rejected with `UNSUPPORTED_FEATURE`. Pass `establishmentOnly: true` to `createIdentifier` to mint one. The trait does not block deactivation — a deactivation is a rotation, and an EO identifier may still be abandoned.
 
 Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 
@@ -141,7 +141,7 @@ KERI digests are self-describing: a qualified digest's CESR code names its hash 
 - A one-character code denotes a 256-bit (32-byte) digest; a `0`-prefixed two-character code a 512-bit (64-byte) one. No other digest widths are supported.
 - node-keri auto-registers every native `node:crypto` hash the linked OpenSSL provides — SHA2-256/512, SHA3-256/512, BLAKE2s-256, BLAKE2b-512. SHA3 and BLAKE2 availability is build-dependent, so the runtime registry is the source of truth.
 - The `digestAlgorithms` registry maps CESR code → implementation and is monkey-patchable: a caller can register an algorithm node-keri does not ship (e.g. Blake3-256) and it is then accepted for decoding, verification, and generation alike.
-- **Generation** defaults to SHA-256 (`I`); pass a `digestCode` to `createIdentifier` / `rotateIdentifier` / `interactIdentifier` to pick another. **Verification** auto-detects each digest's algorithm from its code and recomputes under exactly that — it is never pinned to one algorithm.
+- **Generation** defaults to SHA-256 (`I`); pass a `digestCode` to `createIdentifier` / `rotateIdentifier` / `interactOnIdentifier` to pick another. **Verification** auto-detects each digest's algorithm from its code and recomputes under exactly that — it is never pinned to one algorithm.
 - The library fails closed: a digest under a code with no registered implementation is rejected, never assumed.
 
 ## `did:keri` method
@@ -150,7 +150,7 @@ KERI digests are self-describing: a qualified digest's CESR code names its hash 
 - The parser is strict and offline: DID-URL components (path, query, fragment) are rejected, and the identifier must be a well-formed AID of either kind.
 - Resolution is local only — the caller supplies the KEL. The library never discovers, fetches, or persists anything.
 - A DID document is a projection of one **verified** key state: it advertises the single currently-authoritative Ed25519 key as a `JsonWebKey2020` verification method, referenced from `authentication` and `assertionMethod`.
-- A non-transferable DID is self-certifying: its key *is* the AID. `verifySignatureWithDid` and `resolveDid` therefore need no KEL for one — `kel` is a required parameter, but the **empty string** `''` is the "no KEL" value, and for a non-transferable DID the key (or DID document) is then derived straight from the prefix. A non-transferable DID may equally be verified or resolved from its trivial single-event KEL by passing that stream instead.
+- A non-transferable DID is self-certifying: its key *is* the AID. The verifiers therefore need no KEL for one — `kel` is a required parameter, but the **empty string** `''` is the "no KEL" value, and for a non-transferable identifier the key (and hence the state, or a DID document projected from it) is then derived straight from the prefix. This holds uniformly at both layers: the AID-level `verifyIdentifier` / `verifySignature` and their DID-level counterparts `verifyDid` / `verifySignatureWithDid` all accept the empty-string "no KEL" value for a non-transferable identifier. A non-transferable identifier may equally be verified from its trivial single-event KEL by passing that stream instead.
 
 ## Conformance notes
 

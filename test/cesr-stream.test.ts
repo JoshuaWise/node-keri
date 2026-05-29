@@ -138,16 +138,16 @@ describe('event-frame codec', () => {
 	});
 
 	test('a constructor frame round-trips through parse and re-encode', () => {
-		const parsed = parseSignedEvent(id.inceptionEvent);
+		const parsed = parseSignedEvent(id.event);
 		expect(parsed.event.t).toBe('icp');
 		expect(parsed.signatures).toHaveLength(1);
-		expect(encodeEventFrame(parsed)).toBe(id.inceptionEvent);
+		expect(encodeEventFrame(parsed)).toBe(id.event);
 	});
 
 	test('a frame is the event JSON followed by a `-AAB` attachment', () => {
-		const parsed = parseSignedEvent(id.inceptionEvent);
-		expect(id.inceptionEvent.startsWith('{"v":"KERI10JSON')).toBe(true);
-		expect(id.inceptionEvent).toContain('-AAB' + parsed.signatures[0]);
+		const parsed = parseSignedEvent(id.event);
+		expect(id.event.startsWith('{"v":"KERI10JSON')).toBe(true);
+		expect(id.event).toContain('-AAB' + parsed.signatures[0]);
 	});
 
 	test('parseKel splits a concatenated multi-event stream', () => {
@@ -156,7 +156,7 @@ describe('event-frame codec', () => {
 			currentPrivateKey: k1.privateKey,
 			nextPublicKey: keyPairFromSeed(fillSeed(0x13)).publicKey,
 		});
-		const stream = id.inceptionEvent + rot.rotationEvent;
+		const stream = id.event + rot.event;
 		const events = parseKel(stream);
 		expect(events).toHaveLength(2);
 		expect(events[0]!.event.t).toBe('icp');
@@ -164,19 +164,19 @@ describe('event-frame codec', () => {
 	});
 
 	test('parseSignedEvent rejects trailing bytes after one frame', () => {
-		expect(() => parseSignedEvent(id.inceptionEvent + 'xx')).toThrow(
+		expect(() => parseSignedEvent(id.event + 'xx')).toThrow(
 			MalformedInputError
 		);
 	});
 
 	test('parseKel rejects a stream whose version size is wrong', () => {
-		const f = id.inceptionEvent;
+		const f = id.event;
 		const broken = f.slice(0, 16) + '000000' + f.slice(22);
 		expect(() => parseKel(broken)).toThrow(MalformedInputError);
 	});
 
 	test('parseKel rejects an empty trailing/garbage frame', () => {
-		expect(() => parseKel(id.inceptionEvent + 'not-a-frame')).toThrow(
+		expect(() => parseKel(id.event + 'not-a-frame')).toThrow(
 			MalformedInputError
 		);
 	});
@@ -191,7 +191,7 @@ describe('encodeEventFrame — robust serialization', () => {
 		currentPrivateKey: keyPairFromSeed(fillSeed(0x21)).privateKey,
 		nextPublicKey: keyPairFromSeed(fillSeed(0x22)).publicKey,
 	});
-	const signed = parseSignedEvent(id.inceptionEvent);
+	const signed = parseSignedEvent(id.event);
 
 	test('rejects a non-object signed event', () => {
 		expect(() => encodeEventFrame(null as never)).toThrow(MalformedInputError);
@@ -257,7 +257,7 @@ describe('encodeEventFrame — robust serialization', () => {
 
 	test('a well-formed signed event round-trips through parse', () => {
 		const frame = encodeEventFrame(signed);
-		expect(frame).toBe(id.inceptionEvent);
+		expect(frame).toBe(id.event);
 		expect(parseSignedEvent(frame)).toEqual(signed);
 	});
 });

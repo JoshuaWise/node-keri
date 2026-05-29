@@ -16,9 +16,9 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { deactivateIdentifier } from '../src/api/deactivate-identifier';
-import { interactIdentifier } from '../src/api/interact-identifier';
+import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
@@ -51,7 +51,7 @@ function freshEoIdentifier() {
 describe('createIdentifier — establishment-only', () => {
 	test('emits an inception event whose `c` field is `["EO"]`', () => {
 		const id = freshEoIdentifier();
-		const event = parseSignedEvent(id.inceptionEvent).event as unknown as {
+		const event = parseSignedEvent(id.event).event as unknown as {
 			t: string;
 			c: readonly unknown[];
 		};
@@ -71,15 +71,15 @@ describe('createIdentifier — establishment-only', () => {
 			nextPublicKey: K1().publicKey,
 		});
 		expect(id.state.establishmentOnly).toBe(false);
-		const event = parseSignedEvent(id.inceptionEvent).event as unknown as {
+		const event = parseSignedEvent(id.event).event as unknown as {
 			c: readonly unknown[];
 		};
 		expect(event.c).toEqual([]);
 	});
 
-	test('verifyKel replays an EO inception and surfaces the flag in the state', () => {
+	test('verifyIdentifier replays an EO inception and surfaces the flag in the state', () => {
 		const id = freshEoIdentifier();
-		const verified = verifyKel({ aid: id.aid, kel: id.inceptionEvent });
+		const verified = verifyIdentifier({ aid: id.aid, kel: id.event });
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
 		expect(verified.state.transferable).toBe(true);
@@ -114,18 +114,18 @@ describe('createInceptionEvent — establishment-only', () => {
 	});
 });
 
-describe('interactIdentifier — refuses an EO state', () => {
+describe('interactOnIdentifier — refuses an EO state', () => {
 	test('throws InvalidArgumentError when the state is establishment-only', () => {
 		const id = freshEoIdentifier();
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.privateKey,
 				data: [{ blocked: true }],
 			})
 		).toThrow(InvalidArgumentError);
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.privateKey,
 			})
@@ -152,7 +152,7 @@ describe('interactIdentifier — refuses an EO state', () => {
 		});
 		expect(rot.state.establishmentOnly).toBe(true);
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: rot.state,
 				currentPrivateKey: id.nextKeyPair.privateKey,
 				data: [{ still: 'blocked' }],
@@ -172,7 +172,7 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		expect(rot.state.establishmentOnly).toBe(true);
 	});
 
-	test('verifyKel accepts an EO KEL with multiple rotations', () => {
+	test('verifyIdentifier accepts an EO KEL with multiple rotations', () => {
 		const id = freshEoIdentifier();
 		const k2 = K2();
 		const k3 = K3();
@@ -187,9 +187,9 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 			nextPublicKey: k3.publicKey,
 		});
 
-		const verified = verifyKel({
+		const verified = verifyIdentifier({
 			aid: id.aid,
-			kel: id.inceptionEvent + rot1.rotationEvent + rot2.rotationEvent,
+			kel: id.event + rot1.event + rot2.event,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -212,9 +212,9 @@ describe('deactivateIdentifier — works on an EO identifier and preserves the t
 		expect(deact.state.transferable).toBe(false);
 		expect(deact.state.establishmentOnly).toBe(true);
 
-		const verified = verifyKel({
+		const verified = verifyIdentifier({
 			aid: id.aid,
-			kel: id.inceptionEvent + deact.deactivationEvent,
+			kel: id.event + deact.event,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -222,7 +222,7 @@ describe('deactivateIdentifier — works on an EO identifier and preserves the t
 	});
 });
 
-describe('verifyKel — rejects out-of-band ixn appended to an EO KEL', () => {
+describe('verifyIdentifier — rejects out-of-band ixn appended to an EO KEL', () => {
 	test('ESTABLISHMENT_ONLY_NO_INTERACTION fires when an `ixn` follows an EO inception', () => {
 		const id = freshEoIdentifier();
 		// Mint a non-EO identifier with the *same* current/next keys, so its
@@ -249,9 +249,9 @@ describe('verifyKel — rejects out-of-band ixn appended to an EO KEL', () => {
 			},
 			parsedIxn.signatures
 		);
-		const verified = verifyKel({
+		const verified = verifyIdentifier({
 			aid: id.aid,
-			kel: id.inceptionEvent + tampered,
+			kel: id.event + tampered,
 		});
 		// The exact diagnosis we want: replay refuses an `ixn` on an EO KEL
 		// before bothering with shape, digest, or signature checks.
@@ -265,19 +265,19 @@ describe('verifyKel — rejects out-of-band ixn appended to an EO KEL', () => {
 	});
 });
 
-describe('verifyKel — configuration traits boundary', () => {
+describe('verifyIdentifier — configuration traits boundary', () => {
 	test('rejects an inception whose `c` carries an unknown trait', () => {
 		const id = createIdentifier({
 			currentPrivateKey: K0().privateKey,
 			nextPublicKey: K1().publicKey,
 		});
-		const parsed = parseSignedEvent(id.inceptionEvent);
+		const parsed = parseSignedEvent(id.event);
 		// Splice in `c: ['DND']` — a real KERI trait, but one outside this profile.
 		const tampered = reframe(
 			{ ...(parsed.event as unknown as Record<string, unknown>), c: ['DND'] },
 			parsed.signatures
 		);
-		const verified = verifyKel({ aid: id.aid, kel: tampered });
+		const verified = verifyIdentifier({ aid: id.aid, kel: tampered });
 		expect(verified.ok).toBe(false);
 		if (verified.ok) throw new Error('unreachable');
 		expect(verified.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -288,7 +288,7 @@ describe('verifyKel — configuration traits boundary', () => {
 			currentPrivateKey: K0().privateKey,
 			nextPublicKey: K1().publicKey,
 		});
-		const parsed = parseSignedEvent(id.inceptionEvent);
+		const parsed = parseSignedEvent(id.event);
 		const tampered = reframe(
 			{
 				...(parsed.event as unknown as Record<string, unknown>),
@@ -296,7 +296,7 @@ describe('verifyKel — configuration traits boundary', () => {
 			},
 			parsed.signatures
 		);
-		const verified = verifyKel({ aid: id.aid, kel: tampered });
+		const verified = verifyIdentifier({ aid: id.aid, kel: tampered });
 		expect(verified.ok).toBe(false);
 		if (verified.ok) throw new Error('unreachable');
 		expect(verified.error.code).toBe('UNSUPPORTED_FEATURE');
@@ -307,12 +307,12 @@ describe('verifyKel — configuration traits boundary', () => {
 			currentPrivateKey: K0().privateKey,
 			nextPublicKey: K1().publicKey,
 		});
-		const parsed = parseSignedEvent(id.inceptionEvent);
+		const parsed = parseSignedEvent(id.event);
 		const tampered = reframe(
 			{ ...(parsed.event as unknown as Record<string, unknown>), c: 'EO' },
 			parsed.signatures
 		);
-		const verified = verifyKel({ aid: id.aid, kel: tampered });
+		const verified = verifyIdentifier({ aid: id.aid, kel: tampered });
 		expect(verified.ok).toBe(false);
 		if (verified.ok) throw new Error('unreachable');
 		expect(verified.error.code).toBe('UNSUPPORTED_FEATURE');

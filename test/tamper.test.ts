@@ -3,7 +3,7 @@
  *
  * A single valid five-event KEL (icp, ixn, rot, ixn, rot) is built once, then
  * systematically mutated one field — or one structural property — at a time.
- * Every mutation must make `verifyKel` return `{ ok: false }`, and never
+ * Every mutation must make `verifyIdentifier` return `{ ok: false }`, and never
  * *throw*: a tampered KEL is hostile but expected input.
  *
  * What each mutation actually exercises
@@ -26,16 +26,16 @@
  * any event survives. It deliberately does NOT reach the per-stage semantic
  * checks (sequence chaining, previous-digest linkage, next-key commitment),
  * because the digest check intercepts a raw mutation first. Those checks are
- * exercised against well-formed, self-consistent events in `verify-kel.test.ts`.
+ * exercised against well-formed, self-consistent events in `verify-identifier.test.ts`.
  *
  * The KEL is exchanged as a CESR stream, so a mutation is applied to the
  * in-memory `SignedKeriEvent`s and then re-framed (`frameKel`) into the wire
- * form `verifyKel` consumes.
+ * form `verifyIdentifier` consumes.
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { createInteractionEvent } from '../src/event/interaction';
 import { parseSignedEvent } from '../src/event/stream';
 import { keyPairFromSeed } from '../src/crypto/keypair';
@@ -85,11 +85,11 @@ function buildKel() {
 	// The constructors return wire-form frames; parse them back so each event
 	// can be mutated as a structured `SignedKeriEvent` before re-framing.
 	const events: SignedKeriEvent[] = [
-		parseSignedEvent(id.inceptionEvent),
+		parseSignedEvent(id.event),
 		parseSignedEvent(ixn1.event),
-		parseSignedEvent(rot1.rotationEvent),
+		parseSignedEvent(rot1.event),
 		parseSignedEvent(ixn2.event),
-		parseSignedEvent(rot2.rotationEvent),
+		parseSignedEvent(rot2.event),
 	];
 	return { aid: id.aid, events };
 }
@@ -121,7 +121,7 @@ function withReplaced(index: number, replacement: SignedKeriEvent) {
 }
 
 /**
- * Assert that verifyKel rejects the CESR stream `kel` for `aid`, without
+ * Assert that verifyIdentifier rejects the CESR stream `kel` for `aid`, without
  * throwing, and with the exact discriminated error `code` expected. Asserting
  * the code — not merely `ok === false` — is what keeps each test honest about
  * which check is doing the rejecting.
@@ -131,9 +131,9 @@ function expectRejected(
 	kel: string,
 	expectedCode: KeriVerificationError['code']
 ): void {
-	let result: ReturnType<typeof verifyKel>;
+	let result: ReturnType<typeof verifyIdentifier>;
 	expect(() => {
-		result = verifyKel({ aid, kel });
+		result = verifyIdentifier({ aid, kel });
 	}).not.toThrow();
 	expect(result!.ok).toBe(false);
 	if (result!.ok) throw new Error('unreachable');
@@ -145,7 +145,7 @@ const indices = [0, 1, 2, 3, 4];
 describe('tamper — the untampered KEL verifies', () => {
 	test('baseline: a clean five-event KEL is accepted', () => {
 		const { aid, events } = buildKel();
-		const result = verifyKel({ aid, kel: frameKel(events) });
+		const result = verifyIdentifier({ aid, kel: frameKel(events) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.state.lastSequenceNumber).toBe(4);
@@ -204,7 +204,7 @@ describe('tamper — single-field mutation of each event', () => {
 		const { aid, events } = buildKel();
 		// `s` is digested, so a raw mutation is caught as a digest mismatch
 		// before the sequence check ever runs; the sequence check itself is
-		// exercised by the structural-reorder tests below and in verify-kel.
+		// exercised by the structural-reorder tests below and in verify-identifier.
 		expectRejected(
 			aid,
 			frameKel(withReplaced(i, patchEvent(events[i]!, { s: 'ff' })).events),
@@ -234,7 +234,7 @@ describe('tamper — single-field mutation of each event', () => {
 		const event = events[i]!.event as { p: string };
 		// `p` is digested: a raw mutation is a digest mismatch, caught before
 		// the previous-digest chain check. That chain check is exercised
-		// against self-consistent events in verify-kel.test.ts.
+		// against self-consistent events in verify-identifier.test.ts.
 		expectRejected(
 			aid,
 			frameKel(
@@ -293,7 +293,7 @@ describe('tamper — mutation of key material', () => {
 		// swap changes event 2's recomputed SAID and is rejected as a digest
 		// mismatch — before the next-key commitment check is even reached. The
 		// commitment check proper (a rotation that reveals an uncommitted key
-		// but whose SAID *is* self-consistent) is exercised in verify-kel.test.ts.
+		// but whose SAID *is* self-consistent) is exercised in verify-identifier.test.ts.
 		const foreignKey = (events[4]!.event as { k: readonly string[] }).k;
 		expectRejected(
 			aid,
@@ -350,7 +350,7 @@ describe('tamper — structural mutation of the log', () => {
 		// A second `icp` past sequence 0 is not a valid continuation event.
 		expectRejected(
 			aid,
-			frameKel(events) + intruder.inceptionEvent,
+			frameKel(events) + intruder.event,
 			'INVALID_EVENT_TYPE'
 		);
 	});
@@ -368,7 +368,7 @@ describe('tamper — structural mutation of the log', () => {
 		// Truncation is not tampering: a prefix of a valid KEL is itself a
 		// valid KEL describing an earlier point in the identifier's history.
 		const { aid, events } = buildKel();
-		const result = verifyKel({ aid, kel: frameKel(events.slice(0, 3)) });
+		const result = verifyIdentifier({ aid, kel: frameKel(events.slice(0, 3)) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.state.lastSequenceNumber).toBe(2);
@@ -409,7 +409,7 @@ describe('tamper — non-canonical serialization', () => {
 	// an event before recomputing, so a frame whose JSON merely reorders fields
 	// is byte-for-byte equivalent in content and would pass the digest and
 	// signature checks — yet a strict verifier (which digests the bytes as
-	// received) rejects it. `verifyKel` must reject it too, as
+	// received) rejects it. `verifyIdentifier` must reject it too, as
 	// `NON_CANONICAL_EVENT`, so the KEL has one canonical wire form.
 	test.each(indices)('event %d: non-canonical field order rejected', (i) => {
 		const { aid, events } = buildKel();

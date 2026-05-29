@@ -17,7 +17,7 @@ function fillSeed(byte: number): Uint8Array {
  * containing inception, interaction, rotation, interaction, rotation, and
  * verify each event under the key that was authoritative when it was issued.
  *
- * This is the closest Milestone 3 gets to a "verifyKel" check — a real
+ * This is the closest Milestone 3 gets to a "verifyIdentifier" check — a real
  * replay verifier (Milestone 4) will walk the same chain but additionally
  * cross-check sequence numbers, digest links, and rotation-commitment
  * matches. Here we just confirm that the *constructors* produce a chain

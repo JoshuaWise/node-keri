@@ -77,7 +77,7 @@ export interface ParsedDidKeri {
  * a non-transferable one — and no DID-URL syntax (path, query, or fragment) is
  * accepted, since resolution operates on bare DIDs. A string that fails either
  * rule throws `InvalidArgumentError`; callers
- * parsing DIDs that arrive from untrusted input should prefer `resolveDid`,
+ * parsing DIDs that arrive from untrusted input should prefer `verifyDid`,
  * which reports the same failure as an `INVALID_DID` result rather than
  * throwing.
  */

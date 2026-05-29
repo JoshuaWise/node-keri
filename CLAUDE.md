@@ -22,8 +22,8 @@ It should expose functions that operate on plain data:
 createIdentifier(...)
 rotateIdentifier(...)
 createInteractionEvent(...)
-verifyKel(...)
-resolveDid(...)
+verifyIdentifier(...)
+verifyDid(...)
 createDidDocument(...)
 ```
 
@@ -121,7 +121,7 @@ function createIdentifier(input?: {
     aid: Aid;
     currentKeyPair: KeriKeyPair;
     nextKeyPair: KeriKeyPair;
-    inceptionEvent: string; // CESR stream frame — see "Wire format" below
+    event: string; // CESR stream frame — see "Wire format" below
     state: KeriState;
 };
 ```
@@ -148,7 +148,7 @@ function rotateIdentifier(input: {
     currentPrivateKey: KeriPrivateKey;
     nextKeyPair: KeriKeyPair;
 }): {
-    rotationEvent: string; // CESR stream frame
+    event: string; // CESR stream frame
     state: KeriState;
 };
 ```
@@ -174,7 +174,7 @@ function createInteractionEvent(input: {
     currentPrivateKey: KeriPrivateKey;
     data?: unknown;
 }): {
-    interactionEvent: string; // CESR stream frame
+    event: string; // CESR stream frame
     state: KeriState;
 };
 ```
@@ -196,7 +196,7 @@ public metadata version
 ### KEL verification
 
 ```ts
-function verifyKel(input: { aid: Aid; kel: string }):
+function verifyIdentifier(input: { aid: Aid; kel: string }):
     | {
           ok: true;
           state: KeriState;
@@ -233,7 +233,7 @@ KERI’s key-event state machine establishes ordering by chaining each non-incep
 ```ts
 function parseDidKeri(did: string): ParsedDidKeri;
 
-function resolveDid(input: { did: DidKeri; kel: string }): DidResolutionResult;
+function verifyDid(input: { did: DidKeri; kel: string }): VerifyDidResult;
 ```
 
 Resolution should be local only. The caller supplies the KEL.
@@ -337,7 +337,7 @@ src/
     create-identifier.ts
     rotate-identifier.ts
     interact-identifier.ts
-    verify-kel.ts
+    verify-identifier.ts
 
   test-vectors/
     fixtures.ts
@@ -421,7 +421,7 @@ interface SignedKeriEvent {
 
 `SignedKeriEvent` is the in-memory representation. On the wire an event is a
 **CESR stream frame** — its canonical JSON followed by a `-A` counter and the
-indexed signature(s). The high-level API (`createIdentifier`, `verifyKel`, …)
+indexed signature(s). The high-level API (`createIdentifier`, `verifyIdentifier`, …)
 takes and returns the stream form (`string`); `encodeEventFrame` /
 `parseSignedEvent` / `parseKel` convert. See "Wire format" below.
 
@@ -441,7 +441,7 @@ self-delimiting; a KEL is its frames concatenated in order, with no separators.
 Controller signatures are CESR _indexed_ signatures ("Siger", code `A`) carrying
 a key index — always 0 in this single-key profile. Detached payload signatures
 (`verifySignatureWithDid`) stay non-indexed (`0B`, "Cigar"). A stream that is
-not well-framed is rejected by `verifyKel` with `MALFORMED_STREAM`.
+not well-framed is rejected by `verifyIdentifier` with `MALFORMED_STREAM`.
 
 ---
 
@@ -473,7 +473,7 @@ interface NonTransferableKeriState extends KeriStateBase {
 type KeriState = TransferableKeriState | NonTransferableKeriState;
 ```
 
-This is derived by replaying the KEL. It should not be trusted if provided externally unless it was returned by `verifyKel`. Narrow on `transferable` to reach `nextKeyCommitment`.
+This is derived by replaying the KEL. It should not be trusted if provided externally unless it was returned by `verifyIdentifier`. Narrow on `transferable` to reach `nextKeyCommitment`.
 
 ---
 
@@ -749,7 +749,7 @@ not:
 createDidDocumentFromUntrustedEvents(events);
 ```
 
-The latter should internally call `verifyKel`.
+The latter should internally call `verifyIdentifier`.
 
 ---
 
@@ -892,7 +892,7 @@ can create interaction events
 Deliver:
 
 ```txt
-verifyKel
+verifyIdentifier
 state reconstruction
 signature validation
 sequence validation
@@ -961,19 +961,30 @@ public API is stable
 export {
     createIdentifier,
     rotateIdentifier,
-    interactIdentifier,
+    interactOnIdentifier,
     deactivateIdentifier,
-    verifyKel,
-    resolveDid,
+    verifyIdentifier,
+    verifyDid,
     createDidDocument,
+    verifySignature,
     verifySignatureWithDid,
     generateKeyPair,
 };
 ```
 
-Where `verifySignatureWithDid` is useful for agent-to-agent communication:
+Where `verifySignature` / `verifySignatureWithDid` are useful for agent-to-agent
+communication. The DID form parses the DID down to its AID and delegates to the
+AID form, so they share all behavior except that the DID form additionally
+returns `false` for a malformed DID:
 
 ```ts
+function verifySignature(input: {
+    aid: Aid;
+    kel: string; // CESR stream; the empty string '' means "no KEL"
+    payload: Uint8Array;
+    signature: CesrSignature;
+}): boolean;
+
 function verifySignatureWithDid(input: {
     did: DidKeri;
     kel: string; // CESR stream; the empty string '' means "no KEL"
@@ -993,7 +1004,7 @@ Flow:
 4. Library verifies the message signature against that key.
 ```
 
-`resolveDid` follows the same `kel: string` convention — pass `''` to resolve a
+`verifyDid` follows the same `kel: string` convention — pass `''` to resolve a
 non-transferable DID straight from its prefix.
 
 That maps cleanly to the agent identity use case.

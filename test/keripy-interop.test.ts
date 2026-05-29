@@ -40,11 +40,11 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { interactIdentifier } from '../src/api/interact-identifier';
+import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { deactivateIdentifier } from '../src/api/deactivate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
-import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
-import { resolveDid } from '../src/did/resolver';
+import { verifyIdentifier } from '../src/api/verify-identifier';
+import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
+import { verifyDid } from '../src/did/verify-did';
 import { createDidDocument } from '../src/did/document';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { sign } from '../src/crypto/ed25519';
@@ -122,7 +122,7 @@ function buildNodeKeriKel() {
 		currentPrivateKey: k1!.privateKey,
 		nextPublicKey: k2!.publicKey,
 	});
-	const ixn = interactIdentifier({
+	const ixn = interactOnIdentifier({
 		state: rot1.state,
 		currentPrivateKey: k1!.privateKey,
 		data: [ANCHOR],
@@ -133,11 +133,7 @@ function buildNodeKeriKel() {
 		nextPublicKey: k3!.publicKey,
 	});
 
-	const kel =
-		icp.inceptionEvent
-		+ rot1.rotationEvent
-		+ ixn.interactionEvent
-		+ rot2.rotationEvent;
+	const kel = icp.event + rot1.event + ixn.event + rot2.event;
 	return { did: icp.did, aid: icp.aid, kel, finalState: rot2.state };
 }
 
@@ -163,7 +159,7 @@ describeInterop('keripy interop: AIDs', () => {
 		expect(parsed.aid).toBe(generated.aid);
 
 		// ...and replaying keripy's KEL re-derives the very same AID.
-		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		const result = verifyIdentifier({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.aid).toBe(generated.aid);
@@ -192,7 +188,7 @@ describeInterop('keripy interop: KELs', () => {
 		const events = parseKel(generated.kel);
 		expect(events).toHaveLength(4);
 
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: generated.aid as unknown as Aid,
 			kel: generated.kel,
 		});
@@ -262,7 +258,7 @@ describeInterop('keripy interop: signed messages', () => {
 
 		const ok = verifySignatureWithDid({
 			did: id.did,
-			kel: id.inceptionEvent,
+			kel: id.event,
 			payload: message,
 			signature: signed.signature as CesrSignature,
 		});
@@ -279,7 +275,7 @@ describeInterop('keripy interop: signed messages', () => {
 		const tampered = utf8Encode('a different payload');
 		const ok = verifySignatureWithDid({
 			did: id.did,
-			kel: id.inceptionEvent,
+			kel: id.event,
 			payload: tampered,
 			signature: signed.signature as CesrSignature,
 		});
@@ -307,7 +303,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		expect(parsed.aid).toBe(generated.aid);
 
 		// Its single-event KEL replays and re-derives the same AID.
-		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		const result = verifyIdentifier({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.transferable).toBe(false);
@@ -328,7 +324,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 
 		// A structurally valid non-transferable KEL still fails when it does
 		// not derive the AID the caller asked for.
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: other.aid as unknown as Aid,
 			kel: generated.kel,
 		});
@@ -345,7 +341,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		// and append it. A non-transferable identifier commits to no next key,
 		// so the verifier rejects the extra event before even inspecting it.
 		const rotationFrame = encodeEventFrame(parseKel(keripyGenKel(SEEDS).kel)[1]!);
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: generated.aid as unknown as Aid,
 			kel: generated.kel + rotationFrame,
 		});
@@ -407,11 +403,11 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 	});
 
 	test('node-keri resolves a keripy non-transferable DID with no KEL', () => {
-		// `resolveDid` with the empty-string "no KEL" value: the state is
+		// `verifyDid` with the empty-string "no KEL" value: the state is
 		// projected straight from the self-certifying `B` prefix.
 		const generated = keripyGenNonTransferableKel(NT_SEED);
 
-		const result = resolveDid({ did: generated.did as DidKeri, kel: '' });
+		const result = verifyDid({ did: generated.did as DidKeri, kel: '' });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.transferable).toBe(false);
@@ -430,7 +426,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		// single-event log — and yields an equivalent document.
 		const generated = keripyGenNonTransferableKel(NT_SEED);
 
-		const result = resolveDid({
+		const result = verifyDid({
 			did: generated.did as DidKeri,
 			kel: generated.kel,
 		});
@@ -473,7 +469,7 @@ function buildNodeKeriDeactivatedKel() {
 	return {
 		did: id.did,
 		aid: id.aid,
-		kel: id.inceptionEvent + deact.deactivationEvent,
+		kel: id.event + deact.event,
 		state: deact.state,
 	};
 }
@@ -546,7 +542,7 @@ describeInterop('keripy interop: deactivated AIDs', () => {
 		const parsed = parseDidKeri(generated.did);
 		expect(parsed.aid).toBe(generated.aid);
 
-		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
+		const result = verifyIdentifier({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.state.deactivated).toBe(true);
@@ -577,7 +573,7 @@ describeInterop('keripy interop: deactivated AIDs', () => {
 			seedKeyPair(32)
 		);
 
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: generated.aid as unknown as Aid,
 			kel: generated.kel + extension,
 		});

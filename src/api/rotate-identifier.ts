@@ -44,7 +44,7 @@ export interface RotateIdentifierInput {
 
 export interface RotateIdentifierResult {
 	/** The signed rotation event, as a CESR stream frame (the wire form). */
-	readonly rotationEvent: string;
+	readonly event: string;
 	/** Replay-equivalent state after applying the rotation. */
 	readonly state: TransferableKeriState;
 }
@@ -76,5 +76,5 @@ export function rotateIdentifier(input: RotateIdentifierInput): RotateIdentifier
 		digestCode: input.digestCode,
 	});
 
-	return { rotationEvent: event, state };
+	return { event, state };
 }

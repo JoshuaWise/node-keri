@@ -78,7 +78,7 @@ export function createDeactivationEvent(
 	);
 	if (revealedCommitment !== input.state.nextKeyCommitment) {
 		// The disclosed key isn't the one that was pre-rotated to. Building the
-		// event anyway would produce something `verifyKel` would reject; fail
+		// event anyway would produce something `verifyIdentifier` would reject; fail
 		// fast so the caller can recover before persisting it anywhere.
 		throw new InvalidArgumentError(
 			'deactivation key does not match the prior next-key commitment'

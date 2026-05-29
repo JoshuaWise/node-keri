@@ -35,7 +35,7 @@ export interface CreateInceptionInput {
 	/**
 	 * Set the `EO` ("establishment only") configuration trait on the inception
 	 * event. The resulting identifier accepts only establishment events
-	 * (`icp`, `rot`) in its KEL — `interactIdentifier` and
+	 * (`icp`, `rot`) in its KEL — `interactOnIdentifier` and
 	 * `createInteractionEvent` will refuse it, and replay rejects an `ixn`
 	 * appended later. The trait is inception-only: it is set here and inherited
 	 * unchanged by every later event of the KEL. Defaults to `false`.

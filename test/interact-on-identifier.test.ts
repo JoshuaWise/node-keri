@@ -1,7 +1,7 @@
 import { createIdentifier } from '../src/api/create-identifier';
-import { interactIdentifier } from '../src/api/interact-identifier';
+import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { verifyKel } from '../src/api/verify-kel';
+import { verifyIdentifier } from '../src/api/verify-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
@@ -25,16 +25,16 @@ function freshIdentifier() {
 	return { ...result, currentKeyPair, nextKeyPair };
 }
 
-describe('interactIdentifier', () => {
+describe('interactOnIdentifier', () => {
 	test('produces an interaction event that extends the KEL', () => {
 		const id = freshIdentifier();
-		const ixn = interactIdentifier({
+		const ixn = interactOnIdentifier({
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
 			data: [{ capabilityHash: 'abc' }],
 		});
 
-		const ixnEvent = parseSignedEvent(ixn.interactionEvent).event;
+		const ixnEvent = parseSignedEvent(ixn.event).event;
 		expect(ixnEvent.t).toBe('ixn');
 		expect(ixnEvent.s).toBe('1');
 		expect(ixn.state.lastSequenceNumber).toBe(1);
@@ -46,25 +46,25 @@ describe('interactIdentifier', () => {
 
 	test('omitting data yields an empty anchor list', () => {
 		const id = freshIdentifier();
-		const ixn = interactIdentifier({
+		const ixn = interactOnIdentifier({
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
 		});
 		expect(
-			(parseSignedEvent(ixn.interactionEvent).event as { a: readonly unknown[] }).a
+			(parseSignedEvent(ixn.event).event as { a: readonly unknown[] }).a
 		).toEqual([]);
 	});
 
 	test('the KEL with an interaction verifies end to end', () => {
 		const id = freshIdentifier();
-		const ixn = interactIdentifier({
+		const ixn = interactOnIdentifier({
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
 			data: [{ step: 1 }],
 		});
-		const verified = verifyKel({
+		const verified = verifyIdentifier({
 			aid: id.aid,
-			kel: id.inceptionEvent + ixn.interactionEvent,
+			kel: id.event + ixn.event,
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
@@ -79,29 +79,29 @@ describe('interactIdentifier', () => {
 			nextPublicKey: K2().publicKey,
 		});
 		// After rotation the authoritative key is the revealed K1.
-		const ixn = interactIdentifier({
+		const ixn = interactOnIdentifier({
 			state: rot.state,
 			currentPrivateKey: id.nextKeyPair.privateKey,
 			data: [{ step: 2 }],
 		});
-		expect(parseSignedEvent(ixn.interactionEvent).event.s).toBe('2');
-		const verified = verifyKel({
+		expect(parseSignedEvent(ixn.event).event.s).toBe('2');
+		const verified = verifyIdentifier({
 			aid: id.aid,
-			kel: id.inceptionEvent + rot.rotationEvent + ixn.interactionEvent,
+			kel: id.event + rot.event + ixn.event,
 		});
 		expect(verified.ok).toBe(true);
 	});
 });
 
-describe('interactIdentifier — rejects bad input', () => {
+describe('interactOnIdentifier — rejects bad input', () => {
 	test('throws on a non-object input', () => {
-		expect(() => interactIdentifier(null as never)).toThrow(InvalidArgumentError);
+		expect(() => interactOnIdentifier(null as never)).toThrow(InvalidArgumentError);
 	});
 
 	test('throws when currentPrivateKey is not a private key', () => {
 		const id = freshIdentifier();
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.publicKey as never,
 			})
@@ -111,7 +111,7 @@ describe('interactIdentifier — rejects bad input', () => {
 	test('throws when the private key does not match the current key', () => {
 		const id = freshIdentifier();
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: id.state,
 				// K1, not the current K0 — does not match `state.currentPublicKey`.
 				currentPrivateKey: id.nextKeyPair.privateKey,
@@ -122,7 +122,7 @@ describe('interactIdentifier — rejects bad input', () => {
 	test('throws when data is not canonical-JSON-serializable', () => {
 		const id = freshIdentifier();
 		expect(() =>
-			interactIdentifier({
+			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.privateKey,
 				data: [{ bad: NaN }],

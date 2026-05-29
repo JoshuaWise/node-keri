@@ -22,7 +22,7 @@ import { serializeEvent } from './sign';
  *
  * `signature` is a CESR indexed signature (a "Siger"); only its raw 64 bytes
  * matter here, since the caller has already chosen which key to check against.
- * The index it carries is the replay verifier's concern — `verifyKel` checks
+ * The index it carries is the replay verifier's concern — `verifyIdentifier` checks
  * it points at key 0, the only key this single-key profile permits.
  *
  * Returns `false` (not throws) for cryptographic failure. A malformed CESR

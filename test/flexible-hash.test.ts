@@ -10,11 +10,11 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { interactIdentifier } from '../src/api/interact-identifier';
-import { verifyKel } from '../src/api/verify-kel';
-import { verifySignatureWithDid } from '../src/api/verify-signature-with-did';
+import { interactOnIdentifier } from '../src/api/interact-on-identifier';
+import { verifyIdentifier } from '../src/api/verify-identifier';
+import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { createDidDocument } from '../src/did/document';
-import { resolveDid } from '../src/did/resolver';
+import { verifyDid } from '../src/did/verify-did';
 import { decodeDigest, decodeDigestSha256 } from '../src/cesr/decode';
 import {
 	encodeDigest,
@@ -127,11 +127,11 @@ describe('generation under a chosen digest algorithm', () => {
 		expect(id.aid.startsWith('H')).toBe(true);
 		expect(id.aid.length).toBe(44);
 		// For inception the AID *is* the SAID.
-		const inception = parseSignedEvent(id.inceptionEvent);
+		const inception = parseSignedEvent(id.event);
 		expect(inception.event.d).toBe(id.aid);
 		expect(decodeDigest(inception.event.d).code).toBe('H');
 
-		const result = verifyKel({ aid: id.aid, kel: id.inceptionEvent });
+		const result = verifyIdentifier({ aid: id.aid, kel: id.event });
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.state.aid).toBe(id.aid);
 	});
@@ -149,7 +149,7 @@ describe('generation under a chosen digest algorithm', () => {
 		const parsed = parseDidKeri(id.did);
 		expect(parsed.aid).toBe(id.aid);
 
-		const result = verifyKel({ aid: id.aid, kel: id.inceptionEvent });
+		const result = verifyIdentifier({ aid: id.aid, kel: id.event });
 		expect(result.ok).toBe(true);
 	});
 
@@ -185,7 +185,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 			currentPrivateKey: k0.privateKey,
 			nextPublicKey: k1.publicKey,
 		});
-		const ixn1 = interactIdentifier({
+		const ixn1 = interactOnIdentifier({
 			state: icp.state,
 			currentPrivateKey: k0.privateKey,
 			data: [{ step: 1 }],
@@ -197,7 +197,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 			nextPublicKey: k2.publicKey,
 			digestCode: DIGEST_CODES.SHA2_512,
 		});
-		const ixn2 = interactIdentifier({
+		const ixn2 = interactOnIdentifier({
 			state: rot1.state,
 			currentPrivateKey: k1.privateKey,
 			data: [{ step: 2 }],
@@ -211,13 +211,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		});
 
 		// The constructors return wire-form frames; the KEL is them concatenated.
-		const frames = [
-			icp.inceptionEvent,
-			ixn1.interactionEvent,
-			rot1.rotationEvent,
-			ixn2.interactionEvent,
-			rot2.rotationEvent,
-		];
+		const frames = [icp.event, ixn1.event, rot1.event, ixn2.event, rot2.event];
 		const events: SignedKeriEvent[] = frames.map(parseSignedEvent);
 		return {
 			aid: icp.aid,
@@ -239,9 +233,9 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		]);
 	});
 
-	test('verifyKel replays the mixed-algorithm KEL and reconstructs state', () => {
+	test('verifyIdentifier replays the mixed-algorithm KEL and reconstructs state', () => {
 		const { aid, events, kel, keys } = buildMixedKel();
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.lastSequenceNumber).toBe(4);
@@ -266,7 +260,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 			} as SignedKeriEvent['event'],
 			signatures: events[1]!.signatures,
 		};
-		const result = verifyKel({ aid, kel: frameKel(tampered) });
+		const result = verifyIdentifier({ aid, kel: frameKel(tampered) });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe('INVALID_EVENT_DIGEST');
 	});
@@ -310,7 +304,7 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 		expect(id.aid.startsWith('E')).toBe(true);
 		expect(decodeDigest(id.aid).code).toBe('E');
 
-		const result = verifyKel({ aid: id.aid, kel: id.inceptionEvent });
+		const result = verifyIdentifier({ aid: id.aid, kel: id.event });
 		expect(result.ok).toBe(true);
 
 		// The custom-algorithm DID now parses too.
@@ -326,18 +320,18 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 			digestCode: 'E',
 		});
 		const aid = id.aid as Aid;
-		const kel = id.inceptionEvent;
+		const kel = id.event;
 
 		// ...then drop the implementation. The KEL can no longer be verified.
 		// The registry is sealed, so the entry is cleared by reassignment.
 		digestAlgorithms['E'] = undefined;
 
-		const result = verifyKel({ aid, kel });
+		const result = verifyIdentifier({ aid, kel });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe('INVALID_CESR_CODE');
 	});
 
-	test('a throwing registered algorithm makes verifyKel throw', () => {
+	test('a throwing registered algorithm makes verifyIdentifier throw', () => {
 		// Mint a KEL while `E` works...
 		digestAlgorithms['E'] = { name: 'Blake3-256 (stub)', hash: blake3Stub };
 		const id = createIdentifier({
@@ -346,13 +340,13 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 			digestCode: 'E',
 		});
 		const aid = id.aid as Aid;
-		const kel = id.inceptionEvent;
+		const kel = id.event;
 
 		// ...then swap in an implementation that throws. The digest is still a
 		// structurally valid, registered `E` digest, so shape validation passes
 		// and the throw surfaces from `runDigest` during SAID recomputation. A
 		// faulty registered algorithm is a programmer error, not hostile input,
-		// so verifyKel does not convert it to an { ok: false } result — the
+		// so verifyIdentifier does not convert it to an { ok: false } result — the
 		// exception propagates unchanged.
 		digestAlgorithms['E'] = {
 			name: 'Blake3-256 (broken)',
@@ -360,12 +354,12 @@ describe('monkey-patching a non-native algorithm end to end', () => {
 				throw new Error('blake3 unavailable');
 			},
 		};
-		expect(() => verifyKel({ aid, kel })).toThrow('blake3 unavailable');
+		expect(() => verifyIdentifier({ aid, kel })).toThrow('blake3 unavailable');
 	});
 });
 
 describe('the DID surface under a 512-bit AID', () => {
-	test('createDidDocument and resolveDid handle an 88-char AID', () => {
+	test('createDidDocument and verifyDid handle an 88-char AID', () => {
 		const id = createIdentifier({
 			currentPrivateKey: keyPairFromSeed(fillSeed(0x50)).privateKey,
 			nextPublicKey: keyPairFromSeed(fillSeed(0x51)).publicKey,
@@ -373,7 +367,7 @@ describe('the DID surface under a 512-bit AID', () => {
 		});
 		expect(id.aid.length).toBe(88);
 
-		const verified = verifyKel({ aid: id.aid, kel: id.inceptionEvent });
+		const verified = verifyIdentifier({ aid: id.aid, kel: id.event });
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) return;
 
@@ -386,7 +380,7 @@ describe('the DID surface under a 512-bit AID', () => {
 
 		// Local resolution of the same DID yields a state that reproduces that
 		// document.
-		const resolution = resolveDid({ did: id.did, kel: id.inceptionEvent });
+		const resolution = verifyDid({ did: id.did, kel: id.event });
 		expect(resolution.ok).toBe(true);
 		if (resolution.ok) {
 			expect(createDidDocument({ state: resolution.state }).id).toBe(id.did);
@@ -395,7 +389,7 @@ describe('the DID surface under a 512-bit AID', () => {
 });
 
 describe('a SAID re-encoded under a different algorithm', () => {
-	test('verifyKel rejects an event whose `d` digest code was swapped', () => {
+	test('verifyIdentifier rejects an event whose `d` digest code was swapped', () => {
 		// Build a plain SHA-256 KEL, then re-qualify the rotation's SAID bytes
 		// under the SHA3-256 code without recomputing them. `digestCodeOf` now
 		// reports `H`, so replay recomputes the SAID with SHA3-256 — which
@@ -413,7 +407,7 @@ describe('a SAID re-encoded under a different algorithm', () => {
 			nextPublicKey: k2.publicKey,
 		});
 
-		const signedRot = parseSignedEvent(rot.rotationEvent);
+		const signedRot = parseSignedEvent(rot.event);
 		const { raw, code } = decodeDigest(signedRot.event.d);
 		expect(code).toBe('I');
 		const swapped = encodeDigest(DIGEST_CODES.SHA3_256, raw);
@@ -422,9 +416,9 @@ describe('a SAID re-encoded under a different algorithm', () => {
 			signatures: signedRot.signatures,
 		};
 
-		const result = verifyKel({
+		const result = verifyIdentifier({
 			aid: icp.aid,
-			kel: icp.inceptionEvent + frameKel([tamperedRot]),
+			kel: icp.event + frameKel([tamperedRot]),
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe('INVALID_EVENT_DIGEST');

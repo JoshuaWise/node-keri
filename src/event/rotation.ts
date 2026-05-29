@@ -76,7 +76,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	);
 	if (newCurrentCommitment !== input.state.nextKeyCommitment) {
 		// The disclosed key isn't the one that was pre-rotated to. Building
-		// the event anyway would produce something `verifyKel` would reject;
+		// the event anyway would produce something `verifyIdentifier` would reject;
 		// fail fast so the caller can recover before persisting it anywhere.
 		throw new InvalidArgumentError(
 			'rotation key does not match the prior next-key commitment'

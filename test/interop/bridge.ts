@@ -145,7 +145,7 @@ export interface GenKelResult {
 }
 
 /** Response of the `verify-kel` bridge command. */
-export type VerifyKelResult =
+export type VerifyIdentifierResult =
 	| { ok: true; aid: string; sn: number; said: string; currentKeys: string[] }
 	| { ok: false; error: string };
 
@@ -245,8 +245,8 @@ export function keripyGenEoIcpThenIxn(
 }
 
 /** Replay a node-keri CESR-stream KEL through keripy's verifier. */
-export function keripyVerifyKel(aid: string, kel: string): VerifyKelResult {
-	return runBridge<VerifyKelResult>('verify-kel', { aid, kel });
+export function keripyVerifyKel(aid: string, kel: string): VerifyIdentifierResult {
+	return runBridge<VerifyIdentifierResult>('verify-kel', { aid, kel });
 }
 
 /**
