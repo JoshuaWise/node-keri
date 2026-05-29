@@ -21,7 +21,8 @@ It should expose functions that operate on plain data:
 ```
 createIdentifier(...)
 rotateIdentifier(...)
-createInteractionEvent(...)
+interactOnIdentifier(...)
+deactivateIdentifier(...)
 verifyIdentifier(...)
 verifyDid(...)
 createDidDocument(...)
@@ -169,7 +170,7 @@ new next-key commitment is stored for future rotation
 ### Interaction event
 
 ```ts
-function createInteractionEvent(input: {
+function interactOnIdentifier(input: {
     state: KeriState;
     currentPrivateKey: KeriPrivateKey;
     data?: unknown;
