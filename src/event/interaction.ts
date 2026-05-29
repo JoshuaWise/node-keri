@@ -64,6 +64,14 @@ export function createInteractionEvent(
 				: 'a non-transferable identifier cannot anchor interaction events'
 		);
 	}
+	// An establishment-only identifier accepts only `icp` and `rot`; refusing
+	// the call here is the constructor mirror of the replay-side check that
+	// rejects an `ixn` appended to such a KEL.
+	if (input.state.establishmentOnly) {
+		throw new InvalidArgumentError(
+			'an establishment-only identifier cannot anchor interaction events'
+		);
+	}
 
 	const currentQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
 	if (currentQb64 !== input.state.currentPublicKey) {

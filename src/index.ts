@@ -100,6 +100,7 @@ export type { Aid, DidKeri, ParsedDidKeri } from './did/did-keri';
 export type {
 	KeriEventType,
 	KeriEventBase,
+	InceptionConfigTraits,
 	InceptionEvent,
 	NonTransferableInceptionEvent,
 	RotationEvent,
@@ -108,6 +109,7 @@ export type {
 	KeriEvent,
 	SignedKeriEvent,
 } from './event/types';
+export { KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY } from './event/types';
 
 export type {
 	KeriState,

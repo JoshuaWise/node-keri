@@ -224,6 +224,26 @@ export function keripyGenDeactivatedKel(seeds: number[]): GenKelResult {
 	return runBridge<GenKelResult>('gen-deactivated-kel', { seeds });
 }
 
+/**
+ * Generate an *establishment-only* KEL (icp with the `EO` trait, then two
+ * rotations — never an interaction) with keripy, as a CESR stream.
+ */
+export function keripyGenEoKel(seeds: number[]): GenKelResult {
+	return runBridge<GenKelResult>('gen-eo-kel', { seeds });
+}
+
+/**
+ * Generate an `EO` inception followed by an interaction event with keripy. The
+ * `ixn` is well-formed and signed; it violates the EO trait, so node-keri's
+ * replay must reject it. The seeds are `[inceptionKey, nextKey]`.
+ */
+export function keripyGenEoIcpThenIxn(
+	seeds: number[],
+	anchor?: unknown
+): GenKelResult {
+	return runBridge<GenKelResult>('gen-eo-icp-then-ixn', { seeds, anchor });
+}
+
 /** Replay a node-keri CESR-stream KEL through keripy's verifier. */
 export function keripyVerifyKel(aid: string, kel: string): VerifyKelResult {
 	return runBridge<VerifyKelResult>('verify-kel', { aid, kel });

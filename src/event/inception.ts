@@ -21,7 +21,11 @@ import { TransferableKeriState } from '../kel/state';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
 import { signEvent } from './sign';
 import { encodeEventFrame } from './stream';
-import { InceptionEvent } from './types';
+import {
+	InceptionConfigTraits,
+	InceptionEvent,
+	KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY,
+} from './types';
 
 export interface CreateInceptionInput {
 	/** Current keypair: its public half is disclosed and its private half signs. */
@@ -34,6 +38,15 @@ export interface CreateInceptionInput {
 	 * (see `digestAlgorithms`) is accepted; an unavailable one throws.
 	 */
 	readonly digestCode?: string;
+	/**
+	 * Set the `EO` ("establishment only") configuration trait on the inception
+	 * event. The resulting identifier accepts only establishment events
+	 * (`icp`, `rot`) in its KEL — `interactIdentifier` and
+	 * `createInteractionEvent` will refuse it, and replay rejects an `ixn`
+	 * appended later. The trait is inception-only: it is set here and inherited
+	 * unchanged by every later event of the KEL. Defaults to `false`.
+	 */
+	readonly establishmentOnly?: boolean;
 }
 
 export interface CreateInceptionResult {
@@ -52,6 +65,13 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 	const currentKeyQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
 	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey, digestCode);
 
+	// `c` carries `['EO']` only when the caller asked for an establishment-only
+	// identifier — by default it is empty.
+	const establishmentOnly = input.establishmentOnly === true;
+	const configTraits: InceptionConfigTraits = establishmentOnly
+		? ([KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY] as const)
+		: ([] as const);
+
 	// `d` and `i` are the SAID-bearing fields for inception: they hold the
 	// fixed-length placeholder while the SAID is computed, then take the SAID
 	// itself in the final event. Fields are listed in KERI canonical order.
@@ -67,7 +87,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 		n: [nextCommitment] as const,
 		bt: '0' as const,
 		b: [] as const,
-		c: [] as const,
+		c: configTraits,
 		a: [] as const,
 	};
 
@@ -101,6 +121,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 		nextKeyCommitment: nextCommitment,
 		transferable: true,
 		eventType: 'icp',
+		...(establishmentOnly ? { establishmentOnly: true as const } : {}),
 	};
 
 	return { event: frame, state };

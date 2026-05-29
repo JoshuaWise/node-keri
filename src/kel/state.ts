@@ -45,6 +45,13 @@ export interface TransferableKeriState extends KeriStateBase {
 	readonly nextKeyCommitment: CesrDigest;
 	/** Type of the most-recently applied event. */
 	readonly eventType: KeriEventType;
+	/**
+	 * `true` when the inception event committed to the `EO` configuration
+	 * trait — only establishment events (`icp`, `rot`) may extend the KEL,
+	 * and an interaction event is refused at both construction and replay.
+	 * Inherited unchanged through every later event of the KEL.
+	 */
+	readonly establishmentOnly?: true;
 }
 
 /**
@@ -88,6 +95,13 @@ export interface DeactivatedKeriState extends KeriStateBase {
 	readonly lastEventDigest: CesrDigest;
 	/** Always `'rot'`: a deactivation is a rotation event. */
 	readonly eventType: 'rot';
+	/**
+	 * `true` when the original inception committed to the `EO` configuration
+	 * trait. Carried forward from the live state purely for completeness —
+	 * a deactivated identifier accepts no further events of any kind, so the
+	 * trait no longer constrains anything.
+	 */
+	readonly establishmentOnly?: true;
 }
 
 /**

@@ -42,6 +42,20 @@ export interface KeriEventBase {
 	s: string;
 }
 
+/**
+ * The only configuration trait this profile recognizes is `EO` —
+ * "establishment only". An EO identifier accepts only establishment events
+ * (`icp`, `rot`) in its KEL: interaction events are rejected. The trait is
+ * an inception-only declaration — it appears in `icp` and only `icp` — and
+ * is inherited by every later event of the KEL via the replay-derived state.
+ */
+export const KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY = 'EO';
+
+/** The `c` (configuration traits) field of an inception event in this profile. */
+export type InceptionConfigTraits =
+	| readonly []
+	| readonly [typeof KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY];
+
 export interface InceptionEvent extends KeriEventBase {
 	t: 'icp';
 	kt: '1';
@@ -50,7 +64,7 @@ export interface InceptionEvent extends KeriEventBase {
 	n: readonly [CesrDigest];
 	bt: '0';
 	b: readonly [];
-	c: readonly [];
+	c: InceptionConfigTraits;
 	a: readonly [];
 }
 

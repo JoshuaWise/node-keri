@@ -38,6 +38,7 @@ export type KeriVerificationError =
 	| { code: 'INVALID_EVENT_TYPE'; eventType: string }
 	| { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
 	| { code: 'DEACTIVATED_NOT_EXTENSIBLE'; eventType: string }
+	| { code: 'ESTABLISHMENT_ONLY_NO_INTERACTION'; eventType: string }
 	| { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
 	| { code: 'INVALID_PREVIOUS_DIGEST' }
 	| { code: 'INVALID_EVENT_DIGEST' }

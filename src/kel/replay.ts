@@ -152,6 +152,16 @@ export function replayKel(aid: Aid, kel: string): VerifyKelResult {
 			if (t === 'rot') {
 				step = applyRotation(prior, event, frame.eventBytes, signature);
 			} else if (t === 'ixn') {
+				// An establishment-only identifier accepts no interaction
+				// events. The trait was declared at inception and carried
+				// forward on every state since; reject before validating
+				// shape, the same way we reject events on a closed KEL.
+				if (prior.establishmentOnly) {
+					return fail({
+						code: 'ESTABLISHMENT_ONLY_NO_INTERACTION',
+						eventType: 'ixn',
+					});
+				}
 				step = applyInteraction(prior, event, frame.eventBytes, signature);
 			} else {
 				// A second `icp`, or an unknown type, both land here.
@@ -332,14 +342,13 @@ function applyInception(
 		eventType: 'icp' as const,
 	};
 	if (validated.transferable) {
-		return {
-			ok: true,
-			state: {
-				...base,
-				nextKeyCommitment: validated.event.n[0],
-				transferable: true,
-			},
+		const state: TransferableKeriState = {
+			...base,
+			nextKeyCommitment: validated.event.n[0],
+			transferable: true,
+			...(validated.establishmentOnly ? { establishmentOnly: true as const } : {}),
 		};
+		return { ok: true, state };
 	}
 	// A non-transferable identifier carries no next-key commitment.
 	return { ok: true, state: { ...base, transferable: false } };
@@ -449,6 +458,12 @@ function applyRotation(
 		return fail({ code: 'INVALID_SIGNATURE' });
 	}
 
+	// The `EO` trait is set at inception and inherited unchanged thereafter —
+	// neither a rotation nor a deactivation can introduce or remove it.
+	const inheritedEo = state.establishmentOnly
+		? { establishmentOnly: true as const }
+		: {};
+
 	if (validated.deactivation) {
 		// A deactivation commits to no next key: the identifier is abandoned
 		// and the KEL ends here. The state carries no `nextKeyCommitment`.
@@ -463,6 +478,7 @@ function applyRotation(
 				transferable: false,
 				deactivated: true,
 				eventType: 'rot',
+				...inheritedEo,
 			},
 		};
 	}
@@ -478,6 +494,7 @@ function applyRotation(
 			nextKeyCommitment: validated.event.n[0],
 			transferable: true,
 			eventType: 'rot',
+			...inheritedEo,
 		},
 	};
 }

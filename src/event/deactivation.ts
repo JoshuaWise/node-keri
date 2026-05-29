@@ -138,6 +138,9 @@ export function createDeactivationEvent(
 		transferable: false,
 		deactivated: true,
 		eventType: 'rot',
+		// `EO` is set at inception and never changes — preserve it through
+		// deactivation for completeness even though the KEL has now closed.
+		...(input.state.establishmentOnly ? { establishmentOnly: true as const } : {}),
 	};
 
 	return { event: frame, state: newState };

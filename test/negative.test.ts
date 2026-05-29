@@ -227,9 +227,11 @@ describe('negative — profile boundary fails closed', () => {
 		expectUnsupported(patchEvent(inceptionOf(id), { kt: '2' }), id.aid);
 	});
 
-	test('rejects a non-empty configuration trait list', () => {
+	test('rejects an unsupported configuration trait', () => {
+		// `EO` is permitted; every other KERI trait — `DND`, `RB`, `NB`,
+		// `NRB`, `DID` — is outside this profile and rejected.
 		const id = sample();
-		expectUnsupported(patchEvent(inceptionOf(id), { c: ['EO'] }), id.aid);
+		expectUnsupported(patchEvent(inceptionOf(id), { c: ['DND'] }), id.aid);
 	});
 
 	test('rejects a multisig (two-key) signing list', () => {

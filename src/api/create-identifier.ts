@@ -35,6 +35,14 @@ export interface CreateIdentifierInput {
 	 * different hash; requesting an unavailable algorithm throws.
 	 */
 	readonly digestCode?: string;
+	/**
+	 * Mint an *establishment-only* identifier — inception sets the `EO`
+	 * configuration trait and the resulting KEL will accept only `icp` and
+	 * `rot` events. `interactIdentifier` will refuse the identifier from then
+	 * on, and an `ixn` appended out of band is rejected on replay. Defaults
+	 * to `false`.
+	 */
+	readonly establishmentOnly?: boolean;
 }
 
 export interface CreateIdentifierResult {
@@ -91,6 +99,7 @@ export function createIdentifier(
 		currentKeyPair,
 		nextPublicKey: nextKeyPair.publicKey,
 		digestCode: input.digestCode,
+		establishmentOnly: input.establishmentOnly,
 	});
 
 	return {

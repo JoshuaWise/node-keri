@@ -41,7 +41,7 @@ Every capability below is **outside the profile**. An event that uses one is rej
 | OOBI / discovery                 | Excluded |
 | Delegation                       | Excluded |
 | TEL / credential registries      | Excluded |
-| Configuration traits             | Excluded |
+| Configuration traits             | `EO` only — all others excluded |
 | Binary CESR                      | Excluded |
 | CESR counters / groups           | Excluded except the `-A` controller-signature counter (see [Wire format](#wire-format)) |
 | CBOR / MessagePack serialization | Excluded |
@@ -58,13 +58,22 @@ Three event types are supported: `icp`, `rot`, `ixn`. Excluded-feature fields ar
 - `k` — an array of **exactly one** key. Two or more is multisig.
 - `n` — an array of **exactly one** next-key digest, except a non-transferable inception or a deactivation `rot`, where it is empty.
 - `bt` (witness threshold) — must be `"0"`.
-- `b` (witnesses), `c` (config traits), `br` / `ba` (witness cuts/adds) — must be empty arrays.
+- `b` (witnesses), `br` / `ba` (witness cuts/adds) — must be empty arrays.
+- `c` (config traits) — must be either `[]` or `["EO"]`. See [Establishment-only identifiers](#establishment-only-identifiers).
 - Inception `a` (seals) — must be empty. To anchor data, use an interaction event, whose `a` is an unconstrained JSON array.
 - An event carrying **any field not named by its type** is rejected.
 
 **Non-transferable inception.** An `icp` whose `i` field is a `B`-coded Ed25519 key (rather than a self-addressing digest) is a non-transferable inception. Its `k` holds that same `B` key, `nt` is `"0"`, and `n` is empty — it commits to no next key. Its AID is the `B` key itself, so `d ≠ i` (unlike a transferable inception, where `d == i`). A non-transferable identifier's KEL is exactly this one event: any `rot` or `ixn` that follows it is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`, since the identifier can never rotate or extend. node-keri verifies these but never generates one.
 
 **Deactivation.** A `rot` whose `nt` is `"0"` and whose `n` is empty is a *deactivation* — the `did:keri` abandonment operation, a rotation to zero forward controlling keys. It is otherwise an ordinary rotation: `k` still holds the single revealed pre-rotated key, which reproduces the prior next-key commitment and signs the event. Committing to no next key makes it terminal — it is the last event of the KEL, and any `rot` or `ixn` that follows is rejected with `DEACTIVATED_NOT_EXTENSIBLE`. The replayed `KeriState` is then `deactivated` and no longer `transferable`. Unlike non-transferable AIDs, node-keri both generates (`deactivateIdentifier`) and verifies deactivations.
+
+### Establishment-only identifiers
+
+An `icp` whose `c` field is `["EO"]` declares the *establishment-only* configuration trait: the identifier's KEL accepts **only establishment events** (`icp`, `rot`) — interaction events are rejected. This is useful for identifiers that should never anchor application data, only roll their keys.
+
+The trait is *inception only*: it appears in `icp` and only in `icp`, and is inherited unchanged by every later event of the KEL through the replay-derived state. Rotation, interaction, and deactivation events do not (and cannot) carry a `c` field, so the trait is set once and never changes.
+
+Enforcement is symmetric: `createInteractionEvent` and `interactIdentifier` refuse a state whose `establishmentOnly` flag is set with `InvalidArgumentError`, and `verifyKel` rejects an `ixn` appended out of band to such a KEL with `ESTABLISHMENT_ONLY_NO_INTERACTION`. `EO` on a non-transferable inception is redundant (the KEL is already non-extensible) and is rejected with `UNSUPPORTED_FEATURE`. Pass `establishmentOnly: true` to `createIdentifier` to mint one. The trait does not block deactivation — a deactivation is a rotation, and an EO identifier may still be abandoned.
 
 Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 

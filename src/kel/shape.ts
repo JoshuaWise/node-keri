@@ -183,6 +183,42 @@ export function checkArray(
 	return { code: 'UNSUPPORTED_FEATURE', feature };
 }
 
+/**
+ * Validate an inception event's `c` (configuration traits) array. The profile
+ * recognizes exactly one trait — `EO` ("establishment only") — and rejects
+ * every other configuration the broader KERI spec defines (`DND`, `RB`, `NB`,
+ * `NRB`, `DID`), since none of them maps onto this single-controller library.
+ *
+ * Returns the structural error (or `null`) alongside the decoded
+ * `establishmentOnly` flag, so callers learn in one pass both that the field
+ * is well-formed and which configuration it selects.
+ */
+export function checkConfigTraits(value: unknown): {
+	error: KeriVerificationError | null;
+	establishmentOnly: boolean;
+} {
+	if (!Array.isArray(value)) {
+		return {
+			error: {
+				code: 'UNSUPPORTED_FEATURE',
+				feature: `configuration traits must be an array, got ${describe(value)}`,
+			},
+			establishmentOnly: false,
+		};
+	}
+	if (value.length === 0) return { error: null, establishmentOnly: false };
+	if (value.length === 1 && value[0] === 'EO') {
+		return { error: null, establishmentOnly: true };
+	}
+	return {
+		error: {
+			code: 'UNSUPPORTED_FEATURE',
+			feature: `unsupported configuration traits: ${JSON.stringify(value)}`,
+		},
+		establishmentOnly: false,
+	};
+}
+
 /** The sequence number string: must be present and canonical lowercase hex. */
 export function checkSequenceString(value: unknown): KeriVerificationError | null {
 	if (typeof value === 'string' && CANONICAL_HEX.test(value)) return null;

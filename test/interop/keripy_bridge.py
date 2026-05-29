@@ -15,6 +15,13 @@ It uses the reference KERI implementation (keripy, the `keri` PyPI package) to:
                              them).
   * `gen-deactivated-kel`  - build a KEL ending in a *deactivation* event (a
                              rotation to no next key) with keripy.
+  * `gen-eo-kel`           - build an *establishment-only* KEL (icp with the
+                             `EO` config trait, then rotations — never an ixn)
+                             with keripy and emit it as a CESR stream.
+  * `gen-eo-icp-then-ixn`  - build an `EO` inception and append an interaction
+                             event to it. keripy will build and sign the `ixn`
+                             without enforcing the trait; node-keri's replay
+                             must reject it on policy grounds.
   * `verify-kel`           - replay a node-keri-produced CESR stream through
                              keripy's `Kevery` and report whether keripy's
                              verifier accepts it.
@@ -261,6 +268,99 @@ def _cmd_gen_deactivated_kel(req):
     }
 
 
+def _cmd_gen_eo_kel(req):
+    """Build an establishment-only KEL (icp + rot + rot) entirely with keripy.
+
+    Request : {"seeds": [s0, s1, s2, s3], optional, default [0, 32, 64, 96]}
+    Response: {"aid", "did", "kel": "<CESR stream>"}
+
+    The inception carries the `EO` configuration trait (`c=["EO"]`), which
+    restricts the KEL to establishment events. The log is therefore an
+    inception followed by two ordinary rotations — no interaction event — and
+    is byte-identical to what node-keri's `createIdentifier({ establishmentOnly:
+    true })` + two rotations produces from the same seeds.
+    """
+    seeds = req.get("seeds", [0, 32, 64, 96])
+    if len(seeds) != 4:
+        raise ValueError("gen-eo-kel requires exactly 4 seeds")
+    s0, s1, s2, s3 = (_signer(s) for s in seeds)
+
+    # Inception with the EO trait: keys=[s0], pre-rotation commitment to s1.
+    icp = dict(v=_vs(), t=Ilks.icp, d="", i="", s="0", kt="1",
+               k=[s0.verfer.qb64], nt="1", n=[_ndig(s1)],
+               bt="0", b=[], c=["EO"], a=[])
+    icp_s = _said_keri(icp, also_pre=True)
+    pre = icp_s.pre
+
+    # Rotation: reveal s1, commit to s2. Signed by the revealed key s1.
+    rot1 = dict(v=_vs(), t=Ilks.rot, d="", i=pre, s="1", p=icp_s.said, kt="1",
+                k=[s1.verfer.qb64], nt="1", n=[_ndig(s2)],
+                bt="0", br=[], ba=[], a=[])
+    rot1_s = _said_keri(rot1)
+
+    # Second rotation: reveal s2, commit to s3. Signed by s2.
+    rot2 = dict(v=_vs(), t=Ilks.rot, d="", i=pre, s="2", p=rot1_s.said, kt="1",
+                k=[s2.verfer.qb64], nt="1", n=[_ndig(s3)],
+                bt="0", br=[], ba=[], a=[])
+    rot2_s = _said_keri(rot2)
+
+    def frame(serder, signer):
+        siger = signer.sign(ser=serder.raw, index=0)
+        return eventing.messagize(serder, sigers=[siger])
+
+    stream = b"".join([
+        frame(icp_s, s0),
+        frame(rot1_s, s1),
+        frame(rot2_s, s2),
+    ])
+    return {
+        "aid": pre,
+        "did": f"did:keri:{pre}",
+        "kel": bytes(stream).decode("utf-8"),
+    }
+
+
+def _cmd_gen_eo_icp_then_ixn(req):
+    """Build an EO inception, then append an interaction event to it.
+
+    Request : {"seeds": [s0, s1], optional, default [0, 32], "anchor": <opt>}
+    Response: {"aid", "did", "kel": "<CESR stream>"}
+
+    The inception declares the `EO` trait. The interaction event that follows
+    is built and signed by the inception key s0 — it is perfectly well-formed
+    and correctly signed. keripy's makify does not enforce the EO trait when it
+    only computes a SAID, so the bridge happily emits the offending `ixn`; the
+    point is to feed it to node-keri's replay, which must reject it with
+    `ESTABLISHMENT_ONLY_NO_INTERACTION`.
+    """
+    seeds = req.get("seeds", [0, 32])
+    if len(seeds) != 2:
+        raise ValueError("gen-eo-icp-then-ixn requires exactly 2 seeds")
+    s0, s1 = (_signer(s) for s in seeds)
+    anchor = req.get("anchor")
+    anchors = [anchor] if anchor is not None else []
+
+    icp = dict(v=_vs(), t=Ilks.icp, d="", i="", s="0", kt="1",
+               k=[s0.verfer.qb64], nt="1", n=[_ndig(s1)],
+               bt="0", b=[], c=["EO"], a=[])
+    icp_s = _said_keri(icp, also_pre=True)
+    pre = icp_s.pre
+
+    ixn = dict(v=_vs(), t=Ilks.ixn, d="", i=pre, s="1", p=icp_s.said, a=anchors)
+    ixn_s = _said_keri(ixn)
+
+    def frame(serder, signer):
+        siger = signer.sign(ser=serder.raw, index=0)
+        return eventing.messagize(serder, sigers=[siger])
+
+    stream = b"".join([frame(icp_s, s0), frame(ixn_s, s0)])
+    return {
+        "aid": pre,
+        "did": f"did:keri:{pre}",
+        "kel": bytes(stream).decode("utf-8"),
+    }
+
+
 def _cmd_verify_kel(req):
     """Replay a node-keri CESR-stream KEL through keripy's `Kevery` verifier.
 
@@ -372,6 +472,8 @@ _COMMANDS = {
     "gen-kel": _cmd_gen_kel,
     "gen-nt-kel": _cmd_gen_nt_kel,
     "gen-deactivated-kel": _cmd_gen_deactivated_kel,
+    "gen-eo-kel": _cmd_gen_eo_kel,
+    "gen-eo-icp-then-ixn": _cmd_gen_eo_icp_then_ixn,
     "verify-kel": _cmd_verify_kel,
     "verify-extension": _cmd_verify_extension,
     "sign": _cmd_sign,

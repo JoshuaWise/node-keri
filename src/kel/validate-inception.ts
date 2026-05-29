@@ -26,6 +26,7 @@ import {
 } from '../profile/errors';
 import {
 	ShapeResult,
+	checkConfigTraits,
 	checkDigest,
 	checkEmptyArray,
 	checkExactKeys,
@@ -57,10 +58,16 @@ const INCEPTION_KEYS: readonly string[] = [
 /**
  * A validated inception event, tagged with the kind of AID it establishes so
  * the replay verifier can apply the matching derivation rule. Discriminated on
- * `transferable`.
+ * `transferable`. For a transferable AID the validated shape also exposes the
+ * `establishmentOnly` flag (set when `c` is `['EO']`), so the replay verifier
+ * can record it on the initial state.
  */
 export type ValidatedInception =
-	| { readonly transferable: true; readonly event: InceptionEvent }
+	| {
+			readonly transferable: true;
+			readonly establishmentOnly: boolean;
+			readonly event: InceptionEvent;
+	  }
 	| { readonly transferable: false; readonly event: NonTransferableInceptionEvent };
 
 /**
@@ -106,7 +113,9 @@ export function validateInceptionShape(
 	event: Record<string, unknown>
 ): ShapeResult<ValidatedInception> {
 	// Fields whose rules do not depend on the transferable/non-transferable
-	// distinction.
+	// distinction. The configuration-traits check is separated out below —
+	// it both decides whether the event is well-formed and tells us if the
+	// `EO` trait was set, which the replay verifier needs.
 	const common = firstError([
 		checkVersionString(event.v),
 		checkDigest(event.d),
@@ -114,11 +123,13 @@ export function validateInceptionShape(
 		checkSentinel(event.kt, '1', 'signing threshold'),
 		checkSentinel(event.bt, '0', 'witness threshold'),
 		checkEmptyArray(event.b, 'witnesses are not supported'),
-		checkEmptyArray(event.c, 'configuration traits are not supported'),
 		checkEmptyArray(event.a, 'inception seals are not supported'),
 		checkExactKeys(event, INCEPTION_KEYS),
 	]);
 	if (common) return { ok: false, error: common };
+
+	const traits = checkConfigTraits(event.c);
+	if (traits.error) return { ok: false, error: traits.error };
 
 	const prefix = classifyPrefix(event.i);
 	if ('error' in prefix) return { ok: false, error: prefix.error };
@@ -134,12 +145,28 @@ export function validateInceptionShape(
 		if (error) return { ok: false, error };
 		return {
 			ok: true,
-			value: { transferable: true, event: event as unknown as InceptionEvent },
+			value: {
+				transferable: true,
+				establishmentOnly: traits.establishmentOnly,
+				event: event as unknown as InceptionEvent,
+			},
 		};
 	}
 
 	// Non-transferable: a single `B`-coded signing key and no next-key
-	// commitment at all — the identifier can never rotate.
+	// commitment at all — the identifier can never rotate. `EO` on such an
+	// identifier would be redundant (a one-event KEL is already
+	// non-extensible), so the profile rejects it on the same grounds as any
+	// other unsupported configuration on a non-transferable inception.
+	if (traits.establishmentOnly) {
+		return {
+			ok: false,
+			error: {
+				code: 'UNSUPPORTED_FEATURE',
+				feature: 'EO is not supported on a non-transferable inception',
+			},
+		};
+	}
 	const error = firstError([
 		checkSingleton(event.k, 'ntkey'),
 		checkSentinel(event.nt, '0', 'next-key threshold'),

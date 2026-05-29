@@ -137,6 +137,9 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 		nextKeyCommitment: newNextCommitment,
 		transferable: true,
 		eventType: 'rot',
+		// `EO` is set at inception and inherited unchanged — a rotation never
+		// introduces or clears it. Forward whatever the prior state carried.
+		...(input.state.establishmentOnly ? { establishmentOnly: true as const } : {}),
 	};
 
 	return { event: frame, state: newState };
