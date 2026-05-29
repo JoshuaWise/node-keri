@@ -7,7 +7,7 @@ export function utf8Encode(value: string): Uint8Array {
 	return encoder.encode(value);
 }
 
-export function utf8Decode(bytes: Uint8Array): string {
+export function utf8Decode(bytes: Readonly<Uint8Array>): string {
 	try {
 		return decoder.decode(bytes);
 	} catch {

@@ -86,7 +86,7 @@ function fail(error: KeriVerificationError): { ok: false; error: KeriVerificatio
  */
 function checkCanonicalBytes(
 	event: Record<string, unknown>,
-	eventBytes: Uint8Array
+	eventBytes: Readonly<Uint8Array>
 ): boolean {
 	let canonicalBytes: Uint8Array;
 	try {
@@ -231,7 +231,7 @@ function readWrapper(signed: unknown):
 function applyInception(
 	aid: Aid,
 	event: Record<string, unknown>,
-	eventBytes: Uint8Array,
+	eventBytes: Readonly<Uint8Array>,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInceptionShape(event);
@@ -363,7 +363,7 @@ function applyInception(
 function applyRotation(
 	state: TransferableKeriState,
 	event: Record<string, unknown>,
-	eventBytes: Uint8Array,
+	eventBytes: Readonly<Uint8Array>,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateRotationShape(event);
@@ -503,7 +503,7 @@ function applyRotation(
 function applyInteraction(
 	state: TransferableKeriState,
 	event: Record<string, unknown>,
-	eventBytes: Uint8Array,
+	eventBytes: Readonly<Uint8Array>,
 	signature: CesrIndexedSignature
 ): StepResult {
 	const shape = validateInteractionShape(event);

@@ -46,20 +46,8 @@ export {
 	DEFAULT_DIGEST_CODE,
 } from './crypto/digests';
 export type { DigestAlgorithm } from './crypto/digests';
-export {
-	generateKeyPair,
-	keyPairFromSeed,
-	keyPairFromPrivateKey,
-	publicKeyFromRaw,
-	exportPublicKeyRaw,
-	exportPublicKey,
-} from './crypto/keypair';
-export type {
-	KeriPublicKey,
-	KeriPrivateKey,
-	KeriKeyPair,
-	PublicKeyJwk,
-} from './crypto/keypair';
+export { generateKeyPair, keyPairFromSeed } from './crypto/keypair';
+export type { KeriPublicKey, KeriPrivateKey, KeriKeyPair } from './crypto/keypair';
 export { sign, verify } from './crypto/ed25519';
 
 export { canonicalizeJson } from './event/canonical-json';

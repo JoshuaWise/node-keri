@@ -23,13 +23,7 @@ npm install node-keri
 ### Create an identifier, rotate it, and store its keys
 
 ```ts
-import {
-	createIdentifier,
-	rotateIdentifier,
-	generateKeyPair,
-	exportPublicKey,
-	exportPublicKeyRaw,
-} from 'node-keri';
+import { createIdentifier, rotateIdentifier, generateKeyPair } from 'node-keri';
 
 // Mint a new did:keri identifier — fresh current + pre-rotation keypairs.
 const id = createIdentifier();
@@ -44,8 +38,6 @@ const rotation = rotateIdentifier({
 
 // After the rotation, id.nextKeyPair is the authoritative signing key.
 // Extract its public half for storage — as a JWK and as raw bytes.
-const currentPublicJwk = exportPublicKey(id.nextKeyPair.publicKey);
-const currentPublicRaw = exportPublicKeyRaw(id.nextKeyPair.publicKey);
 
 // Persist the key event log; keep the private keypairs in your own secure
 // store — the library never serializes private keys. Each event is a CESR
@@ -128,15 +120,7 @@ The error policy is uniform across the whole surface: **throwing is reserved for
 
 ### Identifier lifecycle
 
-#### `generateKeyPair`
-
-```ts
-function generateKeyPair(): KeriKeyPair;
-```
-
-Generate a fresh Ed25519 keypair from the platform CSPRNG. `KeriKeyPair` is an opaque wrapper type — the private seed is never exposed.
-
-#### `createIdentifier`
+#### `createIdentifier()`
 
 ```ts
 function createIdentifier(input?: {
@@ -160,9 +144,9 @@ Mint a new transferable `did:keri` identifier. Generates fresh current and next 
 
 `digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to SHA-256 (`I`). See [Digest algorithms](#digest-algorithms).
 
-Set `establishmentOnly: true` to mint an **establishment-only** identifier — see [Establishment-only identifiers](#establishment-only-identifiers). It defaults to `false`.
+Set `establishmentOnly: true` to mint an **establishment-only** identifier. It defaults to `false`.
 
-#### `rotateIdentifier`
+#### `rotateIdentifier()`
 
 ```ts
 function rotateIdentifier(input: {
@@ -180,7 +164,7 @@ Roll the signing key forward. `currentPrivateKey` is the private half of the key
 
 `digestCode` selects the hash for this event's SAID and new next-key commitment (default SHA-256). The prior commitment is always re-checked under its _own_ original algorithm, so rotations may switch algorithms freely.
 
-#### `interactIdentifier`
+#### `interactIdentifier()`
 
 ```ts
 function interactIdentifier(input: {
@@ -194,27 +178,9 @@ function interactIdentifier(input: {
 };
 ```
 
-Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256). Throws `InvalidArgumentError` for an [establishment-only](#establishment-only-identifiers) identifier, which by construction accepts no interaction events.
+Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256). Throws `InvalidArgumentError` for an establishment-only identifier, which by construction accepts no interaction events.
 
-#### Establishment-only identifiers
-
-KERI lets an inception event declare that its KEL will only ever carry **establishment events** — `icp` and `rot`, the events that change key state — and never interaction (`ixn`) events. This is the `EO` ("establishment only") configuration trait, set in the inception event's `c` field. It is a useful hardening choice for an identifier whose sole purpose is to anchor key rotations: it removes interaction events as an attack surface and makes the key history the entire history.
-
-Pass `establishmentOnly: true` to `createIdentifier` to set the trait:
-
-```ts
-const id = createIdentifier({ establishmentOnly: true });
-```
-
-The trait is **inception-only and permanent**: it is declared once, at inception, and every later event inherits it unchanged — there is no event that turns it off. From then on:
-
-- `interactIdentifier` (and the low-level `createInteractionEvent`) throw `InvalidArgumentError` for the identifier — there is no valid interaction event to construct.
-- `verifyKel` rejects any `ixn` appended to the KEL out of band with the `ESTABLISHMENT_ONLY_NO_INTERACTION` verification error, exactly as it rejects an event appended after a deactivation.
-- Rotation is unaffected — an establishment-only identifier rotates normally with `rotateIdentifier`, and may still be deactivated.
-
-The flag rides along on the verified state: `state.establishmentOnly` is `true` for such an identifier (and absent otherwise). node-keri both generates and verifies the `EO` trait, including on KELs produced by keripy.
-
-#### `deactivateIdentifier`
+#### `deactivateIdentifier()`
 
 ```ts
 function deactivateIdentifier(input: {
@@ -229,7 +195,9 @@ function deactivateIdentifier(input: {
 
 Permanently abandon an identifier. Per the `did:keri` method, deactivation is a rotation to zero forward (next) controlling keys: the event is a `rot` with `nt: "0"` and an empty `n`. `currentPrivateKey` is the pre-rotation key being revealed — exactly as for `rotateIdentifier`, its public half must reproduce the prior next-key commitment. Because the event commits to no next key, it is the **final** event of the KEL: `verifyKel` rejects anything appended after it with `DEACTIVATED_NOT_EXTENSIBLE`, and `verifySignatureWithDid` no longer trusts the DID. The returned `state` has `deactivated === true` and `transferable === false`. **This step is irreversible.**
 
-#### `verifyKel`
+### Signing and verifying
+
+#### `verifyKel()`
 
 ```ts
 function verifyKel(input: {
@@ -244,7 +212,7 @@ Replay a key event log — a CESR stream — from inception and reconstruct the 
 
 A KEL that ends in a deactivation event (see `deactivateIdentifier`) verifies normally, and its `state` has `deactivated === true` and `transferable === false`; any event appended after the deactivation is rejected with `DEACTIVATED_NOT_EXTENSIBLE`.
 
-#### `verifySignatureWithDid`
+#### `verifySignatureWithDid()`
 
 ```ts
 function verifySignatureWithDid(input: {
@@ -264,7 +232,7 @@ Returns `false` for every data-level failure: a malformed DID, an empty or non-v
 
 ### DID surface
 
-#### `resolveDid`
+#### `resolveDid()`
 
 ```ts
 function resolveDid(input: {
@@ -280,7 +248,7 @@ Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify 
 
 A non-transferable DID resolves with the **empty string** `''` for `kel`: it is self-certifying, so the document is projected straight from the prefix. (`eventCount` is then 0, and `metadata.kel` is absent even under `includeKel` — there is no KEL to echo.) A non-transferable DID may also be resolved from its trivial single-event KEL by passing that stream.
 
-#### `createDidDocument`
+#### `createDidDocument()`
 
 ```ts
 function createDidDocument(input: {
@@ -294,45 +262,30 @@ Project a _verified_ `KeriState` into a W3C DID document with a single Ed25519 v
 
 ### Key handling
 
-#### `keyPairFromSeed`
+#### `KeriKeyPair`
+
+A wrapper type for an Ed25519 keypair.
+
+Access each underlying [`KeyObject`](https://nodejs.org/api/crypto.html#class-keyobject) at:
+
+- `pair.publicKey.keyObject`
+- `pair.privateKey.keyObject`
+
+#### `generateKeyPair()`
+
+```ts
+function generateKeyPair(): KeriKeyPair;
+```
+
+Generate a fresh Ed25519 keypair from the platform [CSPRNG](https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator).
+
+#### `keyPairFromSeed()`
 
 ```ts
 function keyPairFromSeed(seed: Uint8Array): KeriKeyPair;
 ```
 
-Reconstruct a keypair from a 32-byte Ed25519 seed. Intended for test vectors and callers that already hold raw key material.
-
-#### `keyPairFromPrivateKey`
-
-```ts
-function keyPairFromPrivateKey(privateKey: KeriPrivateKey): KeriKeyPair;
-```
-
-Reconstruct a full keypair from its private half. Ed25519 private keys carry their public point, so the public key is derived deterministically — no key material is generated.
-
-#### `publicKeyFromRaw`
-
-```ts
-function publicKeyFromRaw(raw: Uint8Array): KeriPublicKey;
-```
-
-Wrap a raw 32-byte Ed25519 public key as a `KeriPublicKey`.
-
-#### `exportPublicKey`
-
-```ts
-function exportPublicKey(publicKey: KeriPublicKey): PublicKeyJwk;
-```
-
-Export a public key as an RFC 8037 JWK (`{ kty: 'OKP', crv: 'Ed25519', x }`) — the portable form to share, and the same representation embedded in a DID document's verification method.
-
-#### `exportPublicKeyRaw`
-
-```ts
-function exportPublicKeyRaw(publicKey: KeriPublicKey): Uint8Array;
-```
-
-Export the raw 32-byte public-key bytes as a fresh copy.
+Reconstruct a keypair from a 32-byte Ed25519 seed.
 
 ### Digest algorithms
 
@@ -422,7 +375,7 @@ type KeriVerificationError =
 
 Alongside the functions above, the package exports the full type surface:
 
-- **Keys** — `KeriKeyPair`, `KeriPublicKey`, `KeriPrivateKey`, `PublicKeyJwk`.
+- **Keys** — `KeriKeyPair`, `KeriPublicKey`, `KeriPrivateKey`.
 - **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrIndexedSignature`, `CesrDigest` (compile-time branded strings).
 - **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.

@@ -135,7 +135,7 @@ export type ParseStreamResult =
 	| { ok: false; message: string };
 
 /** Render the ASCII text in `bytes[start, end)`, rejecting any non-ASCII byte. */
-function asciiSlice(bytes: Uint8Array, start: number, end: number): string {
+function asciiSlice(bytes: Readonly<Uint8Array>, start: number, end: number): string {
 	let text = '';
 	for (let i = start; i < end; i++) {
 		const byte = bytes[i];
@@ -151,7 +151,7 @@ function asciiSlice(bytes: Uint8Array, start: number, end: number): string {
 }
 
 /** Read the event byte length declared by the version string at `offset`. */
-function readEventSize(bytes: Uint8Array, offset: number): number {
+function readEventSize(bytes: Readonly<Uint8Array>, offset: number): number {
 	if (offset + HEADER_LENGTH > bytes.length) {
 		throw new MalformedInputError('truncated event header');
 	}
@@ -178,7 +178,7 @@ function readEventSize(bytes: Uint8Array, offset: number): number {
 
 /** Parse one frame starting at byte `offset`; report the next frame's offset. */
 function parseFrameAt(
-	bytes: Uint8Array,
+	bytes: Readonly<Uint8Array>,
 	offset: number
 ): { signed: SignedKeriEvent; eventBytes: Uint8Array; nextOffset: number } {
 	const size = readEventSize(bytes, offset);

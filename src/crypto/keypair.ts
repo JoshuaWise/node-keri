@@ -23,7 +23,7 @@ import { InvalidArgumentError, UnsupportedAlgorithmError } from '../profile/erro
 export interface KeriPublicKey {
 	readonly type: 'KeriPublicKey';
 	readonly algorithm: SupportedKeyAlgorithm;
-	readonly raw: Uint8Array;
+	readonly raw: Readonly<Uint8Array>;
 	readonly keyObject: KeyObject;
 }
 
@@ -62,7 +62,7 @@ export function generateKeyPair(): KeriKeyPair {
  * vectors and any caller that already holds raw key material. The public
  * half is derived from the seed by Node.
  */
-export function keyPairFromSeed(seed: Uint8Array): KeriKeyPair {
+export function keyPairFromSeed(seed: Readonly<Uint8Array>): KeriKeyPair {
 	if (seed.length !== ED25519_PRIVATE_SEED_BYTES) {
 		throw new InvalidArgumentError(
 			`Ed25519 seed must be ${ED25519_PRIVATE_SEED_BYTES} bytes`
@@ -79,7 +79,7 @@ export function keyPairFromSeed(seed: Uint8Array): KeriKeyPair {
 }
 
 /** Wrap a raw 32-byte Ed25519 public key as a KeriPublicKey. */
-export function publicKeyFromRaw(raw: Uint8Array): KeriPublicKey {
+export function publicKeyFromRaw(raw: Readonly<Uint8Array>): KeriPublicKey {
 	if (raw.length !== ED25519_PUBLIC_KEY_BYTES) {
 		throw new InvalidArgumentError(
 			`Ed25519 public key must be ${ED25519_PUBLIC_KEY_BYTES} bytes`
@@ -95,34 +95,6 @@ export function publicKeyFromRaw(raw: Uint8Array): KeriPublicKey {
 		raw: new Uint8Array(raw),
 		keyObject,
 	});
-}
-
-/** Export the raw 32-byte public key bytes from a KeriPublicKey. */
-export function exportPublicKeyRaw(publicKey: KeriPublicKey): Uint8Array {
-	assertPublicKey(publicKey);
-	return new Uint8Array(publicKey.raw);
-}
-
-/** An Ed25519 public key in JSON Web Key form (RFC 8037). */
-export interface PublicKeyJwk {
-	readonly kty: 'OKP';
-	readonly crv: 'Ed25519';
-	/** Raw 32-byte public key, unpadded base64url. */
-	readonly x: string;
-}
-
-/**
- * Export a public key as a JWK — the portable, JSON-safe form a caller
- * shares for signed verification. It is the same representation embedded
- * in a `did:keri` DID document's verification method.
- */
-export function exportPublicKey(publicKey: KeriPublicKey): PublicKeyJwk {
-	assertPublicKey(publicKey);
-	return {
-		kty: 'OKP',
-		crv: 'Ed25519',
-		x: base64urlEncode(publicKey.raw),
-	};
 }
 
 /**

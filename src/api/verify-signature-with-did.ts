@@ -48,7 +48,7 @@ export interface VerifySignatureWithDidInput {
 	 */
 	readonly kel: string;
 	/** The exact bytes that were signed. */
-	readonly payload: Uint8Array;
+	readonly payload: Readonly<Uint8Array>;
 	/**
 	 * A detached CESR-qualified Ed25519 signature over `payload`. This is a
 	 * non-indexed signature (a "Cigar", code `0B`) — the form for signatures

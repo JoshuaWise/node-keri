@@ -55,7 +55,7 @@ export interface DigestAlgorithm {
 	 * 256-bit (one-character) code or 64 bytes for a 512-bit (`0`-prefixed)
 	 * code; a result of any other length or type is rejected by `runDigest`.
 	 */
-	hash(input: Uint8Array): Uint8Array;
+	hash(input: Readonly<Uint8Array>): Uint8Array;
 }
 
 /**
@@ -134,7 +134,7 @@ for (const code of validDigestCodes()) {
 Object.seal(digestAlgorithms);
 
 /** One-shot hash through `node:crypto`. */
-function nodeHash(nodeName: string, input: Uint8Array): Uint8Array {
+function nodeHash(nodeName: string, input: Readonly<Uint8Array>): Uint8Array {
 	return new Uint8Array(createHash(nodeName).update(input).digest());
 }
 
@@ -163,7 +163,8 @@ const NATIVE_DIGESTS: ReadonlyArray<{
 		if (!available.has(d.nodeName)) continue;
 		digestAlgorithms[d.code] = Object.freeze({
 			name: d.name,
-			hash: (input: Uint8Array): Uint8Array => nodeHash(d.nodeName, input),
+			hash: (input: Readonly<Uint8Array>): Uint8Array =>
+				nodeHash(d.nodeName, input),
 		});
 	}
 	// SHA-256 is the default generation algorithm and the AID/SAID workhorse;
@@ -190,7 +191,7 @@ export function isRegisteredDigestCode(code: unknown): code is string {
  * or wrapped: it propagates unchanged. A faulty registered algorithm is a
  * programmer error, not the hostile input the verifier turns into a result.
  */
-export function runDigest(code: string, input: Uint8Array): Uint8Array {
+export function runDigest(code: string, input: Readonly<Uint8Array>): Uint8Array {
 	const spec = digestSpecForCode(code);
 	const algorithm = digestAlgorithms[code];
 	if (!algorithm || typeof algorithm.hash !== 'function') {

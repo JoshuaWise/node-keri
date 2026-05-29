@@ -5,7 +5,7 @@ import { MalformedInputError } from '../profile/errors';
  * Base64url encode without padding. Output uses the URL-safe alphabet
  * (`A-Z a-z 0-9 - _`) and never contains `=`.
  */
-export function base64urlEncode(bytes: Uint8Array): string {
+export function base64urlEncode(bytes: Readonly<Uint8Array>): string {
 	return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString(
 		'base64url'
 	);

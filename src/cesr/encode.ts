@@ -26,7 +26,11 @@ import {
  * indexed primitive passes `prefix` explicitly (`hs` code chars + `ss` index
  * chars, together `ps` long).
  */
-function encodeMatter(spec: CesrCodeSpec, raw: Uint8Array, prefix?: string): string {
+function encodeMatter(
+	spec: CesrCodeSpec,
+	raw: Readonly<Uint8Array>,
+	prefix?: string
+): string {
 	if (raw.length !== spec.rs) {
 		throw new InvalidArgumentError(
 			`${spec.label} requires ${spec.rs} raw bytes, got ${raw.length}`
@@ -39,12 +43,12 @@ function encodeMatter(spec: CesrCodeSpec, raw: Uint8Array, prefix?: string): str
 }
 
 /** CESR-qualify a 32-byte Ed25519 public key (transferable, code `D`). */
-export function encodePublicKeyEd25519(raw: Uint8Array): CesrPublicKey {
+export function encodePublicKeyEd25519(raw: Readonly<Uint8Array>): CesrPublicKey {
 	return encodeMatter(CESR_PUBLIC_KEY_ED25519, raw) as CesrPublicKey;
 }
 
 /** CESR-qualify a 64-byte Ed25519 signature, non-indexed (code `0B`). */
-export function encodeSignatureEd25519(raw: Uint8Array): CesrSignature {
+export function encodeSignatureEd25519(raw: Readonly<Uint8Array>): CesrSignature {
 	return encodeMatter(CESR_SIGNATURE_ED25519, raw) as CesrSignature;
 }
 
@@ -56,7 +60,7 @@ export function encodeSignatureEd25519(raw: Uint8Array): CesrSignature {
  * index 0; the parameter exists for wire compatibility with KERI.
  */
 export function encodeIndexedSignatureEd25519(
-	raw: Uint8Array,
+	raw: Readonly<Uint8Array>,
 	index: number
 ): CesrIndexedSignature {
 	const spec = CESR_INDEXED_SIGNATURE_ED25519;
@@ -70,7 +74,7 @@ export function encodeIndexedSignatureEd25519(
 }
 
 /** CESR-qualify a 32-byte SHA-256 digest (code `I`), specifically. */
-export function encodeDigestSha256(raw: Uint8Array): CesrDigest {
+export function encodeDigestSha256(raw: Readonly<Uint8Array>): CesrDigest {
 	return encodeMatter(CESR_DIGEST_SHA256, raw) as CesrDigest;
 }
 
@@ -82,6 +86,6 @@ export function encodeDigestSha256(raw: Uint8Array): CesrDigest {
  * matching length (32 or 64 bytes); both are enforced here. This does not
  * require the algorithm to be *registered*: it is a pure structural encoding.
  */
-export function encodeDigest(code: string, raw: Uint8Array): CesrDigest {
+export function encodeDigest(code: string, raw: Readonly<Uint8Array>): CesrDigest {
 	return encodeMatter(digestSpecForCode(code), raw) as CesrDigest;
 }

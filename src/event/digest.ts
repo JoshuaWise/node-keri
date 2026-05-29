@@ -87,7 +87,7 @@ export interface SaidComputation {
 	readonly versionString: string;
 	/** Canonical bytes that were hashed; equals the bytes of the final
 	 *  event with the SAID fields holding their placeholder values. */
-	readonly digestedBytes: Uint8Array;
+	readonly digestedBytes: Readonly<Uint8Array>;
 }
 
 /**

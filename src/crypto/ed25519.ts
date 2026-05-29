@@ -8,7 +8,10 @@ import {
 } from './keypair';
 
 /** Produce an Ed25519 signature over `message`. Always 64 bytes. */
-export function sign(privateKey: KeriPrivateKey, message: Uint8Array): Uint8Array {
+export function sign(
+	privateKey: KeriPrivateKey,
+	message: Readonly<Uint8Array>
+): Uint8Array {
 	assertPrivateKey(privateKey);
 	const sig = new Uint8Array(nodeSign(null, message, privateKey.keyObject));
 	if (sig.length !== ED25519_SIGNATURE_BYTES) {
@@ -24,8 +27,8 @@ export function sign(privateKey: KeriPrivateKey, message: Uint8Array): Uint8Arra
  */
 export function verify(
 	publicKey: KeriPublicKey,
-	message: Uint8Array,
-	signature: Uint8Array
+	message: Readonly<Uint8Array>,
+	signature: Readonly<Uint8Array>
 ): boolean {
 	assertPublicKey(publicKey);
 	if (signature.length !== ED25519_SIGNATURE_BYTES) return false;

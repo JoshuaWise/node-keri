@@ -12,12 +12,7 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { verifyKel } from '../src/api/verify-kel';
 import { decodeDigestSha256 } from '../src/cesr/decode';
 import { canonicalizeJson } from '../src/event/canonical-json';
-import {
-	exportPublicKey,
-	exportPublicKeyRaw,
-	keyPairFromPrivateKey,
-	keyPairFromSeed,
-} from '../src/crypto/keypair';
+import { keyPairFromPrivateKey, keyPairFromSeed } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
 import { formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { resolveDid } from '../src/did/resolver';
@@ -163,15 +158,7 @@ describe('negative — createDidDocument', () => {
 	});
 });
 
-describe('negative — key export and import', () => {
-	test('exportPublicKey rejects a non-public-key', () => {
-		expect(() => exportPublicKey({} as never)).toThrow(InvalidArgumentError);
-	});
-
-	test('exportPublicKeyRaw rejects a non-public-key', () => {
-		expect(() => exportPublicKeyRaw('nope' as never)).toThrow(InvalidArgumentError);
-	});
-
+describe('negative — key import', () => {
 	test('keyPairFromSeed rejects a wrong-length seed', () => {
 		expect(() => keyPairFromSeed(new Uint8Array(31))).toThrow(InvalidArgumentError);
 	});

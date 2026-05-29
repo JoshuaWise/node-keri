@@ -959,18 +959,15 @@ public API is stable
 
 ```ts
 export {
-    generateKeyPair,
     createIdentifier,
     rotateIdentifier,
     interactIdentifier,
     deactivateIdentifier,
     verifyKel,
-    parseDidKeri,
-    formatDidKeri,
     resolveDid,
     createDidDocument,
-    exportPublicKey,
     verifySignatureWithDid,
+    generateKeyPair,
 };
 ```
 

@@ -1,7 +1,7 @@
 import { utf8Encode } from '../src/bytes/utf8';
 import { sign, verify } from '../src/crypto/ed25519';
 import {
-	exportPublicKeyRaw,
+	KeriPublicKey,
 	generateKeyPair,
 	keyPairFromSeed,
 	publicKeyFromRaw,
@@ -63,12 +63,8 @@ describe('ed25519', () => {
 	});
 
 	test('keyPairFromSeed rejects wrong-length seeds', () => {
-		expect(() => keyPairFromSeed(new Uint8Array(31))).toThrow(
-			InvalidArgumentError
-		);
-		expect(() => keyPairFromSeed(new Uint8Array(33))).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => keyPairFromSeed(new Uint8Array(31))).toThrow(InvalidArgumentError);
+		expect(() => keyPairFromSeed(new Uint8Array(33))).toThrow(InvalidArgumentError);
 	});
 
 	test('verify rejects a tampered message', () => {
@@ -89,12 +85,8 @@ describe('ed25519', () => {
 
 	test('verify rejects a wrong-length signature without throwing', () => {
 		const kp = generateKeyPair();
-		expect(verify(kp.publicKey, utf8Encode('m'), new Uint8Array(63))).toBe(
-			false
-		);
-		expect(verify(kp.publicKey, utf8Encode('m'), new Uint8Array(65))).toBe(
-			false
-		);
+		expect(verify(kp.publicKey, utf8Encode('m'), new Uint8Array(63))).toBe(false);
+		expect(verify(kp.publicKey, utf8Encode('m'), new Uint8Array(65))).toBe(false);
 	});
 
 	test('verify rejects under a different keypair', () => {
@@ -105,7 +97,8 @@ describe('ed25519', () => {
 		expect(verify(b.publicKey, msg, sig)).toBe(false);
 	});
 
-	test('publicKeyFromRaw round-trips through exportPublicKeyRaw', () => {
+	test('publicKeyFromRaw round-trips through exported raw key', () => {
+		const exportPublicKeyRaw = (key: KeriPublicKey) => new Uint8Array(key.raw);
 		const kp = generateKeyPair();
 		const raw = exportPublicKeyRaw(kp.publicKey);
 		const restored = publicKeyFromRaw(raw);
@@ -118,22 +111,16 @@ describe('ed25519', () => {
 	});
 
 	test('publicKeyFromRaw rejects wrong-length input', () => {
-		expect(() => publicKeyFromRaw(new Uint8Array(31))).toThrow(
-			InvalidArgumentError
-		);
-		expect(() => publicKeyFromRaw(new Uint8Array(33))).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => publicKeyFromRaw(new Uint8Array(31))).toThrow(InvalidArgumentError);
+		expect(() => publicKeyFromRaw(new Uint8Array(33))).toThrow(InvalidArgumentError);
 	});
 
 	test('sign and verify reject foreign key objects', () => {
 		const kp = generateKeyPair();
-		expect(() => sign({} as never, utf8Encode('x'))).toThrow(
+		expect(() => sign({} as never, utf8Encode('x'))).toThrow(InvalidArgumentError);
+		expect(() => verify({} as never, utf8Encode('x'), new Uint8Array(64))).toThrow(
 			InvalidArgumentError
 		);
-		expect(() =>
-			verify({} as never, utf8Encode('x'), new Uint8Array(64))
-		).toThrow(InvalidArgumentError);
 		// Swapping public and private should also fail.
 		expect(() => sign(kp.publicKey as never, utf8Encode('x'))).toThrow(
 			InvalidArgumentError
