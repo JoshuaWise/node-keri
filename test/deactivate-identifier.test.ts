@@ -307,8 +307,9 @@ describe('DID surface — a deactivated DID', () => {
 		const result = resolveDid({ did: id.did, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.metadata.deactivated).toBe(true);
-		expect(result.metadata.eventCount).toBe(2);
+		expect(result.state.deactivated).toBe(true);
+		// Two events (icp + deactivating rot) ⇒ the last is at sequence number 1.
+		expect(result.state.sequenceNumber).toBe(1);
 		expect(result.didDocument.verificationMethod).toEqual([]);
 		expect(result.didDocument.authentication).toEqual([]);
 		expect(result.didDocument.assertionMethod).toEqual([]);

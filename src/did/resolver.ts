@@ -37,30 +37,17 @@ export interface ResolveDidInput {
 	readonly kel: string;
 }
 
-/** Side information about a successful resolution. */
-export interface DidResolutionMetadata {
-	/** The replay-verified latest state of the identifier. */
-	readonly state: KeriState;
-	/** Number of events in the verified KEL. */
-	readonly eventCount: number;
-	/**
-	 * `true` when the identifier has been deactivated — its KEL ends in a
-	 * deactivation event. Resolution still succeeds (the KEL is valid), but the
-	 * `didDocument` is authority-free and the DID must be treated as abandoned.
-	 */
-	readonly deactivated: boolean;
-}
-
 /** Discriminated result of resolving a `did:keri` DID. */
 export type DidResolutionResult =
-	| { ok: true; didDocument: DidDocument; metadata: DidResolutionMetadata }
+	| { ok: true; didDocument: DidDocument; state: KeriState }
 	| { ok: false; error: KeriVerificationError };
 
 /**
  * Resolve a `did:keri` DID against a caller-supplied KEL.
  *
  * On success the `didDocument` reflects the latest *verified* key state and
- * `metadata.state` is the only `KeriState` the caller may treat as trusted.
+ * `state` is the only `KeriState` the caller may treat as trusted — it carries
+ * the `deactivated` flag and (via `sequenceNumber`) the KEL length directly.
  * Any data-level failure — a malformed DID, or a KEL that is empty, tampered,
  * reordered, or for a different identifier — is returned as `{ ok: false }`.
  * Throwing is reserved for a caller that violates the argument contract.
@@ -110,14 +97,7 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
 		state: verification.state,
 	});
 
-	// `verifyKel` already parsed and replayed the stream, so it reports the
-	// event count directly — no need to parse the KEL a second time here.
-	const metadata: DidResolutionMetadata = {
-		state: verification.state,
-		eventCount: verification.eventCount,
-		deactivated: verification.state.deactivated === true,
-	};
-	return { ok: true, didDocument, metadata };
+	return { ok: true, didDocument, state: verification.state };
 }
 
 /**
@@ -125,7 +105,9 @@ export function resolveDid(input: ResolveDidInput): DidResolutionResult {
  * signing key — a `B`-coded basic prefix is self-certifying — so the document
  * is projected straight from it, with no events to replay.
  *
- * There is no KEL, so `metadata.eventCount` is 0.
+ * There is no KEL: the returned `state` omits `lastEventDigest` / `eventType`,
+ * which is what distinguishes a bare AID from one verified from a single-event
+ * KEL (both report `sequenceNumber: 0`).
  */
 function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult {
 	const state: NonTransferableKeriState = {
@@ -139,9 +121,5 @@ function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult 
 		transferable: false,
 	};
 	const didDocument = createDidDocument({ did: parsed.did, state });
-	return {
-		ok: true,
-		didDocument,
-		metadata: { state, eventCount: 0, deactivated: false },
-	};
+	return { ok: true, didDocument, state };
 }

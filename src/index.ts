@@ -176,8 +176,4 @@ export type {
 } from './did/document';
 
 export { resolveDid } from './did/resolver';
-export type {
-	ResolveDidInput,
-	DidResolutionResult,
-	DidResolutionMetadata,
-} from './did/resolver';
+export type { ResolveDidInput, DidResolutionResult } from './did/resolver';

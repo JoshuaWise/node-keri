@@ -257,11 +257,11 @@ function resolveDid(input: {
 	did: DidKeri;
 	kel: string;
 }):
-	| { ok: true; didDocument: DidDocument; metadata: DidResolutionMetadata }
+	| { ok: true; didDocument: DidDocument; state: KeriState }
 	| { ok: false; error: KeriVerificationError };
 ```
 
-Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `metadata` carries the verified `state`, `eventCount`, and `deactivated` flag. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still resolves with `ok: true` — its `didDocument` is authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`) and `metadata.deactivated` is `true`.
+Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `state` is the verified latest `KeriState` — the only one the caller may treat as trusted — carrying the `deactivated` flag and (via `sequenceNumber`) the KEL length directly. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still resolves with `ok: true` — its `didDocument` is authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`) and `state.deactivated` is `true`.
 
 A non-transferable DID resolves with the **empty string** `''` for `kel`: it is self-certifying, so the document is projected straight from the prefix. A non-transferable DID may also be resolved from its trivial single-event KEL by passing that stream.
 
@@ -408,7 +408,7 @@ Alongside the functions above, the package exports the full type surface:
 - **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
 - **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `NonTransferableInceptionEvent`, `RotationEvent`, `DeactivationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
 - **State** — `KeriState`, the replay-derived, trusted summary of an identifier — a discriminated union of `TransferableKeriState`, `NonTransferableKeriState`, and `DeactivatedKeriState` on the `transferable` field (the two `transferable: false` members are told apart by `deactivated`).
-- **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`, `DidResolutionMetadata`.
+- **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `DidResolutionResult`.
 - **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyKelResult`, and so on).
 - **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `DEFAULT_DIGEST_CODE`, `DIGEST_CODES`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.
 

@@ -407,9 +407,10 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		const result = resolveDid({ did: generated.did as DidKeri, kel: '' });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.metadata.state.transferable).toBe(false);
-			expect(result.metadata.state.aid).toBe(generated.aid);
-			expect(result.metadata.eventCount).toBe(0);
+			expect(result.state.transferable).toBe(false);
+			expect(result.state.aid).toBe(generated.aid);
+			// Resolved bare from the prefix: no event-derived fields.
+			expect(result.state.lastEventDigest).toBeUndefined();
 			expect(result.didDocument.id).toBe(generated.did);
 			// The sole verification method is the AID itself, as a JWK.
 			expect(result.didDocument.verificationMethod).toHaveLength(1);
@@ -427,9 +428,12 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.metadata.state.transferable).toBe(false);
-			expect(result.metadata.state.aid).toBe(generated.aid);
-			expect(result.metadata.eventCount).toBe(1);
+			expect(result.state.transferable).toBe(false);
+			expect(result.state.aid).toBe(generated.aid);
+			// Verified from its single-event KEL: event-derived fields are present,
+			// which is what distinguishes this from the bare resolution above.
+			expect(result.state.lastEventDigest).toBeDefined();
+			expect(result.state.eventType).toBe('icp');
 			expect(result.didDocument.id).toBe(generated.did);
 		}
 	});
