@@ -84,7 +84,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	}
 
 	const newNextCommitment = deriveNextKeyCommitment(input.nextPublicKey, digestCode);
-	const nextSeq = input.state.sequenceNumber + 1;
+	const nextSeq = input.state.lastSequenceNumber + 1;
 	if (!Number.isSafeInteger(nextSeq)) {
 		throw new InvalidArgumentError('sequence number overflow');
 	}
@@ -131,15 +131,16 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	const newState: TransferableKeriState = {
 		aid: input.state.aid,
 		did: input.state.did,
-		sequenceNumber: nextSeq,
+		lastSequenceNumber: nextSeq,
+		lastEventType: 'rot',
 		lastEventDigest: said,
 		currentPublicKey: newCurrentQb64,
 		nextKeyCommitment: newNextCommitment,
 		transferable: true,
-		eventType: 'rot',
+		deactivated: false,
 		// `EO` is set at inception and inherited unchanged — a rotation never
 		// introduces or clears it. Forward whatever the prior state carried.
-		...(input.state.establishmentOnly ? { establishmentOnly: true as const } : {}),
+		establishmentOnly: input.state.establishmentOnly,
 	};
 
 	return { event: frame, state: newState };

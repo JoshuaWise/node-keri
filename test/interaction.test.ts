@@ -56,9 +56,9 @@ describe('createInteractionEvent', () => {
 		expect(state.nextKeyCommitment).toBe(inception.state.nextKeyCommitment);
 		expect(state.aid).toBe(inception.state.aid);
 		expect(state.did).toBe(inception.state.did);
-		expect(state.sequenceNumber).toBe(1);
+		expect(state.lastSequenceNumber).toBe(1);
 		expect(state.lastEventDigest).toBe(event.d);
-		expect(state.eventType).toBe('ixn');
+		expect(state.lastEventType).toBe('ixn');
 	});
 
 	test('preserves anchored data verbatim', () => {

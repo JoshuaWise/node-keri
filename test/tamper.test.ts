@@ -148,7 +148,7 @@ describe('tamper — the untampered KEL verifies', () => {
 		const result = verifyKel({ aid, kel: frameKel(events) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.state.sequenceNumber).toBe(4);
+		expect(result.state.lastSequenceNumber).toBe(4);
 	});
 });
 
@@ -371,7 +371,7 @@ describe('tamper — structural mutation of the log', () => {
 		const result = verifyKel({ aid, kel: frameKel(events.slice(0, 3)) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.state.sequenceNumber).toBe(2);
+		expect(result.state.lastSequenceNumber).toBe(2);
 	});
 });
 

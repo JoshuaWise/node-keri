@@ -110,12 +110,7 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 		throw new InvalidArgumentError('createDidDocument requires an input object');
 	}
 	const state = input.state;
-	if (
-		state === null
-		|| typeof state !== 'object'
-		|| typeof state.did !== 'string'
-		|| typeof state.currentPublicKey !== 'string'
-	) {
+	if (state === null || typeof state !== 'object' || typeof state.did !== 'string') {
 		throw new InvalidArgumentError('createDidDocument requires a verified KeriState');
 	}
 	const did = state.did;
@@ -136,6 +131,10 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 			authentication: [],
 			assertionMethod: [],
 		};
+	}
+
+	if (typeof state.currentPublicKey !== 'string') {
+		throw new InvalidArgumentError('createDidDocument requires a verified KeriState');
 	}
 
 	// `state.currentPublicKey` is CESR-qualified; the JWK `x` member is the

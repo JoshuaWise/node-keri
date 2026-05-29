@@ -224,7 +224,7 @@ describe('resolveDid', () => {
 		if (!result.ok) return;
 		expect(result.didDocument.id).toBe(did);
 		// Three events (icp + 2 more) ⇒ the last is at sequence number 2.
-		expect(result.state.sequenceNumber).toBe(2);
+		expect(result.state.lastSequenceNumber).toBe(2);
 	});
 
 	test('returns INVALID_DID for a malformed DID rather than throwing', () => {
@@ -289,13 +289,16 @@ describe('resolveDid', () => {
 		expect(result.didDocument.verificationMethod).toHaveLength(1);
 		expect(result.state.transferable).toBe(false);
 		expect(result.state.aid).toBe(ntAid);
-		// A non-transferable AID *is* its own signing key.
-		expect(result.state.currentPublicKey).toBe(ntAid);
+		expect(result.state.deactivated).toBe(false);
+		if (!result.state.deactivated) {
+			// A non-transferable AID *is* its own signing key.
+			expect(result.state.currentPublicKey).toBe(ntAid);
+		}
 		// Resolved bare from the prefix, with no KEL: there are no event-derived
 		// fields, which is what tells a bare AID apart from one verified from a
 		// single-event KEL (both report sequenceNumber 0).
 		expect(result.state.lastEventDigest).toBeUndefined();
-		expect(result.state.eventType).toBeUndefined();
+		expect(result.state.lastEventType).toBeUndefined();
 	});
 
 	test('throws on an argument-contract violation', () => {

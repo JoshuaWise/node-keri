@@ -128,16 +128,19 @@ describeInterop('keripy interop: establishment-only KELs', () => {
 		const result = verifyKel({ aid: parsed.aid, kel: generated.kel });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.state.sequenceNumber).toBe(2);
+			expect(result.state.lastSequenceNumber).toBe(2);
 			expect(result.state.aid).toBe(generated.aid);
 			expect(result.state.transferable).toBe(true);
 			if (result.state.transferable) {
 				expect(result.state.establishmentOnly).toBe(true);
 			}
-			// The final rotation revealed seed 64; that is the current key.
-			expect(result.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
-			);
+			expect(result.state.deactivated).toBe(false);
+			if (!result.state.deactivated) {
+				// The final rotation revealed seed 64; that is the current key.
+				expect(result.state.currentPublicKey).toBe(
+					encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
+				);
+			}
 		}
 	});
 });

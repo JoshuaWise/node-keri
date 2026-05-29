@@ -85,7 +85,7 @@ export function createDeactivationEvent(
 		);
 	}
 
-	const nextSeq = input.state.sequenceNumber + 1;
+	const nextSeq = input.state.lastSequenceNumber + 1;
 	if (!Number.isSafeInteger(nextSeq)) {
 		throw new InvalidArgumentError('sequence number overflow');
 	}
@@ -132,15 +132,14 @@ export function createDeactivationEvent(
 	const newState: DeactivatedKeriState = {
 		aid: input.state.aid,
 		did: input.state.did,
-		sequenceNumber: nextSeq,
+		lastSequenceNumber: nextSeq,
+		lastEventType: 'rot',
 		lastEventDigest: said,
-		currentPublicKey: revealedQb64,
 		transferable: false,
 		deactivated: true,
-		eventType: 'rot',
 		// `EO` is set at inception and never changes — preserve it through
 		// deactivation for completeness even though the KEL has now closed.
-		...(input.state.establishmentOnly ? { establishmentOnly: true as const } : {}),
+		establishmentOnly: input.state.establishmentOnly,
 	};
 
 	return { event: frame, state: newState };

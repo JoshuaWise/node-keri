@@ -28,7 +28,7 @@ describe('createIdentifier', () => {
 		const inception = parseSignedEvent(result.inceptionEvent);
 		expect(inception.event.t).toBe('icp');
 		expect(inception.event.s).toBe('0');
-		expect(result.state.sequenceNumber).toBe(0);
+		expect(result.state.lastSequenceNumber).toBe(0);
 	});
 
 	test('returns no key material — the caller already holds it', () => {

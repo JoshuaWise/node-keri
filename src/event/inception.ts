@@ -115,13 +115,14 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 	const state: TransferableKeriState = {
 		aid,
 		did: formatDidKeri(aid),
-		sequenceNumber: 0,
+		lastSequenceNumber: 0,
+		lastEventType: 'icp',
 		lastEventDigest: said,
 		currentPublicKey: currentKeyQb64,
 		nextKeyCommitment: nextCommitment,
 		transferable: true,
-		eventType: 'icp',
-		...(establishmentOnly ? { establishmentOnly: true as const } : {}),
+		deactivated: false,
+		establishmentOnly,
 	};
 
 	return { event: frame, state };

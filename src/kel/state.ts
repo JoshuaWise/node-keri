@@ -21,9 +21,7 @@ interface KeriStateBase {
 	 * Sequence number of the most-recently applied event. Inception is 0; also
 	 * 0 for a bare non-transferable AID resolved with no events at all.
 	 */
-	readonly sequenceNumber: number;
-	/** Currently authoritative signing key, qb64-encoded. */
-	readonly currentPublicKey: CesrPublicKey;
+	readonly lastSequenceNumber: number;
 }
 
 /**
@@ -32,26 +30,27 @@ interface KeriStateBase {
  * commitment the next rotation must reveal a key for.
  */
 export interface TransferableKeriState extends KeriStateBase {
+	/** Type of the most-recently applied event. */
+	readonly lastEventType: KeriEventType;
+	/** SAID of the most-recently applied event; the next event's `p`. */
+	readonly lastEventDigest: CesrDigest;
+	/** Currently authoritative signing key, qb64-encoded. */
+	readonly currentPublicKey: CesrPublicKey;
+	/** Pre-rotated commitment that the next rotation must reveal a key for. */
+	readonly nextKeyCommitment: CesrDigest;
 	readonly transferable: true;
 	/**
 	 * Never `true` for a transferable state — a live identifier is not
-	 * deactivated. Declared so `deactivated` is a field of every `KeriState`
-	 * and can be read without first narrowing the union.
+	 * deactivated.
 	 */
-	readonly deactivated?: false;
-	/** SAID of the most-recently applied event; the next event's `p`. */
-	readonly lastEventDigest: CesrDigest;
-	/** Pre-rotated commitment that the next rotation must reveal a key for. */
-	readonly nextKeyCommitment: CesrDigest;
-	/** Type of the most-recently applied event. */
-	readonly eventType: KeriEventType;
+	readonly deactivated: false;
 	/**
 	 * `true` when the inception event committed to the `EO` configuration
 	 * trait — only establishment events (`icp`, `rot`) may extend the KEL,
 	 * and an interaction event is refused at both construction and replay.
 	 * Inherited unchanged through every later event of the KEL.
 	 */
-	readonly establishmentOnly?: true;
+	readonly establishmentOnly: boolean;
 }
 
 /**
@@ -63,21 +62,22 @@ export interface TransferableKeriState extends KeriStateBase {
  * generates them.
  */
 export interface NonTransferableKeriState extends KeriStateBase {
-	readonly transferable: false;
-	/**
-	 * Never `true` for a non-transferable basic prefix: it was never extensible
-	 * in the first place, so "deactivated" does not apply. Declared so
-	 * `deactivated` is a field of every `KeriState`.
-	 */
-	readonly deactivated?: false;
+	/** `'icp'` when verified from a KEL; absent for a bare AID with no KEL. */
+	readonly lastEventType?: KeriEventType;
 	/**
 	 * SAID of the inception event — present when this AID was verified from a
 	 * (trivial, single-event) KEL, absent for a bare non-transferable AID
 	 * resolved with no KEL at all.
 	 */
 	readonly lastEventDigest?: CesrDigest;
-	/** `'icp'` when verified from a KEL; absent for a bare AID with no KEL. */
-	readonly eventType?: KeriEventType;
+	/** Currently authoritative signing key, qb64-encoded. */
+	readonly currentPublicKey: CesrPublicKey;
+	readonly transferable: false;
+	/**
+	 * Never `true` for a non-transferable basic prefix: it was never extensible
+	 * in the first place, so "deactivated" does not apply.
+	 */
+	readonly deactivated: false;
 }
 
 /**
@@ -89,19 +89,19 @@ export interface NonTransferableKeriState extends KeriStateBase {
  * apart. There is no `nextKeyCommitment`: the identifier committed to nothing.
  */
 export interface DeactivatedKeriState extends KeriStateBase {
-	readonly transferable: false;
-	readonly deactivated: true;
+	/** Always `'rot'`: a deactivation is a rotation event. */
+	readonly lastEventType: 'rot';
 	/** SAID of the deactivation event — the final event of the KEL. */
 	readonly lastEventDigest: CesrDigest;
-	/** Always `'rot'`: a deactivation is a rotation event. */
-	readonly eventType: 'rot';
+	readonly transferable: false;
+	readonly deactivated: true;
 	/**
 	 * `true` when the original inception committed to the `EO` configuration
 	 * trait. Carried forward from the live state purely for completeness —
 	 * a deactivated identifier accepts no further events of any kind, so the
 	 * trait no longer constrains anything.
 	 */
-	readonly establishmentOnly?: true;
+	readonly establishmentOnly: boolean;
 }
 
 /**

@@ -110,7 +110,7 @@ describe('createInceptionEvent', () => {
 			nextPublicKey: next.publicKey,
 		});
 
-		expect(state.sequenceNumber).toBe(0);
+		expect(state.lastSequenceNumber).toBe(0);
 		expect(state.lastEventDigest).toBe(signedEvent.event.d);
 		expect(state.aid).toBe(signedEvent.event.i);
 		expect(state.did).toBe(DID_KERI_PREFIX + state.aid);
@@ -119,7 +119,7 @@ describe('createInceptionEvent', () => {
 		);
 		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(next.publicKey));
 		expect(state.transferable).toBe(true);
-		expect(state.eventType).toBe('icp');
+		expect(state.lastEventType).toBe('icp');
 	});
 
 	test('signature verifies under the disclosed key', () => {

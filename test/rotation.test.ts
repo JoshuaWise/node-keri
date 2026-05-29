@@ -64,13 +64,13 @@ describe('createRotationEvent', () => {
 		expect(event.a).toEqual([]);
 
 		// State advances by one and tracks the new key material.
-		expect(state.sequenceNumber).toBe(1);
+		expect(state.lastSequenceNumber).toBe(1);
 		expect(state.lastEventDigest).toBe(event.d);
 		expect(state.aid).toBe(inception.state.aid);
 		expect(state.did).toBe(inception.state.did);
 		expect(state.currentPublicKey).toBe(encodePublicKeyEd25519(k1.publicKey.raw));
 		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(k2.publicKey));
-		expect(state.eventType).toBe('rot');
+		expect(state.lastEventType).toBe('rot');
 	});
 
 	test('signature is by the new current (revealed) key', () => {
@@ -222,10 +222,10 @@ describe('createRotationEvent', () => {
 				nextPublicKey: fresh.publicKey,
 			});
 			expect(r.signedEvent.event.s).toBe(i.toString(16));
-			expect(r.state.sequenceNumber).toBe(i);
+			expect(r.state.lastSequenceNumber).toBe(i);
 			state = r.state;
 			nextSeed = freshNextSeed;
 		}
-		expect(state.sequenceNumber).toBe(16);
+		expect(state.lastSequenceNumber).toBe(16);
 	});
 });

@@ -65,12 +65,12 @@ describe('createIdentifier — establishment-only', () => {
 		expect(id.state.transferable).toBe(true);
 	});
 
-	test('a non-EO identifier has no `establishmentOnly` flag and an empty `c`', () => {
+	test('a non-EO identifier has a false `establishmentOnly` flag and an empty `c`', () => {
 		const id = createIdentifier({
 			currentPrivateKey: K0().privateKey,
 			nextPublicKey: K1().publicKey,
 		});
-		expect(id.state.establishmentOnly).toBeUndefined();
+		expect(id.state.establishmentOnly).toBe(false);
 		const event = parseSignedEvent(id.inceptionEvent).event as unknown as {
 			c: readonly unknown[];
 		};
@@ -97,7 +97,7 @@ describe('createInceptionEvent — establishment-only', () => {
 			currentKeyPair: K0(),
 			nextPublicKey: K1().publicKey,
 		});
-		expect(result.state.establishmentOnly).toBeUndefined();
+		expect(result.state.establishmentOnly).toBe(false);
 	});
 
 	test('explicit `false` is equivalent to omitting the flag', () => {
@@ -106,7 +106,7 @@ describe('createInceptionEvent — establishment-only', () => {
 			nextPublicKey: K1().publicKey,
 			establishmentOnly: false,
 		});
-		expect(result.state.establishmentOnly).toBeUndefined();
+		expect(result.state.establishmentOnly).toBe(false);
 		const event = parseSignedEvent(result.event).event as unknown as {
 			c: readonly unknown[];
 		};
@@ -193,7 +193,7 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		});
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error('unreachable');
-		expect(verified.state.sequenceNumber).toBe(2);
+		expect(verified.state.lastSequenceNumber).toBe(2);
 		expect(verified.state.transferable).toBe(true);
 		if (!verified.state.transferable) throw new Error('unreachable');
 		expect(verified.state.establishmentOnly).toBe(true);

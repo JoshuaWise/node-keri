@@ -37,7 +37,7 @@ describe('rotateIdentifier', () => {
 		const rotEvent = parseSignedEvent(rotation.rotationEvent).event;
 		expect(rotEvent.t).toBe('rot');
 		expect(rotEvent.s).toBe('1');
-		expect(rotation.state.sequenceNumber).toBe(1);
+		expect(rotation.state.lastSequenceNumber).toBe(1);
 		expect(rotation.state.aid).toBe(id.aid);
 	});
 

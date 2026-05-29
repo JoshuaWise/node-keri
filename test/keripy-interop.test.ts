@@ -199,12 +199,15 @@ describeInterop('keripy interop: KELs', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			const lastEvent = events[events.length - 1]!.event;
-			expect(result.state.sequenceNumber).toBe(3);
+			expect(result.state.lastSequenceNumber).toBe(3);
 			expect(result.state.lastEventDigest).toBe(lastEvent.d as string);
 			// The final rotation revealed seed 64; that is the current key.
-			expect(result.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
-			);
+			expect(result.state.deactivated).toBe(false);
+			if (!result.state.deactivated) {
+				expect(result.state.currentPublicKey).toBe(
+					encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
+				);
+			}
 		}
 	});
 
@@ -308,10 +311,13 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 		if (result.ok) {
 			expect(result.state.transferable).toBe(false);
 			expect(result.state.aid).toBe(generated.aid);
-			expect(result.state.sequenceNumber).toBe(0);
-			// A non-transferable AID is a basic prefix: it *is* its own
-			// controller key, so the current key equals the AID itself.
-			expect(result.state.currentPublicKey).toBe(generated.aid);
+			expect(result.state.lastSequenceNumber).toBe(0);
+			expect(result.state.deactivated).toBe(false);
+			if (!result.state.deactivated) {
+				// A non-transferable AID is a basic prefix: it *is* its own
+				// controller key, so the current key equals the AID itself.
+				expect(result.state.currentPublicKey).toBe(generated.aid);
+			}
 		}
 	});
 
@@ -433,7 +439,7 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 			// Verified from its single-event KEL: event-derived fields are present,
 			// which is what distinguishes this from the bare resolution above.
 			expect(result.state.lastEventDigest).toBeDefined();
-			expect(result.state.eventType).toBe('icp');
+			expect(result.state.lastEventType).toBe('icp');
 			expect(result.didDocument.id).toBe(generated.did);
 		}
 	});
@@ -492,14 +498,16 @@ function forgePostDeactivationEvent(
 	const pretendState: TransferableKeriState = {
 		aid,
 		did,
-		sequenceNumber: Number.parseInt(last.s, 16),
+		lastSequenceNumber: Number.parseInt(last.s, 16),
+		lastEventType: 'rot',
 		lastEventDigest: last.d,
 		currentPublicKey: encodePublicKeyEd25519(signerKeyPair.publicKey.raw),
 		// Any commitment will do — the event never gets far enough to be
 		// checked against it; replay rejects it for extending a closed KEL.
 		nextKeyCommitment: deriveNextKeyCommitment(seedKeyPair(64).publicKey),
 		transferable: true,
-		eventType: 'rot',
+		deactivated: false,
+		establishmentOnly: false,
 	};
 	return createInteractionEvent({
 		state: pretendState,
@@ -525,9 +533,8 @@ describeInterop('keripy interop: deactivated AIDs', () => {
 			// keripy replayed inception + deactivation and stopped at sn 1.
 			expect(result.sn).toBe(1);
 			expect(result.said).toBe(state.lastEventDigest);
-			// The deactivation revealed seed 32; keripy committed it as the
-			// (now final) current key.
-			expect(result.currentKeys).toEqual([state.currentPublicKey]);
+			expect(state.deactivated).toBe(true);
+			expect('currentPublicKey' in state).toBe(false);
 		}
 	});
 
@@ -542,8 +549,8 @@ describeInterop('keripy interop: deactivated AIDs', () => {
 		if (result.ok) {
 			expect(result.state.deactivated).toBe(true);
 			expect(result.state.transferable).toBe(false);
-			expect(result.state.eventType).toBe('rot');
-			expect(result.state.sequenceNumber).toBe(1);
+			expect(result.state.lastEventType).toBe('rot');
+			expect(result.state.lastSequenceNumber).toBe(1);
 			expect(result.state.aid).toBe(generated.aid);
 		}
 	});

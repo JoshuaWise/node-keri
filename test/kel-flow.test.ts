@@ -106,11 +106,11 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 		}
 
 		// Final state reflects the latest rotation.
-		expect(rot2.state.sequenceNumber).toBe(4);
+		expect(rot2.state.lastSequenceNumber).toBe(4);
 		expect(rot2.state.currentPublicKey).toBe(
 			encodePublicKeyEd25519(k2.publicKey.raw)
 		);
-		expect(rot2.state.eventType).toBe('rot');
+		expect(rot2.state.lastEventType).toBe('rot');
 		expect(rot2.state.aid).toBe(aid);
 	});
 
@@ -130,7 +130,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 				newCurrentKeyPair: keys[i]!,
 				nextPublicKey: keys[i + 1]!.publicKey,
 			});
-			expect(r.state.sequenceNumber).toBe(i);
+			expect(r.state.lastSequenceNumber).toBe(i);
 			expect(r.state.currentPublicKey).toBe(
 				encodePublicKeyEd25519(keys[i]!.publicKey.raw)
 			);
@@ -145,6 +145,6 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			state = r.state;
 		}
 
-		expect(state.sequenceNumber).toBe(keys.length - 2);
+		expect(state.lastSequenceNumber).toBe(keys.length - 2);
 	});
 });

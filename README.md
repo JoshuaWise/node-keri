@@ -261,7 +261,7 @@ function resolveDid(input: {
 	| { ok: false; error: KeriVerificationError };
 ```
 
-Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `state` is the verified latest `KeriState` — the only one the caller may treat as trusted — carrying the `deactivated` flag and (via `sequenceNumber`) the KEL length directly. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still resolves with `ok: true` — its `didDocument` is authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`) and `state.deactivated` is `true`.
+Resolve a `did:keri` DID entirely offline against a caller-supplied KEL: verify the KEL against the DID's AID, then project the verified latest state into a DID document. `state` is the verified latest `KeriState` — the only one the caller may treat as trusted. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still resolves with `ok: true` — its `didDocument` is authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`) and `state.deactivated` is `true`.
 
 A non-transferable DID resolves with the **empty string** `''` for `kel`: it is self-certifying, so the document is projected straight from the prefix. A non-transferable DID may also be resolved from its trivial single-event KEL by passing that stream.
 

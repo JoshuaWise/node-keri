@@ -113,11 +113,14 @@ describe('verifyKel — successful replay', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.aid).toBe(aid);
-		expect(result.state.sequenceNumber).toBe(4);
-		expect(result.state.eventType).toBe('rot');
-		expect(result.state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(keys.k2.publicKey.raw)
-		);
+		expect(result.state.lastSequenceNumber).toBe(4);
+		expect(result.state.lastEventType).toBe('rot');
+		expect(result.state.deactivated).toBe(false);
+		if (!result.state.deactivated) {
+			expect(result.state.currentPublicKey).toBe(
+				encodePublicKeyEd25519(keys.k2.publicKey.raw)
+			);
+		}
 		expect(result.state.lastEventDigest).toBe(rot2.signedEvent.event.d);
 		expect(result.state.transferable).toBe(true);
 		if (result.state.transferable) {
@@ -130,8 +133,8 @@ describe('verifyKel — successful replay', () => {
 		const result = verifyKel({ aid, kel: kel(icp.signedEvent) });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.state.sequenceNumber).toBe(0);
-		expect(result.state.eventType).toBe('icp');
+		expect(result.state.lastSequenceNumber).toBe(0);
+		expect(result.state.lastEventType).toBe('icp');
 	});
 
 	test('is deterministic — repeated verification yields an identical state', () => {
@@ -165,7 +168,7 @@ describe('verifyKel — successful replay', () => {
 		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.state.sequenceNumber).toBe(1);
+		expect(result.state.lastSequenceNumber).toBe(1);
 	});
 });
 

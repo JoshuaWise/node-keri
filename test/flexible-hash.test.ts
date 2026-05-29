@@ -244,12 +244,15 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		const result = verifyKel({ aid, kel });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.state.sequenceNumber).toBe(4);
+		expect(result.state.lastSequenceNumber).toBe(4);
 		expect(result.state.lastEventDigest).toBe(events[4]!.event.d);
-		// The final rotation revealed k2, so it is the current key.
-		expect(result.state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(keys.k2.publicKey.raw)
-		);
+		expect(result.state.deactivated).toBe(false);
+		if (!result.state.deactivated) {
+			// The final rotation revealed k2, so it is the current key.
+			expect(result.state.currentPublicKey).toBe(
+				encodePublicKeyEd25519(keys.k2.publicKey.raw)
+			);
+		}
 	});
 
 	test('tampering one event of the mixed KEL is still rejected', () => {

@@ -100,7 +100,7 @@ export function createInteractionEvent(
 		throw err;
 	}
 
-	const nextSeq = input.state.sequenceNumber + 1;
+	const nextSeq = input.state.lastSequenceNumber + 1;
 	if (!Number.isSafeInteger(nextSeq)) {
 		throw new InvalidArgumentError('sequence number overflow');
 	}
@@ -134,12 +134,14 @@ export function createInteractionEvent(
 	const newState: TransferableKeriState = {
 		aid: input.state.aid,
 		did: input.state.did,
-		sequenceNumber: nextSeq,
+		lastSequenceNumber: nextSeq,
+		lastEventType: 'ixn',
 		lastEventDigest: said,
 		currentPublicKey: input.state.currentPublicKey,
 		nextKeyCommitment: input.state.nextKeyCommitment,
 		transferable: true,
-		eventType: 'ixn',
+		deactivated: false,
+		establishmentOnly: input.state.establishmentOnly,
 	};
 
 	return { event: frame, state: newState };

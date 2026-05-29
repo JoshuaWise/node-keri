@@ -336,22 +336,23 @@ function applyInception(
 	const base = {
 		aid,
 		did: formatDidKeri(aid),
-		sequenceNumber: 0,
+		lastSequenceNumber: 0,
+		lastEventType: 'icp' as const,
 		lastEventDigest: said,
 		currentPublicKey: ie.k[0],
-		eventType: 'icp' as const,
 	};
 	if (validated.transferable) {
 		const state: TransferableKeriState = {
 			...base,
 			nextKeyCommitment: validated.event.n[0],
 			transferable: true,
-			...(validated.establishmentOnly ? { establishmentOnly: true as const } : {}),
+			deactivated: false,
+			establishmentOnly: validated.establishmentOnly,
 		};
 		return { ok: true, state };
 	}
 	// A non-transferable identifier carries no next-key commitment.
-	return { ok: true, state: { ...base, transferable: false } };
+	return { ok: true, state: { ...base, transferable: false, deactivated: false } };
 }
 
 /**
@@ -419,7 +420,7 @@ function applyRotation(
 		});
 	}
 
-	const expectedSeq = state.sequenceNumber + 1;
+	const expectedSeq = state.lastSequenceNumber + 1;
 	const seq = Number.parseInt(re.s, 16);
 	if (!Number.isSafeInteger(seq) || seq !== expectedSeq) {
 		return fail({ code: 'INVALID_SEQUENCE', expected: expectedSeq, actual: seq });
@@ -458,12 +459,6 @@ function applyRotation(
 		return fail({ code: 'INVALID_SIGNATURE' });
 	}
 
-	// The `EO` trait is set at inception and inherited unchanged thereafter —
-	// neither a rotation nor a deactivation can introduce or remove it.
-	const inheritedEo = state.establishmentOnly
-		? { establishmentOnly: true as const }
-		: {};
-
 	if (validated.deactivation) {
 		// A deactivation commits to no next key: the identifier is abandoned
 		// and the KEL ends here. The state carries no `nextKeyCommitment`.
@@ -472,13 +467,14 @@ function applyRotation(
 			state: {
 				aid: state.aid,
 				did: state.did,
-				sequenceNumber: seq,
+				lastSequenceNumber: seq,
+				lastEventType: 'rot',
 				lastEventDigest: said,
-				currentPublicKey: re.k[0],
 				transferable: false,
 				deactivated: true,
-				eventType: 'rot',
-				...inheritedEo,
+				// The `EO` trait is set at inception and inherited unchanged thereafter —
+				// neither a rotation nor a deactivation can introduce or remove it.
+				establishmentOnly: state.establishmentOnly,
 			},
 		};
 	}
@@ -488,13 +484,16 @@ function applyRotation(
 		state: {
 			aid: state.aid,
 			did: state.did,
-			sequenceNumber: seq,
+			lastSequenceNumber: seq,
+			lastEventType: 'rot',
 			lastEventDigest: said,
 			currentPublicKey: re.k[0],
 			nextKeyCommitment: validated.event.n[0],
 			transferable: true,
-			eventType: 'rot',
-			...inheritedEo,
+			deactivated: false,
+			// The `EO` trait is set at inception and inherited unchanged thereafter —
+			// neither a rotation nor a deactivation can introduce or remove it.
+			establishmentOnly: state.establishmentOnly,
 		},
 	};
 }
@@ -552,7 +551,7 @@ function applyInteraction(
 		});
 	}
 
-	const expectedSeq = state.sequenceNumber + 1;
+	const expectedSeq = state.lastSequenceNumber + 1;
 	const seq = Number.parseInt(xe.s, 16);
 	if (!Number.isSafeInteger(seq) || seq !== expectedSeq) {
 		return fail({ code: 'INVALID_SEQUENCE', expected: expectedSeq, actual: seq });
@@ -571,12 +570,14 @@ function applyInteraction(
 		state: {
 			aid: state.aid,
 			did: state.did,
-			sequenceNumber: seq,
+			lastSequenceNumber: seq,
+			lastEventType: 'ixn',
 			lastEventDigest: said,
 			currentPublicKey: state.currentPublicKey,
 			nextKeyCommitment: state.nextKeyCommitment,
 			transferable: true,
-			eventType: 'ixn',
+			deactivated: false,
+			establishmentOnly: false,
 		},
 	};
 }

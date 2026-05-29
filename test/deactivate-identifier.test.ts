@@ -78,8 +78,8 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 
 		expect(deact.state.deactivated).toBe(true);
 		expect(deact.state.transferable).toBe(false);
-		expect(deact.state.eventType).toBe('rot');
-		expect(deact.state.sequenceNumber).toBe(1);
+		expect(deact.state.lastEventType).toBe('rot');
+		expect(deact.state.lastSequenceNumber).toBe(1);
 		expect(deact.state.aid).toBe(id.aid);
 		// No `nextKeyCommitment` — the identifier committed to nothing.
 		expect('nextKeyCommitment' in deact.state).toBe(false);
@@ -101,9 +101,10 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 		const nonTransferable: KeriState = {
 			aid: id.aid,
 			did: id.did,
-			sequenceNumber: 0,
+			lastSequenceNumber: 0,
 			currentPublicKey: id.state.currentPublicKey,
 			transferable: false,
+			deactivated: false,
 		};
 		expect(() =>
 			createDeactivationEvent({
@@ -146,7 +147,7 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
-		expect(result.state.sequenceNumber).toBe(2);
+		expect(result.state.lastSequenceNumber).toBe(2);
 	});
 
 	test('deactivates after an interaction event', () => {
@@ -166,7 +167,7 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
-		expect(result.state.sequenceNumber).toBe(2);
+		expect(result.state.lastSequenceNumber).toBe(2);
 	});
 });
 
@@ -184,8 +185,8 @@ describe('verifyKel — replays a deactivated KEL', () => {
 		if (!result.ok) return;
 		expect(result.state.transferable).toBe(false);
 		expect(result.state.deactivated).toBe(true);
-		expect(result.state.eventType).toBe('rot');
-		expect(result.state.sequenceNumber).toBe(1);
+		expect(result.state.lastEventType).toBe('rot');
+		expect(result.state.lastSequenceNumber).toBe(1);
 	});
 
 	test('rejects any event appended after deactivation', () => {
@@ -202,17 +203,18 @@ describe('verifyKel — replays a deactivated KEL', () => {
 		const pretendState: TransferableKeriState = {
 			aid: deact.state.aid,
 			did: deact.state.did,
-			sequenceNumber: deact.state.sequenceNumber,
+			lastSequenceNumber: deact.state.lastSequenceNumber,
+			lastEventType: 'rot',
 			lastEventDigest: deact.state.lastEventDigest,
-			currentPublicKey: deact.state.currentPublicKey,
+			currentPublicKey: id.state.currentPublicKey,
 			nextKeyCommitment: deriveNextKeyCommitment(K2().publicKey),
 			transferable: true,
-			eventType: 'rot',
+			deactivated: false,
+			establishmentOnly: false,
 		};
 		const appended = createInteractionEvent({
 			state: pretendState,
-			// The deactivation revealed K1, so K1 is its `currentPublicKey`.
-			currentKeyPair: K1(),
+			currentKeyPair: K0(),
 			data: [],
 		});
 
@@ -309,7 +311,7 @@ describe('DID surface — a deactivated DID', () => {
 		if (!result.ok) return;
 		expect(result.state.deactivated).toBe(true);
 		// Two events (icp + deactivating rot) ⇒ the last is at sequence number 1.
-		expect(result.state.sequenceNumber).toBe(1);
+		expect(result.state.lastSequenceNumber).toBe(1);
 		expect(result.didDocument.verificationMethod).toEqual([]);
 		expect(result.didDocument.authentication).toEqual([]);
 		expect(result.didDocument.assertionMethod).toEqual([]);

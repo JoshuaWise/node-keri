@@ -113,12 +113,13 @@ function resolveBareNonTransferable(parsed: ParsedDidKeri): DidResolutionResult 
 	const state: NonTransferableKeriState = {
 		aid: parsed.aid,
 		did: parsed.did,
-		sequenceNumber: 0,
+		lastSequenceNumber: 0,
 		// A non-transferable AID *is* its qb64 public key; that is the whole
 		// point of a basic prefix. `lastEventDigest` / `eventType` are absent —
 		// there is no event.
 		currentPublicKey: parsed.aid as unknown as CesrPublicKey,
 		transferable: false,
+		deactivated: false,
 	};
 	const didDocument = createDidDocument({ did: parsed.did, state });
 	return { ok: true, didDocument, state };

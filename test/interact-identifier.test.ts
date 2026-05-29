@@ -37,7 +37,7 @@ describe('interactIdentifier', () => {
 		const ixnEvent = parseSignedEvent(ixn.interactionEvent).event;
 		expect(ixnEvent.t).toBe('ixn');
 		expect(ixnEvent.s).toBe('1');
-		expect(ixn.state.sequenceNumber).toBe(1);
+		expect(ixn.state.lastSequenceNumber).toBe(1);
 		expect(ixn.state.aid).toBe(id.aid);
 		// An interaction does not rotate keys.
 		expect(ixn.state.currentPublicKey).toBe(id.state.currentPublicKey);
