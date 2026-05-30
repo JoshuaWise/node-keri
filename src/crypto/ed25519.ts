@@ -3,10 +3,7 @@ import { ED25519_SIGNATURE_BYTES } from '../profile/constants';
 import { PrivateKey, PublicKey, assertPrivateKey, assertPublicKey } from './keypair';
 
 /** Produce an Ed25519 signature over `message`. Always 64 bytes. */
-export function sign(
-	privateKey: PrivateKey,
-	message: Readonly<Uint8Array>
-): Uint8Array {
+export function sign(privateKey: PrivateKey, message: Readonly<Uint8Array>): Uint8Array {
 	assertPrivateKey(privateKey);
 	const sig = new Uint8Array(nodeSign(null, message, privateKey));
 	if (sig.length !== ED25519_SIGNATURE_BYTES) {

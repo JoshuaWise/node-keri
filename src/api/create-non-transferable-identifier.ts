@@ -16,11 +16,7 @@
  */
 
 import { encodeNonTransferablePublicKeyEd25519 } from '../cesr/encode';
-import {
-	PublicKey,
-	assertPublicKey,
-	rawPublicKey,
-} from '../crypto/keypair';
+import { PublicKey, assertPublicKey, rawPublicKey } from '../crypto/keypair';
 import { Aid, DidKeri, aidFromNonTransferableKey, formatDidKeri } from '../did/did-keri';
 import { NonTransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';

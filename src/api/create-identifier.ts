@@ -90,7 +90,9 @@ export function createIdentifier(input: CreateIdentifierInput): CreateIdentifier
 	// active signing key and a rotation commits to nothing new. The event
 	// constructors do not enforce this, so the ergonomic API does. Comparing the
 	// CESR-qualified forms is a stable, value-level equality check.
-	if (publicKeyToCesr(currentKeyPair.publicKey) === publicKeyToCesr(input.nextPublicKey)) {
+	if (
+		publicKeyToCesr(currentKeyPair.publicKey) === publicKeyToCesr(input.nextPublicKey)
+	) {
 		throw new InvalidArgumentError(
 			'currentPrivateKey and nextPublicKey must be distinct keys'
 		);

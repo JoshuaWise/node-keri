@@ -102,6 +102,8 @@ export function verifySignature(input: VerifySignatureInput): boolean {
 	if (verification.state.deactivated) return false;
 	// `currentPublicKey` came out of replay (or is the AID itself), so it is
 	// well-formed by construction and decoding it cannot fail.
-	const publicKeyRaw = decodeVerificationKeyEd25519(verification.state.currentPublicKey);
+	const publicKeyRaw = decodeVerificationKeyEd25519(
+		verification.state.currentPublicKey
+	);
 	return verify(publicKeyFromRaw(publicKeyRaw), input.payload, signatureRaw);
 }
