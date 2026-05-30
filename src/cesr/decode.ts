@@ -3,7 +3,6 @@ import { isRegisteredDigestCode } from '../crypto/digests';
 import { MalformedInputError } from '../profile/errors';
 import {
 	ALL_CODES,
-	CESR_DIGEST_SHA256,
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_PUBLIC_KEY_ED25519N,
@@ -154,20 +153,6 @@ export function decodeIndexedSignatureEd25519(qb64: string): {
 	index: number;
 } {
 	return decodeIndexedMatter(CESR_INDEXED_SIGNATURE_ED25519, qb64);
-}
-
-/**
- * Read just the signing-key index from an indexed Ed25519 signature, without
- * exposing the raw signature bytes. Convenience for callers that only need to
- * know which key in the establishment event's list a Siger claims to be from.
- */
-export function signatureIndex(qb64: string): number {
-	return decodeIndexedSignatureEd25519(qb64).index;
-}
-
-/** Decode a CESR-qualified SHA-256 digest (code `I`), specifically. */
-export function decodeDigestSha256(qb64: string): Uint8Array {
-	return decodeMatter(CESR_DIGEST_SHA256, qb64);
 }
 
 /**

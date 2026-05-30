@@ -10,7 +10,6 @@
 
 import { createIdentifier } from '../src/api/create-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
-import { decodeDigestSha256 } from '../src/cesr/decode';
 import { canonicalizeJson } from '../src/event/canonical-json';
 import { keyPairFromPrivateKey, keyPairFromSeed } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
@@ -23,7 +22,7 @@ import {
 	MalformedInputError,
 } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, decodeDigestSha256 } from './helpers/util';
 
 /** A valid identifier reused across cases that need real material. */
 function sample() {

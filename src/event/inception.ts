@@ -131,7 +131,3 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 
 	return { event: frame, state };
 }
-
-// Re-export so that consumers building on top of inception don't have to
-// reach into the digest module for what is conceptually a key-management op.
-export { deriveNextKeyCommitment, saidPlaceholder, SAID_PLACEHOLDER } from './digest';

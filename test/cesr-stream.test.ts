@@ -8,7 +8,7 @@
  */
 
 import { b64ToInt, intToB64 } from '../src/bytes/base64url';
-import { decodeIndexedSignatureEd25519, signatureIndex } from '../src/cesr/decode';
+import { decodeIndexedSignatureEd25519 } from '../src/cesr/decode';
 import {
 	encodeIndexedSignatureEd25519,
 	encodeSignatureEd25519,
@@ -66,7 +66,7 @@ describe('indexed Ed25519 signatures (Siger)', () => {
 			const decoded = decodeIndexedSignatureEd25519(qb64);
 			expect(decoded.index).toBe(index);
 			expect(Array.from(decoded.raw)).toEqual(Array.from(raw));
-			expect(signatureIndex(qb64)).toBe(index);
+			expect(decodeIndexedSignatureEd25519(qb64).index).toBe(index);
 		}
 	});
 

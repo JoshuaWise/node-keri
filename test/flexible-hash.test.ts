@@ -15,7 +15,7 @@ import { verifyIdentifier } from '../src/api/verify-identifier';
 import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { createDidDocument } from '../src/did/document';
 import { verifyDid } from '../src/did/verify-did';
-import { decodeDigest, decodeDigestSha256 } from '../src/cesr/decode';
+import { decodeDigest } from '../src/cesr/decode';
 import { encodeDigest, encodeSignatureEd25519 } from '../src/cesr/encode';
 import {
 	DIGEST_CODES,
@@ -36,7 +36,7 @@ import {
 	UnsupportedAlgorithmError,
 } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-import { sha256, parseSignedEvent, fillSeed } from './helpers/util';
+import { sha256, parseSignedEvent, fillSeed, decodeDigestSha256 } from './helpers/util';
 
 /** Restore the digest registry after any test that monkey-patches it. */
 let snapshot: Record<string, DigestAlgorithm | undefined>;

@@ -8,10 +8,9 @@ import {
 	formatKeriVersionString,
 } from '../src/event/digest';
 import { toCanonicalEvent } from '../src/event/field-order';
-import { decodeDigestSha256 } from '../src/cesr/decode';
 import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { CanonicalJsonError, InvalidArgumentError } from '../src/profile/errors';
-import { sha256, fillSeed } from './helpers/util';
+import { sha256, fillSeed, decodeDigestSha256 } from './helpers/util';
 
 describe('formatKeriVersionString', () => {
 	test('produces a fixed 17-character string with size in 6 hex chars', () => {

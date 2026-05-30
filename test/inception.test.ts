@@ -1,5 +1,4 @@
 import {
-	decodeDigestSha256,
 	decodeIndexedSignatureEd25519,
 	decodePublicKeyEd25519,
 } from '../src/cesr/decode';
@@ -11,7 +10,7 @@ import { createInceptionEvent, CreateInceptionInput } from '../src/event/incepti
 import { serializeEvent, signEvent } from '../src/event/sign';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, decodeDigestSha256 } from './helpers/util';
 
 const SEED_CURRENT = fillSeed(0x21);
 const SEED_NEXT = fillSeed(0x22);

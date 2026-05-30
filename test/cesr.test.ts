@@ -1,12 +1,10 @@
 import {
-	decodeDigestSha256,
 	decodeNonTransferablePublicKeyEd25519,
 	decodePublicKeyEd25519,
 	decodeSignatureEd25519,
 	decodeVerificationKeyEd25519,
 } from '../src/cesr/decode';
 import {
-	encodeDigestSha256,
 	encodeNonTransferablePublicKeyEd25519,
 	encodePublicKeyEd25519,
 	encodeSignatureEd25519,
@@ -15,7 +13,7 @@ import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError, MalformedInputError } from '../src/profile/errors';
-import { sha256 } from './helpers/util';
+import { sha256, decodeDigestSha256, encodeDigestSha256 } from './helpers/util';
 
 function fromHex(s: string): Uint8Array {
 	const out = new Uint8Array(s.length / 2);
@@ -236,7 +234,7 @@ describe('cesr encode/decode', () => {
 		test('decode distinguishes digests from public keys', () => {
 			// Same length, different code; must not cross.
 			const pkQb64 = encodePublicKeyEd25519(new Uint8Array(32));
-			expect(() => decodeDigestSha256(pkQb64)).toThrow(/Ed25519 public key/);
+			expect(() => decodeDigestSha256(pkQb64)).toThrow(/unavailable digest code/);
 		});
 
 		test('decode rejects non-canonical encodings', () => {

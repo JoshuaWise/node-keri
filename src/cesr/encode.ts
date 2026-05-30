@@ -1,7 +1,6 @@
 import { base64urlEncode, intToB64 } from '../bytes/base64url';
 import { InvalidArgumentError } from '../profile/errors';
 import {
-	CESR_DIGEST_SHA256,
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
 	CESR_PUBLIC_KEY_ED25519N,
@@ -84,11 +83,6 @@ export function encodeIndexedSignatureEd25519(
 	}
 	const prefix = spec.code + intToB64(index, spec.ss);
 	return encodeMatter(spec, raw, prefix) as CesrIndexedSignature;
-}
-
-/** CESR-qualify a 32-byte SHA-256 digest (code `I`), specifically. */
-export function encodeDigestSha256(raw: Readonly<Uint8Array>): CesrDigest {
-	return encodeMatter(CESR_DIGEST_SHA256, raw) as CesrDigest;
 }
 
 /**

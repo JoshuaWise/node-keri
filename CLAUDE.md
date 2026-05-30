@@ -534,10 +534,7 @@ decodeSignatureEd25519(qb64: string): Uint8Array
 encodeIndexedSignatureEd25519(raw64: Uint8Array, index: number): CesrIndexedSignature
 decodeIndexedSignatureEd25519(qb64: string): { raw: Uint8Array; index: number }
 
-// Digests are algorithm-agile. SHA-256 has dedicated helpers; the generic
-// pair works for any registered digest code.
-encodeDigestSha256(raw32: Uint8Array): CesrDigest
-decodeDigestSha256(qb64: string): Uint8Array
+// Digests are algorithm-agile. Works for any registered digest code.
 encodeDigest(code: string, raw: Uint8Array): CesrDigest
 decodeDigest(qb64: string): { raw: Uint8Array; code: string }
 ```
