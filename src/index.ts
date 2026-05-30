@@ -1,110 +1,24 @@
-// Public API v1 — the stable surface of the KERI Direct JSON Profile.
-//
-// Three layers are exported: the foundation (bytes, crypto, CESR, canonical
-// JSON), the event lifecycle building blocks plus the KEL replay verifier,
-// and the high-level identifier API — `createIdentifier`,
-// `createNonTransferableIdentifier`, `rotateIdentifier`, `interactOnIdentifier`,
-// `verifyIdentifier`, the `did:keri` surface
-// (`verifyDid`, `createDidDocument`), and `createSignature` /
-// `verifySignature` / `verifySignatureWithDid` for signed-message creation and
-// verification.
-//
 // See PROFILE.md for the conformance boundary and SECURITY.md for the trust
-// model and security invariants this surface enforces.
+// model and security invariants this API surface enforces.
 
-export {
-	KeriError,
-	InvalidArgumentError,
-	UnsupportedAlgorithmError,
-	MalformedInputError,
-	CanonicalJsonError,
-} from './profile/errors';
-export type { KeriVerificationError } from './profile/errors';
-
-export {
-	KERI_PROFILE_NAME,
-	SUPPORTED_KEY_ALGORITHM,
-	ED25519_PUBLIC_KEY_BYTES,
-	ED25519_PRIVATE_SEED_BYTES,
-	ED25519_SIGNATURE_BYTES,
-	SHA256_DIGEST_BYTES,
-} from './profile/constants';
 export type { SupportedKeyAlgorithm } from './profile/constants';
+export { KERI_PROFILE_NAME, SUPPORTED_KEY_ALGORITHM } from './profile/constants';
 
-export { base64urlEncode, base64urlDecode } from './bytes/base64url';
-export { utf8Encode, utf8Decode } from './bytes/utf8';
-export { timingSafeEqual, bytesEqual, concatBytes } from './bytes/compare';
-
-export { randomBytes } from './crypto/random';
-export { sha256 } from './crypto/hash';
-export {
-	digestAlgorithms,
-	runDigest,
-	isRegisteredDigestCode,
-	DIGEST_CODES,
-	DEFAULT_DIGEST_CODE,
-} from './crypto/digests';
 export type { DigestAlgorithm } from './crypto/digests';
+export { digestAlgorithms, DIGEST_CODES, DEFAULT_DIGEST_CODE } from './crypto/digests';
+
+export type { Aid, DidKeri } from './did/did-keri';
+export type { CesrPublicKey, CesrSignature, CesrDigest } from './cesr/qualified';
+export type { KeriEventType } from './event/types';
+
+export type { PublicKey, PrivateKey, KeyPair } from './crypto/keypair';
 export {
 	generateKeyPair,
-	keyPairFromSeed,
 	asPublicKey,
 	asPrivateKey,
 	publicKeyToCesr,
 	publicKeyFromCesr,
 } from './crypto/keypair';
-export type { PublicKey, PrivateKey, KeyPair } from './crypto/keypair';
-
-export { canonicalizeJson } from './event/canonical-json';
-
-export {
-	encodePublicKeyEd25519,
-	encodeNonTransferablePublicKeyEd25519,
-	encodeSignatureEd25519,
-	encodeIndexedSignatureEd25519,
-	encodeDigestSha256,
-	encodeDigest,
-} from './cesr/encode';
-export {
-	decodePublicKeyEd25519,
-	decodeNonTransferablePublicKeyEd25519,
-	decodeVerificationKeyEd25519,
-	decodeSignatureEd25519,
-	decodeIndexedSignatureEd25519,
-	signatureIndex,
-	decodeDigestSha256,
-	decodeDigest,
-} from './cesr/decode';
-export { digestCodeOf, digestSpecForCode } from './cesr/codes';
-export type {
-	CesrPublicKey,
-	CesrSignature,
-	CesrIndexedSignature,
-	CesrDigest,
-} from './cesr/qualified';
-
-export {
-	DID_KERI_PREFIX,
-	aidFromSaid,
-	aidFromNonTransferableKey,
-	formatDidKeri,
-	parseDidKeri,
-} from './did/did-keri';
-export type { Aid, DidKeri, ParsedDidKeri } from './did/did-keri';
-
-export type {
-	KeriEventType,
-	KeriEventBase,
-	InceptionConfigTraits,
-	InceptionEvent,
-	NonTransferableInceptionEvent,
-	RotationEvent,
-	DeactivationEvent,
-	InteractionEvent,
-	KeriEvent,
-	SignedKeriEvent,
-} from './event/types';
-export { KERI_CONFIG_TRAIT_ESTABLISHMENT_ONLY } from './event/types';
 
 export type {
 	KeriState,
@@ -113,81 +27,52 @@ export type {
 	DeactivatedKeriState,
 } from './kel/state';
 
-export {
-	KERI_VERSION_STRING_LENGTH,
-	SAID_PLACEHOLDER,
-	saidPlaceholder,
-	computeEventSaid,
-	deriveNextKeyCommitment,
-	formatKeriVersionString,
-} from './event/digest';
-export { serializeEvent, signEvent } from './event/sign';
-export { verifyEventSignature } from './event/verify-signature';
-export { encodeEventFrame, parseSignedEvent, parseKel } from './event/stream';
-
-export { createInceptionEvent } from './event/inception';
-export type { CreateInceptionInput, CreateInceptionResult } from './event/inception';
-
-export { createRotationEvent } from './event/rotation';
-export type { CreateRotationInput, CreateRotationResult } from './event/rotation';
-
-export { createDeactivationEvent } from './event/deactivation';
-export type {
-	CreateDeactivationInput,
-	CreateDeactivationResult,
-} from './event/deactivation';
-
-export { createInteractionEvent } from './event/interaction';
-export type {
-	CreateInteractionInput,
-	CreateInteractionResult,
-} from './event/interaction';
-
-export { createIdentifier } from './api/create-identifier';
 export type {
 	CreateIdentifierInput,
 	CreateIdentifierResult,
 } from './api/create-identifier';
+export { createIdentifier } from './api/create-identifier';
 
-export { createNonTransferableIdentifier } from './api/create-non-transferable-identifier';
 export type {
 	CreateNonTransferableIdentifierInput,
 	CreateNonTransferableIdentifierResult,
 } from './api/create-non-transferable-identifier';
+export { createNonTransferableIdentifier } from './api/create-non-transferable-identifier';
 
-export { rotateIdentifier } from './api/rotate-identifier';
 export type {
 	RotateIdentifierInput,
 	RotateIdentifierResult,
 } from './api/rotate-identifier';
+export { rotateIdentifier } from './api/rotate-identifier';
 
-export { deactivateIdentifier } from './api/deactivate-identifier';
 export type {
 	DeactivateIdentifierInput,
 	DeactivateIdentifierResult,
 } from './api/deactivate-identifier';
+export { deactivateIdentifier } from './api/deactivate-identifier';
 
-export { interactOnIdentifier } from './api/interact-on-identifier';
 export type {
 	InteractOnIdentifierInput,
 	InteractOnIdentifierResult,
 } from './api/interact-on-identifier';
+export { interactOnIdentifier } from './api/interact-on-identifier';
 
-export { verifyIdentifier } from './api/verify-identifier';
 export type {
 	VerifyIdentifierInput,
 	VerifyIdentifierResult,
 } from './api/verify-identifier';
+export { verifyIdentifier } from './api/verify-identifier';
 
+export type { VerifyDidInput, VerifyDidResult } from './did/verify-did';
+export { verifyDid } from './did/verify-did';
+
+export type { VerifySignatureInput } from './api/verify-signature';
+export { verifySignature } from './api/verify-signature';
 export { createSignature } from './api/create-signature';
 
-export { verifySignature } from './api/verify-signature';
-export type { VerifySignatureInput } from './api/verify-signature';
-
-export { verifySignatureWithDid } from './did/verify-signature-with-did';
 export type { VerifySignatureWithDidInput } from './did/verify-signature-with-did';
+export { verifySignatureWithDid } from './did/verify-signature-with-did';
 
-export { createDidDocument } from './did/document';
 export type {
 	CreateDidDocumentInput,
 	DidDocument,
@@ -195,6 +80,19 @@ export type {
 	DidService,
 	DidServiceEndpoint,
 } from './did/document';
+export { createDidDocument } from './did/document';
 
-export { verifyDid } from './did/verify-did';
-export type { VerifyDidInput, VerifyDidResult } from './did/verify-did';
+export type { SignedKeriEvent } from './event/types';
+export { parseKel } from './event/stream';
+export { deriveNextKeyCommitment } from './event/digest';
+export { canonicalizeJson } from './event/canonical-json';
+export { utf8Encode, utf8Decode } from './bytes/utf8';
+
+export type { KeriVerificationError } from './profile/errors';
+export {
+	KeriError,
+	InvalidArgumentError,
+	UnsupportedAlgorithmError,
+	MalformedInputError,
+	CanonicalJsonError,
+} from './profile/errors';

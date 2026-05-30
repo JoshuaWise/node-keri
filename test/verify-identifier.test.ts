@@ -8,7 +8,6 @@ import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
 import { signEvent } from '../src/event/sign';
-import { parseSignedEvent } from '../src/event/stream';
 import {
 	InceptionEvent,
 	InteractionEvent,
@@ -20,10 +19,7 @@ import { TransferableKeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { frameKel } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /** Concatenate signed events into a single KEL CESR stream. */
 function kel(...signed: SignedKeriEvent[]): string {
@@ -711,9 +707,7 @@ describe('verifyIdentifier — non-transferable AID with no KEL', () => {
 	// no events to replay. Build one by swapping the code char of a `D` key
 	// (equivalently `encodeNonTransferablePublicKeyEd25519`): same raw bytes.
 	const kp = keyPairFromSeed(fillSeed(0x44));
-	const ntAid = aidFromSaid(
-		('B' + publicKeyToCesr(kp.publicKey).slice(1)) as never
-	);
+	const ntAid = aidFromSaid(('B' + publicKeyToCesr(kp.publicKey).slice(1)) as never);
 
 	test('verifies straight from the prefix, with no events', () => {
 		const result = verifyIdentifier({ aid: ntAid, kel: '' });
@@ -745,7 +739,9 @@ describe('verifyIdentifier — non-transferable AID with no KEL', () => {
 describe('verifyIdentifier — argument contract', () => {
 	test('throws on a non-string kel argument', () => {
 		const { aid } = buildKel();
-		expect(() => verifyIdentifier({ aid, kel: 123 as never })).toThrow(InvalidArgumentError);
+		expect(() => verifyIdentifier({ aid, kel: 123 as never })).toThrow(
+			InvalidArgumentError
+		);
 	});
 
 	test('throws on an empty aid', () => {

@@ -16,9 +16,9 @@
  *                                             one indexed signature ───┘
  *
  * This module is the codec for that form. `encodeEventFrame` turns an
- * in-memory `SignedKeriEvent` into its frame string; `parseSignedEvent` /
- * `parseKel` turn frames back into `SignedKeriEvent`s for inspection. The
- * KEL replay verifier parses streams through `parseStreamResult`.
+ * in-memory `SignedKeriEvent` into its frame string; `parseKel` turn frames
+ * back into `SignedKeriEvent`s for inspection. The KEL replay verifier parses
+ * streams through `parseStreamResult`.
  */
 
 import { utf8Decode, utf8Encode } from '../bytes/utf8';
@@ -68,7 +68,7 @@ const HEADER_LENGTH = 6 + KERI_VERSION_STRING_LENGTH;
  *     each siger is exactly `SIGER_LENGTH` characters and re-parseable.
  *
  * A defect throws `MalformedInputError`; a valid `SignedKeriEvent` always round-
- * trips through `parseSignedEvent`.
+ * trips through `parseKel`.
  */
 export function encodeEventFrame(signed: SignedKeriEvent): string {
 	if (signed === null || typeof signed !== 'object') {
@@ -262,22 +262,4 @@ export function parseKel(stream: string): SignedKeriEvent[] {
 		throw new MalformedInputError(result.message);
 	}
 	return result.frames.map((frame) => frame.signed);
-}
-
-/**
- * Parse a single event frame into its `SignedKeriEvent`. Throws
- * `MalformedInputError` if `frame` is not exactly one well-formed frame
- * (trailing bytes, or no event, are rejected).
- *
- * Like `parseKel`, this is for inspecting the in-memory shape of a wire-form
- * event; it does not verify the event.
- */
-export function parseSignedEvent(frame: string): SignedKeriEvent {
-	const events = parseKel(frame);
-	if (events.length !== 1) {
-		throw new MalformedInputError(
-			`expected exactly one event frame, parsed ${events.length}`
-		);
-	}
-	return events[0]!;
 }

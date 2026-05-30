@@ -318,14 +318,6 @@ function generateKeyPair(): KeyPair;
 
 Generate a fresh Ed25519 keypair from the platform [CSPRNG](https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator).
 
-#### `keyPairFromSeed()`
-
-```ts
-function keyPairFromSeed(seed: Uint8Array): KeyPair;
-```
-
-Reconstruct a keypair from a 32-byte Ed25519 seed.
-
 #### `asPublicKey()` / `asPrivateKey()`
 
 ```ts

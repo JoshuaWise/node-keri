@@ -2,14 +2,10 @@ import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
-import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { SignedKeriEvent } from '../src/event/types';
 import { CesrPublicKey } from '../src/cesr/qualified';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /**
  * End-to-end exercise of the Milestone 3 surface: build a full local KEL
@@ -106,9 +102,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 
 		// Final state reflects the latest rotation.
 		expect(rot2.state.lastSequenceNumber).toBe(4);
-		expect(rot2.state.currentPublicKey).toBe(
-			publicKeyToCesr(k2.publicKey)
-		);
+		expect(rot2.state.currentPublicKey).toBe(publicKeyToCesr(k2.publicKey));
 		expect(rot2.state.lastEventType).toBe('rot');
 		expect(rot2.state.aid).toBe(aid);
 	});
@@ -130,9 +124,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 				nextPublicKey: keys[i + 1]!.publicKey,
 			});
 			expect(r.state.lastSequenceNumber).toBe(i);
-			expect(r.state.currentPublicKey).toBe(
-				publicKeyToCesr(keys[i]!.publicKey)
-			);
+			expect(r.state.currentPublicKey).toBe(publicKeyToCesr(keys[i]!.publicKey));
 			const signed = parseSignedEvent(r.event);
 			expect(
 				verifyEventSignature(

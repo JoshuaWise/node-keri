@@ -22,13 +22,9 @@ import { verifyIdentifier } from '../src/api/verify-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
-import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { reframe } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x60));
 const K1 = () => keyPairFromSeed(fillSeed(0x61));

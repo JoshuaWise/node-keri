@@ -131,7 +131,7 @@ An event and its signature(s) are exchanged as a **CESR stream frame**, not as a
 
 The profile accepts exactly one counter — `-A` — and exactly one signature under it. Any other counter (witness signatures, receipt couples, CESR version/genus groups) names an excluded feature and is rejected; a stream that is not well-framed is rejected with `MALFORMED_STREAM`. Binary CESR is not accepted — the stream is text (base64 / UTF-8 JSON) only.
 
-`SignedKeriEvent` is the in-memory shape of one event; the stream is its serialization. The library converts between them with `encodeEventFrame` / `parseSignedEvent` / `parseKel`, and every high-level function takes or returns the stream form.
+`SignedKeriEvent` is the in-memory shape of one event; the stream is its serialization. The library converts between them with `encodeEventFrame` / `parseKel`, and every high-level function takes or returns the stream form.
 
 ## Digest algorithms
 

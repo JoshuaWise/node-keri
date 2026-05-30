@@ -8,10 +8,7 @@ import { keyPairFromSeed } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
 import { ED25519_SIGNATURE_BYTES } from '../src/profile/constants';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { fillSeed } from './helpers/util';
 
 const PAYLOAD = utf8Encode('a message from the DID controller');
 
@@ -48,7 +45,12 @@ describe('createSignature', () => {
 		// A signature over a different payload does not verify.
 		const wrong = createSignature(currentKeyPair.privateKey, utf8Encode('other'));
 		expect(
-			verifySignature({ aid: id.aid, kel: id.event, payload: PAYLOAD, signature: wrong })
+			verifySignature({
+				aid: id.aid,
+				kel: id.event,
+				payload: PAYLOAD,
+				signature: wrong,
+			})
 		).toBe(false);
 	});
 

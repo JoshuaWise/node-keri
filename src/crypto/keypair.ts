@@ -6,7 +6,7 @@ import {
 	generateKeyPairSync,
 } from 'node:crypto';
 import { base64urlDecode, base64urlEncode } from '../bytes/base64url';
-import { concatBytes } from '../bytes/compare';
+import { concatBytes } from '../bytes/util';
 import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { decodeVerificationKeyEd25519 } from '../cesr/decode';
 import { CesrPublicKey } from '../cesr/qualified';

@@ -11,14 +11,11 @@ import {
 	encodePublicKeyEd25519,
 	encodeSignatureEd25519,
 } from '../src/cesr/encode';
-import { sha256 } from '../src/crypto/hash';
 import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
-import {
-	InvalidArgumentError,
-	MalformedInputError,
-} from '../src/profile/errors';
+import { InvalidArgumentError, MalformedInputError } from '../src/profile/errors';
+import { sha256 } from './helpers/util';
 
 function fromHex(s: string): Uint8Array {
 	const out = new Uint8Array(s.length / 2);
@@ -68,8 +65,9 @@ describe('cesr encode/decode', () => {
 			for (let trial = 0; trial < 32; trial++) {
 				const raw = new Uint8Array(32);
 				for (let i = 0; i < 32; i++) raw[i] = (i * 37 + trial * 11) & 0xff;
-				expect(toArray(decodePublicKeyEd25519(encodePublicKeyEd25519(raw))))
-					.toEqual(toArray(raw));
+				expect(
+					toArray(decodePublicKeyEd25519(encodePublicKeyEd25519(raw)))
+				).toEqual(toArray(raw));
 			}
 		});
 
@@ -99,9 +97,7 @@ describe('cesr encode/decode', () => {
 			// A valid SHA-256 digest qb64 is the same length (44) but starts
 			// with 'I'. It must not be silently accepted as a public key.
 			const digestQb64 = encodeDigestSha256(new Uint8Array(32));
-			expect(() => decodePublicKeyEd25519(digestQb64)).toThrow(
-				/SHA-256 digest/
-			);
+			expect(() => decodePublicKeyEd25519(digestQb64)).toThrow(/SHA-256 digest/);
 		});
 
 		test('decode rejects the wrong known code, and unknown codes', () => {
@@ -128,15 +124,13 @@ describe('cesr encode/decode', () => {
 			// (b64[1] >> 4). 'Q' has base64 value 16, so its top 2 bits are 01
 			// and the resulting first byte is 1 — non-zero, hence non-canonical.
 			const bad = 'DQ' + 'A'.repeat(42);
-			expect(() => decodePublicKeyEd25519(bad)).toThrow(
-				/non-canonical/
-			);
+			expect(() => decodePublicKeyEd25519(bad)).toThrow(/non-canonical/);
 		});
 
 		test('decode rejects non-string input', () => {
-			expect(() =>
-				decodePublicKeyEd25519(123 as unknown as string)
-			).toThrow(MalformedInputError);
+			expect(() => decodePublicKeyEd25519(123 as unknown as string)).toThrow(
+				MalformedInputError
+			);
 		});
 	});
 
@@ -242,9 +236,7 @@ describe('cesr encode/decode', () => {
 		test('decode distinguishes digests from public keys', () => {
 			// Same length, different code; must not cross.
 			const pkQb64 = encodePublicKeyEd25519(new Uint8Array(32));
-			expect(() => decodeDigestSha256(pkQb64)).toThrow(
-				/Ed25519 public key/
-			);
+			expect(() => decodeDigestSha256(pkQb64)).toThrow(/Ed25519 public key/);
 		});
 
 		test('decode rejects non-canonical encodings', () => {

@@ -15,9 +15,9 @@ import {
 	isRegisteredDigestCode,
 	runDigest,
 } from '../src/crypto/digests';
-import { sha256 } from '../src/crypto/hash';
 import { utf8Encode } from '../src/bytes/utf8';
 import { UnsupportedAlgorithmError } from '../src/profile/errors';
+import { sha256 } from './helpers/util';
 
 /** Snapshot the registry so a test's monkey-patches never leak to the next. */
 let snapshot: Record<string, DigestAlgorithm | undefined>;
@@ -69,7 +69,7 @@ describe('digestAlgorithms registry', () => {
 		}
 	});
 
-	test('the SHA-256 entry agrees with the standalone sha256 helper', () => {
+	test('the SHA-256 entry agrees with the sha256 helper', () => {
 		const input = utf8Encode('abc');
 		expect(Array.from(runDigest('I', input))).toEqual(Array.from(sha256(input)));
 	});

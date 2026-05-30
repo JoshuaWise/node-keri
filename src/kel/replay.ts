@@ -20,7 +20,7 @@
  * *tampered* event fails the digest check directly.
  */
 
-import { bytesEqual } from '../bytes/compare';
+import { bytesEqual } from '../bytes/util';
 import { digestCodeOf } from '../cesr/codes';
 import { decodePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest, CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';

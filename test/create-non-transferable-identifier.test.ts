@@ -10,10 +10,7 @@ import { verifyDid } from '../src/did/verify-did';
 import { base64urlEncode } from '../src/bytes/base64url';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { fillSeed } from './helpers/util';
 
 const PAYLOAD = utf8Encode('a message from a non-transferable controller');
 
@@ -25,7 +22,9 @@ describe('createNonTransferableIdentifier', () => {
 		// The AID is the `B`-coded basic prefix of the key — 44 chars, no SAID.
 		expect(id.aid.startsWith('B')).toBe(true);
 		expect(id.aid.length).toBe(44);
-		expect(id.aid).toBe(encodeNonTransferablePublicKeyEd25519(rawPublicKey(kp.publicKey)));
+		expect(id.aid).toBe(
+			encodeNonTransferablePublicKeyEd25519(rawPublicKey(kp.publicKey))
+		);
 		expect(id.did).toBe(`${DID_KERI_PREFIX}${id.aid}`);
 
 		// The result has no `event` field — there is no inception event / KEL.
@@ -103,8 +102,12 @@ describe('createNonTransferableIdentifier', () => {
 
 	test('is deterministic for a fixed key', () => {
 		const seed = fillSeed(0x47);
-		const a = createNonTransferableIdentifier({ publicKey: keyPairFromSeed(seed).publicKey });
-		const b = createNonTransferableIdentifier({ publicKey: keyPairFromSeed(seed).publicKey });
+		const a = createNonTransferableIdentifier({
+			publicKey: keyPairFromSeed(seed).publicKey,
+		});
+		const b = createNonTransferableIdentifier({
+			publicKey: keyPairFromSeed(seed).publicKey,
+		});
 		expect(b.did).toBe(a.did);
 		expect(b.state).toEqual(a.state);
 	});

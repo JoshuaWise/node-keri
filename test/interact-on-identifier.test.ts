@@ -3,12 +3,8 @@ import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
-import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x40));
 const K1 = () => keyPairFromSeed(fillSeed(0x41));

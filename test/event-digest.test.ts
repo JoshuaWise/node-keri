@@ -9,16 +9,9 @@ import {
 } from '../src/event/digest';
 import { toCanonicalEvent } from '../src/event/field-order';
 import { decodeDigestSha256 } from '../src/cesr/decode';
-import { sha256 } from '../src/crypto/hash';
 import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
-import {
-	CanonicalJsonError,
-	InvalidArgumentError,
-} from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { CanonicalJsonError, InvalidArgumentError } from '../src/profile/errors';
+import { sha256, fillSeed } from './helpers/util';
 
 describe('formatKeriVersionString', () => {
 	test('produces a fixed 17-character string with size in 6 hex chars', () => {
@@ -27,9 +20,7 @@ describe('formatKeriVersionString', () => {
 		expect(formatKeriVersionString(0xffffff)).toBe('KERI10JSONffffff_');
 		// Length is constant regardless of size value.
 		expect(formatKeriVersionString(1).length).toBe(KERI_VERSION_STRING_LENGTH);
-		expect(formatKeriVersionString(0xfffff).length).toBe(
-			KERI_VERSION_STRING_LENGTH
-		);
+		expect(formatKeriVersionString(0xfffff).length).toBe(KERI_VERSION_STRING_LENGTH);
 	});
 
 	test('rejects non-integer or negative sizes', () => {
@@ -39,9 +30,7 @@ describe('formatKeriVersionString', () => {
 	});
 
 	test('rejects sizes that overflow the 6-char hex field', () => {
-		expect(() => formatKeriVersionString(0x1000000)).toThrow(
-			CanonicalJsonError
-		);
+		expect(() => formatKeriVersionString(0x1000000)).toThrow(CanonicalJsonError);
 	});
 });
 
@@ -64,10 +53,7 @@ describe('computeEventSaid', () => {
 		const { said, versionString, digestedBytes } = computeEventSaid(fields);
 
 		// The size encoded in v must equal the byte length of the digested bytes.
-		const sizeHex = versionString.slice(
-			'KERI10JSON'.length,
-			'KERI10JSON'.length + 6
-		);
+		const sizeHex = versionString.slice('KERI10JSON'.length, 'KERI10JSON'.length + 6);
 		expect(parseInt(sizeHex, 16)).toBe(digestedBytes.length);
 
 		// The SAID is a SHA-256 digest of those exact bytes.
@@ -123,12 +109,8 @@ describe('computeEventSaid', () => {
 	});
 
 	test('rejects an event of unknown type', () => {
-		expect(() => computeEventSaid({ t: 'xyz' })).toThrow(
-			InvalidArgumentError
-		);
-		expect(() => computeEventSaid({ s: '0' })).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => computeEventSaid({ t: 'xyz' })).toThrow(InvalidArgumentError);
+		expect(() => computeEventSaid({ s: '0' })).toThrow(InvalidArgumentError);
 	});
 
 	test('different inputs produce different SAIDs', () => {
@@ -164,9 +146,7 @@ describe('deriveNextKeyCommitment', () => {
 		const expected = sha256(utf8Encode(qb64));
 
 		const commitment = deriveNextKeyCommitment(kp.publicKey);
-		expect(Array.from(decodeDigestSha256(commitment))).toEqual(
-			Array.from(expected)
-		);
+		expect(Array.from(decodeDigestSha256(commitment))).toEqual(Array.from(expected));
 	});
 
 	test('is deterministic for the same key', () => {
@@ -185,8 +165,6 @@ describe('deriveNextKeyCommitment', () => {
 	});
 
 	test('rejects non-public-key inputs', () => {
-		expect(() =>
-			deriveNextKeyCommitment({} as never)
-		).toThrow(InvalidArgumentError);
+		expect(() => deriveNextKeyCommitment({} as never)).toThrow(InvalidArgumentError);
 	});
 });

@@ -21,12 +21,9 @@ import {
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { keyPairFromSeed } from '../src/crypto/keypair';
-import { encodeEventFrame, parseKel, parseSignedEvent } from '../src/event/stream';
+import { encodeEventFrame, parseKel } from '../src/event/stream';
 import { InvalidArgumentError, MalformedInputError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 function sig64(byte: number): Uint8Array {
 	return new Uint8Array(64).fill(byte);

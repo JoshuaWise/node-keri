@@ -23,12 +23,10 @@ import {
 	digestAlgorithms,
 	isRegisteredDigestCode,
 } from '../src/crypto/digests';
-import { sha256 } from '../src/crypto/hash';
 import { sign } from '../src/crypto/ed25519';
 import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid } from '../src/did/did-keri';
-import { parseSignedEvent } from '../src/event/stream';
 import { utf8Encode } from '../src/bytes/utf8';
 import type { SignedKeriEvent } from '../src/event/types';
 import type { CesrSignature } from '../src/cesr/qualified';
@@ -38,10 +36,7 @@ import {
 	UnsupportedAlgorithmError,
 } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { sha256, parseSignedEvent, fillSeed } from './helpers/util';
 
 /** Restore the digest registry after any test that monkey-patches it. */
 let snapshot: Record<string, DigestAlgorithm | undefined>;

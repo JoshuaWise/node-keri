@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file guides Claude Code when working with the "keri" repository. Note that Claude Code is often run in a sandbox, so Claude should always use `--runInBand` when running tests to avoid crashing due to memory exhaustion.
+This file guides Claude Code when working with the "keri" repository. Note that Claude Code is often run in a sandbox, so Claude should always use `--runInBand` when running tests to avoid crashing due to memory exhaustion. Always run `npm run prettier` after writing or editing any files.
 
 Below is a practical implementation plan for a **pure, synchronous TypeScript KERI lifecycle library**.
 
@@ -418,8 +418,7 @@ interface SignedKeriEvent {
 `SignedKeriEvent` is the in-memory representation. On the wire an event is a
 **CESR stream frame** — its canonical JSON followed by a `-A` counter and the
 indexed signature(s). The high-level API (`createIdentifier`, `verifyIdentifier`, …)
-takes and returns the stream form (`string`); `encodeEventFrame` /
-`parseSignedEvent` / `parseKel` convert. See "Wire format" below.
+takes and returns the stream form (`string`); `encodeEventFrame` / `parseKel` convert. See "Wire format" below.
 
 ---
 
@@ -589,14 +588,7 @@ never assumed.
 Use Node’s built-in crypto only.
 
 ```ts
-import {
-    generateKeyPairSync,
-    sign,
-    verify,
-    createHash,
-    randomBytes,
-    KeyObject,
-} from 'node:crypto';
+import { generateKeyPairSync, sign, verify, createHash, KeyObject } from 'node:crypto';
 ```
 
 Keys are Node `KeyObject`s, branded for Ed25519 and their half rather than

@@ -9,10 +9,7 @@ import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import type { Aid } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { fillSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x30));
 const K1 = () => keyPairFromSeed(fillSeed(0x31));

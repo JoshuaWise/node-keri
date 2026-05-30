@@ -9,13 +9,9 @@ import { DID_KERI_PREFIX } from '../src/did/did-keri';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent, CreateInceptionInput } from '../src/event/inception';
 import { serializeEvent, signEvent } from '../src/event/sign';
-import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 const SEED_CURRENT = fillSeed(0x21);
 const SEED_NEXT = fillSeed(0x22);
@@ -113,9 +109,7 @@ describe('createInceptionEvent', () => {
 		expect(state.lastEventDigest).toBe(signedEvent.event.d);
 		expect(state.aid).toBe(signedEvent.event.i);
 		expect(state.did).toBe(DID_KERI_PREFIX + state.aid);
-		expect(state.currentPublicKey).toBe(
-			publicKeyToCesr(current.publicKey)
-		);
+		expect(state.currentPublicKey).toBe(publicKeyToCesr(current.publicKey));
 		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(next.publicKey));
 		expect(state.transferable).toBe(true);
 		expect(state.lastEventType).toBe('icp');

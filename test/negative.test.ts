@@ -16,7 +16,6 @@ import { keyPairFromPrivateKey, keyPairFromSeed } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
 import { formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { verifyDid } from '../src/did/verify-did';
-import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
 import {
 	CanonicalJsonError,
@@ -24,10 +23,7 @@ import {
 	MalformedInputError,
 } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /** A valid identifier reused across cases that need real material. */
 function sample() {

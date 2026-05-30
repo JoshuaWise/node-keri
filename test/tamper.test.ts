@@ -37,16 +37,12 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { createInteractionEvent } from '../src/event/interaction';
-import { parseSignedEvent } from '../src/event/stream';
 import { keyPairFromSeed } from '../src/crypto/keypair';
 import { SignedKeriEvent } from '../src/event/types';
 import { Aid } from '../src/did/did-keri';
 import { KeriVerificationError } from '../src/profile/errors';
 import { frameKel, reframe } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /** Build the canonical exercise KEL using only the public high-level API. */
 function buildKel() {

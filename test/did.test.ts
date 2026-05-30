@@ -3,7 +3,6 @@ import { keyPairFromSeed, rawPublicKey } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
-import { parseSignedEvent } from '../src/event/stream';
 import { SignedKeriEvent } from '../src/event/types';
 import { DID_KERI_PREFIX, formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { createDidDocument } from '../src/did/document';
@@ -11,10 +10,7 @@ import { verifyDid } from '../src/did/verify-did';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /** Build an icp, ixn, rot KEL (seq 0..2). Latest signing key is k1. */
 function buildKel() {

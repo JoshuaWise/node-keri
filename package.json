@@ -1,7 +1,7 @@
 {
 	"name": "node-keri",
 	"version": "0.1.0",
-	"description": "Keri (did:keri) implementation for Node",
+	"description": "KERI (did:keri) implementation for Node",
 	"author": "Joshua Wise <joshuathomaswise@gmail.com>",
 	"homepage": "https://github.com/JoshuaWise/keri#readme",
 	"repository": {

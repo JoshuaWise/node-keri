@@ -2,12 +2,8 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { generateKeyPair, keyPairFromSeed } from '../src/crypto/keypair';
 import { formatDidKeri } from '../src/did/did-keri';
-import { parseSignedEvent } from '../src/event/stream';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 const SEED_CURRENT = fillSeed(0x10);
 const SEED_NEXT = fillSeed(0x11);

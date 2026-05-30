@@ -2,13 +2,9 @@ import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent, CreateInteractionInput } from '../src/event/interaction';
 import { serializeEvent, signEvent } from '../src/event/sign';
-import { parseSignedEvent } from '../src/event/stream';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
-
-function fillSeed(byte: number): Uint8Array {
-	return new Uint8Array(32).fill(byte);
-}
+import { parseSignedEvent, fillSeed } from './helpers/util';
 
 /**
  * `createInteractionEvent` returns the event in CESR stream wire form; parse
