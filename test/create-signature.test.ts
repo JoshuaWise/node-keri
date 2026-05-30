@@ -4,11 +4,10 @@ import { verifySignature } from '../src/api/verify-signature';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
 import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
 import { ED25519_SIGNATURE_BYTES } from '../src/profile/constants';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { fillSeed } from './helpers/util';
+import { fillSeed, keyPairFromSeed } from './helpers/util';
 
 const PAYLOAD = utf8Encode('a message from the DID controller');
 

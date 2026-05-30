@@ -17,7 +17,6 @@ import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { utf8Encode } from '../src/bytes/utf8';
 import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
 import { createDeactivationEvent } from '../src/event/deactivation';
 import { createInteractionEvent } from '../src/event/interaction';
 import { deriveNextKeyCommitment } from '../src/event/digest';
@@ -26,7 +25,7 @@ import { verifyDid } from '../src/did/verify-did';
 import { KeriState, TransferableKeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { reframe } from './kel-stream';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x50));
 const K1 = () => keyPairFromSeed(fillSeed(0x51));

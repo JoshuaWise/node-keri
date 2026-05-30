@@ -1,11 +1,11 @@
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
+import { publicKeyToCesr } from '../src/crypto/keypair';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent } from '../src/event/inception';
 import { createRotationEvent, CreateRotationInput } from '../src/event/rotation';
 import { serializeEvent, signEvent } from '../src/event/sign';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 /**
  * `createRotationEvent` returns the event in CESR stream wire form; parse the

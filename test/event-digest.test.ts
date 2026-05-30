@@ -2,15 +2,20 @@ import { utf8Decode, utf8Encode } from '../src/bytes/utf8';
 import { canonicalizeJson } from '../src/event/canonical-json';
 import {
 	KERI_VERSION_STRING_LENGTH,
-	SAID_PLACEHOLDER,
 	computeEventSaid,
 	deriveNextKeyCommitment,
 	formatKeriVersionString,
 } from '../src/event/digest';
 import { toCanonicalEvent } from '../src/event/field-order';
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
+import { publicKeyToCesr } from '../src/crypto/keypair';
 import { CanonicalJsonError, InvalidArgumentError } from '../src/profile/errors';
-import { sha256, fillSeed, decodeDigestSha256 } from './helpers/util';
+import {
+	sha256,
+	fillSeed,
+	decodeDigestSha256,
+	SAID_PLACEHOLDER,
+	keyPairFromSeed,
+} from './helpers/util';
 
 describe('formatKeriVersionString', () => {
 	test('produces a fixed 17-character string with size in 6 hex chars', () => {

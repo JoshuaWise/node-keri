@@ -1,9 +1,5 @@
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
-import {
-	SAID_PLACEHOLDER,
-	computeEventSaid,
-	deriveNextKeyCommitment,
-} from '../src/event/digest';
+import { publicKeyToCesr } from '../src/crypto/keypair';
+import { computeEventSaid, deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
@@ -19,7 +15,12 @@ import { TransferableKeriState } from '../src/kel/state';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { frameKel } from './kel-stream';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import {
+	parseSignedEvent,
+	fillSeed,
+	keyPairFromSeed,
+	SAID_PLACEHOLDER,
+} from './helpers/util';
 
 /** Concatenate signed events into a single KEL CESR stream. */
 function kel(...signed: SignedKeriEvent[]): string {

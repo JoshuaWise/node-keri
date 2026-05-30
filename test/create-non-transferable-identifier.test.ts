@@ -3,14 +3,14 @@ import { createSignature } from '../src/api/create-signature';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { verifySignature } from '../src/api/verify-signature';
 import { encodeNonTransferablePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
+import { publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
 import { DID_KERI_PREFIX, parseDidKeri } from '../src/did/did-keri';
 import { verifyDid } from '../src/did/verify-did';
 import { base64urlEncode } from '../src/bytes/base64url';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { fillSeed } from './helpers/util';
+import { fillSeed, keyPairFromSeed } from './helpers/util';
 
 const PAYLOAD = utf8Encode('a message from a non-transferable controller');
 

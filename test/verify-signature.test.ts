@@ -5,11 +5,11 @@ import { verifySignature } from '../src/api/verify-signature';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
 import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
+import { publicKeyToCesr } from '../src/crypto/keypair';
 import type { Aid } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { fillSeed } from './helpers/util';
+import { fillSeed, keyPairFromSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x30));
 const K1 = () => keyPairFromSeed(fillSeed(0x31));

@@ -1,19 +1,11 @@
-import { Buffer } from 'node:buffer';
-import {
-	KeyObject,
-	createPrivateKey,
-	createPublicKey,
-	generateKeyPairSync,
-} from 'node:crypto';
+import { KeyObject, createPublicKey, generateKeyPairSync } from 'node:crypto';
 import { base64urlDecode, base64urlEncode } from '../bytes/base64url';
-import { concatBytes } from '../bytes/util';
 import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { decodeVerificationKeyEd25519 } from '../cesr/decode';
 import { CesrPublicKey } from '../cesr/qualified';
 import {
 	SupportedKeyAlgorithm,
 	SUPPORTED_KEY_ALGORITHM,
-	ED25519_PRIVATE_SEED_BYTES,
 	ED25519_PUBLIC_KEY_BYTES,
 } from '../profile/constants';
 import { InvalidArgumentError, UnsupportedAlgorithmError } from '../profile/errors';
@@ -52,37 +44,10 @@ export interface KeyPair {
 	readonly privateKey: PrivateKey;
 }
 
-// PKCS#8 ASN.1 DER prefix for an Ed25519 private key (RFC 8410). The
-// 32-byte seed follows immediately after this prefix.
-const ED25519_PKCS8_PREFIX = new Uint8Array([
-	0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22,
-	0x04, 0x20,
-]);
-
 /** Generate a fresh Ed25519 keypair using the platform CSPRNG. */
 export function generateKeyPair(): KeyPair {
 	const { publicKey, privateKey } = generateKeyPairSync(SUPPORTED_KEY_ALGORITHM);
 	return { publicKey: asPublicKey(publicKey), privateKey: asPrivateKey(privateKey) };
-}
-
-/**
- * Construct a KeyPair from a 32-byte Ed25519 seed. Intended for test vectors
- * and any caller that already holds raw key material. The public half is
- * derived from the seed by Node.
- */
-export function keyPairFromSeed(seed: Readonly<Uint8Array>): KeyPair {
-	if (seed.length !== ED25519_PRIVATE_SEED_BYTES) {
-		throw new InvalidArgumentError(
-			`Ed25519 seed must be ${ED25519_PRIVATE_SEED_BYTES} bytes`
-		);
-	}
-	const der = concatBytes(ED25519_PKCS8_PREFIX, seed);
-	const privateKey = createPrivateKey({
-		key: Buffer.from(der),
-		format: 'der',
-		type: 'pkcs8',
-	});
-	return keyPairFromPrivateKey(asPrivateKey(privateKey));
 }
 
 /**

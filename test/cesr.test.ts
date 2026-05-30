@@ -10,10 +10,15 @@ import {
 	encodeSignatureEd25519,
 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
+import { publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError, MalformedInputError } from '../src/profile/errors';
-import { sha256, decodeDigestSha256, encodeDigestSha256 } from './helpers/util';
+import {
+	sha256,
+	decodeDigestSha256,
+	encodeDigestSha256,
+	keyPairFromSeed,
+} from './helpers/util';
 
 function fromHex(s: string): Uint8Array {
 	const out = new Uint8Array(s.length / 2);

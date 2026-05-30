@@ -20,7 +20,6 @@
  * *tampered* event fails the digest check directly.
  */
 
-import { bytesEqual } from '../bytes/util';
 import { digestCodeOf } from '../cesr/codes';
 import { decodePublicKeyEd25519 } from '../cesr/decode';
 import { CesrDigest, CesrIndexedSignature, CesrPublicKey } from '../cesr/qualified';
@@ -64,6 +63,15 @@ type StepResult =
  */
 function fail(error: KeriVerificationError): { ok: false; error: KeriVerificationError } {
 	return { ok: false, error };
+}
+
+/** Variable-time byte equality. Use for non-secret comparisons only. */
+function bytesEqual(a: Readonly<Uint8Array>, b: Readonly<Uint8Array>): boolean {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
 }
 
 /**

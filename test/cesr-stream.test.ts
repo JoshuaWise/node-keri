@@ -20,10 +20,9 @@ import {
 } from '../src/cesr/counter';
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
-import { keyPairFromSeed } from '../src/crypto/keypair';
 import { encodeEventFrame, parseKel } from '../src/event/stream';
 import { InvalidArgumentError, MalformedInputError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 function sig64(byte: number): Uint8Array {
 	return new Uint8Array(64).fill(byte);

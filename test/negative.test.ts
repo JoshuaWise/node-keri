@@ -11,7 +11,7 @@
 import { createIdentifier } from '../src/api/create-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { canonicalizeJson } from '../src/event/canonical-json';
-import { keyPairFromPrivateKey, keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromPrivateKey } from '../src/crypto/keypair';
 import { createDidDocument } from '../src/did/document';
 import { formatDidKeri, parseDidKeri } from '../src/did/did-keri';
 import { verifyDid } from '../src/did/verify-did';
@@ -22,7 +22,12 @@ import {
 	MalformedInputError,
 } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-import { parseSignedEvent, fillSeed, decodeDigestSha256 } from './helpers/util';
+import {
+	parseSignedEvent,
+	fillSeed,
+	decodeDigestSha256,
+	keyPairFromSeed,
+} from './helpers/util';
 
 /** A valid identifier reused across cases that need real material. */
 function sample() {

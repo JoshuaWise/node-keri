@@ -36,15 +36,9 @@ import { toCanonicalEvent } from './field-order';
  * the digest algorithm (44 chars for a 256-bit code, 88 for a 512-bit one),
  * so the placeholder substitution preserves the event's byte length.
  */
-export function saidPlaceholder(digestCode: string = DEFAULT_DIGEST_CODE): string {
+export function saidPlaceholder(digestCode: string): string {
 	return '#'.repeat(digestSpecForCode(digestCode).fs);
 }
-
-/**
- * The SAID placeholder for the default (SHA-256) digest — 44 `#` characters.
- * Events digested with another algorithm need `saidPlaceholder(code)` instead.
- */
-export const SAID_PLACEHOLDER: string = saidPlaceholder(DEFAULT_DIGEST_CODE);
 
 const VERSION_PROTOCOL = 'KERI';
 const VERSION_NUMBER = '10';

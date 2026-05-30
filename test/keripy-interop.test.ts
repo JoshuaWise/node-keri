@@ -47,7 +47,8 @@ import { verifyIdentifier } from '../src/api/verify-identifier';
 import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { verifyDid } from '../src/did/verify-did';
 import { createDidDocument } from '../src/did/document';
-import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
+import { publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
+import { keyPairFromSeed, SAID_PLACEHOLDER } from './helpers/util';
 import { sign } from '../src/crypto/ed25519';
 import {
 	encodeNonTransferablePublicKeyEd25519,
@@ -56,11 +57,7 @@ import {
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid, DidKeri } from '../src/did/did-keri';
 import { createInteractionEvent } from '../src/event/interaction';
-import {
-	SAID_PLACEHOLDER,
-	computeEventSaid,
-	deriveNextKeyCommitment,
-} from '../src/event/digest';
+import { computeEventSaid, deriveNextKeyCommitment } from '../src/event/digest';
 import { encodeEventFrame, parseKel } from '../src/event/stream';
 import type { KeriEvent, SignedKeriEvent } from '../src/event/types';
 import { utf8Encode } from '../src/bytes/utf8';

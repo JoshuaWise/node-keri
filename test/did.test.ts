@@ -1,5 +1,5 @@
 import { base64urlEncode } from '../src/bytes/base64url';
-import { keyPairFromSeed, rawPublicKey } from '../src/crypto/keypair';
+import { rawPublicKey } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
@@ -10,7 +10,7 @@ import { verifyDid } from '../src/did/verify-did';
 import { verifyIdentifier } from '../src/api/verify-identifier';
 import { InvalidArgumentError } from '../src/profile/errors';
 import { frameKel } from './kel-stream';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 /** Build an icp, ixn, rot KEL (seq 0..2). Latest signing key is k1. */
 function buildKel() {

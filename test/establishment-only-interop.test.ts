@@ -23,7 +23,8 @@
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
+import { publicKeyToCesr } from '../src/crypto/keypair';
+import { keyPairFromSeed } from './helpers/util';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid } from '../src/did/did-keri';
 import { parseKel } from '../src/event/stream';

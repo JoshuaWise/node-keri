@@ -2,9 +2,8 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
-import { keyPairFromSeed } from '../src/crypto/keypair';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 const K0 = () => keyPairFromSeed(fillSeed(0x40));
 const K1 = () => keyPairFromSeed(fillSeed(0x41));

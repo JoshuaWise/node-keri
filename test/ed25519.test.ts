@@ -3,10 +3,10 @@ import { sign, verify } from '../src/crypto/ed25519';
 import {
 	PublicKey,
 	generateKeyPair,
-	keyPairFromSeed,
 	publicKeyFromRaw,
 	rawPublicKey,
 } from '../src/crypto/keypair';
+import { keyPairFromSeed } from './helpers/util';
 import {
 	ED25519_PUBLIC_KEY_BYTES,
 	ED25519_SIGNATURE_BYTES,

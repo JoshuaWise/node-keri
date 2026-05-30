@@ -3,14 +3,19 @@ import {
 	decodePublicKeyEd25519,
 } from '../src/cesr/decode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
+import { publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { DID_KERI_PREFIX } from '../src/did/did-keri';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent, CreateInceptionInput } from '../src/event/inception';
 import { serializeEvent, signEvent } from '../src/event/sign';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed, decodeDigestSha256 } from './helpers/util';
+import {
+	parseSignedEvent,
+	fillSeed,
+	decodeDigestSha256,
+	keyPairFromSeed,
+} from './helpers/util';
 
 const SEED_CURRENT = fillSeed(0x21);
 const SEED_NEXT = fillSeed(0x22);

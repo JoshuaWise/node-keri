@@ -1,11 +1,11 @@
-import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
+import { publicKeyToCesr } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
 import { verifyEventSignature } from '../src/event/verify-signature';
 import { SignedKeriEvent } from '../src/event/types';
 import { CesrPublicKey } from '../src/cesr/qualified';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 /**
  * End-to-end exercise of the Milestone 3 surface: build a full local KEL

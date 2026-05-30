@@ -1,9 +1,9 @@
 import { createIdentifier } from '../src/api/create-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
-import { generateKeyPair, keyPairFromSeed } from '../src/crypto/keypair';
+import { generateKeyPair } from '../src/crypto/keypair';
 import { formatDidKeri } from '../src/did/did-keri';
 import { InvalidArgumentError } from '../src/profile/errors';
-import { parseSignedEvent, fillSeed } from './helpers/util';
+import { parseSignedEvent, fillSeed, keyPairFromSeed } from './helpers/util';
 
 const SEED_CURRENT = fillSeed(0x10);
 const SEED_NEXT = fillSeed(0x11);
