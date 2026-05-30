@@ -109,7 +109,7 @@ Qualified text primitives — keys and signatures are Ed25519-only; digests are 
 | 256-bit digest                       | one char     | 44 chars         |
 | 512-bit digest                       | `0`-prefixed | 88 chars         |
 
-The non-transferable key code (`B`) appears only as the `i`/`k` of a non-transferable inception and the `currentPublicKey` of the state it yields; node-keri decodes it but has no encoder for it.
+The non-transferable key code (`B`) is the AID and `currentPublicKey` of a non-transferable identifier — minted by `createNonTransferableIdentifier`, which encodes it with `encodeNonTransferablePublicKeyEd25519` — and the `i`/`k` of a non-transferable inception event ingested from another implementation. node-keri both encodes and decodes it.
 
 The non-indexed signature (`0B`, a "Cigar") is used for detached signatures over arbitrary payloads. The indexed signature (`A`, a "Siger") carries the index of the signing key within the establishment event's key list, encoded in a 1-character "soft" field after the code — it is the form attached to events in the wire stream. In this single-key profile that index is always 0.
 

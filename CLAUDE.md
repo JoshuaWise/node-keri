@@ -115,14 +115,11 @@ KERI Direct JSON Profile v1
 function generateKeyPair(): KeyPair;
 
 function createIdentifier(input?: {
-    currentKeyPair?: KeyPair;
-    nextKeyPair?: KeyPair;
-    metadata?: Record<string, unknown>;
+    currentPrivatePair: PrivateKey;
+    nextPublicKey: PublicKey;
 }): {
     did: DidKeri;
     aid: Aid;
-    currentKeyPair: KeyPair;
-    nextKeyPair: KeyPair;
     event: string; // CESR stream frame — see "Wire format" below
     state: KeriState;
 };
@@ -131,8 +128,6 @@ function createIdentifier(input?: {
 This creates:
 
 ```txt
-current signing key
-next pre-rotated key
 inception event
 initial key state
 did:keri identifier
@@ -148,7 +143,7 @@ KERI’s rotation model depends on pre-rotation: the current event commits to th
 function rotateIdentifier(input: {
     state: KeriState;
     newPrivateKey: PrivateKey;
-    nextKeyPair: KeyPair;
+    nextPublicKey: PublicKey;
 }): {
     event: string; // CESR stream frame
     state: KeriState;
@@ -174,7 +169,7 @@ new next-key commitment is stored for future rotation
 function interactOnIdentifier(input: {
     state: KeriState;
     currentPrivateKey: PrivateKey;
-    data?: unknown;
+    data: unknown[];
 }): {
     event: string; // CESR stream frame
     state: KeriState;
@@ -332,12 +327,12 @@ src/
   did/
     did-keri.ts
     document.ts
-    resolver.ts
+    verify-did.ts
 
   api/
     create-identifier.ts
     rotate-identifier.ts
-    interact-identifier.ts
+    interact-on-identifier.ts
     verify-identifier.ts
 
   test-vectors/
@@ -452,16 +447,17 @@ not well-framed is rejected by `verifyIdentifier` with `MALFORMED_STREAM`.
 interface KeriStateBase {
     aid: Aid;
     did: DidKeri;
-    sequenceNumber: number;
+    lastSequenceNumber: number;
+    lastEventType: KeriEventType;
     lastEventDigest: CesrDigest;
     currentPublicKey: CesrPublicKey;
-    eventType: KeriEventType;
 }
 
 // A transferable identifier pre-rotates, so it carries the next-key commitment.
 interface TransferableKeriState extends KeriStateBase {
-    transferable: true;
     nextKeyCommitment: CesrDigest;
+    transferable: true;
+    deactivated: false;
 }
 
 // A non-transferable identifier commits to no next key and can never rotate.
@@ -699,6 +695,7 @@ type KeriVerificationError =
     | { code: 'INVALID_EVENT_TYPE'; eventType: string }
     | { code: 'NON_TRANSFERABLE_NOT_EXTENSIBLE'; eventType: string }
     | { code: 'DEACTIVATED_NOT_EXTENSIBLE'; eventType: string }
+    | { code: 'ESTABLISHMENT_ONLY_NO_INTERACTION'; eventType: string }
     | { code: 'INVALID_SEQUENCE'; expected: number; actual: number }
     | { code: 'INVALID_PREVIOUS_DIGEST' }
     | { code: 'INVALID_EVENT_DIGEST' }

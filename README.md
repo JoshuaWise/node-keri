@@ -49,7 +49,7 @@ const kel = result.event;
 const verified = verifyDid({ did: result.did, kel });
 if (verified.ok) {
 	const publicKey = publicKeyFromCesr(verified.state.currentPublicKey);
-	console.log(publicKey.export({ format: ' jwk' }));
+	console.log(publicKey.export({ format: 'jwk' }));
 } else {
 	console.error('Verification failed!');
 }
@@ -294,7 +294,7 @@ Project a _verified_ `KeriState` into a [W3C DID document](https://www.w3.org/TR
 
 **Options:**
 
-- `services`: populates the document's `services` field; bare-fragment ids are expanded against the document's DID.
+- `services`: populates the document's `service` field; bare-fragment ids are expanded against the document's DID.
 
 ### Key handling
 

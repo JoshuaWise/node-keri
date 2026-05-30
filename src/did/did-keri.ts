@@ -3,7 +3,7 @@
  * DIDs, plus the `did:keri` formatter and parser.
  *
  * Document generation and resolution live in sibling modules (`document.ts`,
- * `resolver.ts`); this file owns the identifier syntax itself — the types,
+ * `verify-did.ts`); this file owns the identifier syntax itself — the types,
  * the `did:keri:<aid>` formatter, and the strict offline parser.
  */
 
