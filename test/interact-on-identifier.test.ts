@@ -44,11 +44,12 @@ describe('interactOnIdentifier', () => {
 		expect(ixn.state.nextKeyCommitment).toBe(id.state.nextKeyCommitment);
 	});
 
-	test('omitting data yields an empty anchor list', () => {
+	test('allows an empty anchor list', () => {
 		const id = freshIdentifier();
 		const ixn = interactOnIdentifier({
 			state: id.state,
 			currentPrivateKey: id.currentKeyPair.privateKey,
+			data: [],
 		});
 		expect(
 			(parseSignedEvent(ixn.event).event as { a: readonly unknown[] }).a
@@ -75,7 +76,7 @@ describe('interactOnIdentifier', () => {
 		const id = freshIdentifier();
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		// After rotation the authoritative key is the revealed K1.
@@ -104,6 +105,7 @@ describe('interactOnIdentifier — rejects bad input', () => {
 			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.publicKey as never,
+				data: [],
 			})
 		).toThrow(InvalidArgumentError);
 	});
@@ -115,6 +117,7 @@ describe('interactOnIdentifier — rejects bad input', () => {
 				state: id.state,
 				// K1, not the current K0 — does not match `state.currentPublicKey`.
 				currentPrivateKey: id.nextKeyPair.privateKey,
+				data: [],
 			})
 		).toThrow(InvalidArgumentError);
 	});

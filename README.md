@@ -1,6 +1,6 @@
 # keri
 
-A pure, synchronous, Node.js library for the **[KERI](https://keri.one/) identity lifecycle**. Create, rotate, deactivate, and verify `did:keri` identifiers using cryptographically verifiable append-only key event logs (KEL).
+A pure, synchronous, Node.js library for the **[KERI](https://keri.one/) identity lifecycle**. Create, rotate, deactivate, sign with, and verify `did:keri` identifiers using cryptographically verifiable append-only key event logs (KEL).
 
 Basically, KERI let's you create unique [DIDs](https://www.w3.org/TR/did-1.0/) (decentralized identifiers) which are cryptographically bound to a private key. You can rotate your keys without changing your DID, and other people can verify that the new keys are in-fact owned by the same DID owner as the previous keys. All of this is possible without any centralized service or shared blockchain. Even if your current keys are stolen or their crypto algorithm is cracked, you can rotate your keys to regain control of your identity.
 
@@ -8,7 +8,7 @@ Basically, KERI let's you create unique [DIDs](https://www.w3.org/TR/did-1.0/) (
 
 **In practice, this means you can have your own persistent "account" in decentralized, peer-to-peer networks. An obvious use-case is in agent-to-agent communication.**
 
-This is a **deterministic state-machine library**, not an authentication framework. It has no dependencies, performs no I/O, and is entirely synchronous. The caller is responsible for secure storage and networking; the library just owns the cryptographic lifecycle. Not all KERI features are supported; the supported subset is the **KERI Direct JSON Profile v1** — see [PROFILE.md](./PROFILE.md) for the exact conformance boundary and [SECURITY.md](./SECURITY.md) for the trust model and security invariants.
+This is a **deterministic state-machine library**, not an authentication framework. It has no dependencies, performs no I/O, and is entirely synchronous. The caller is responsible for secure storage and networking; the library just owns the cryptographic lifecycle. Only Ed25519 keys are supported. Not all KERI features are supported; the supported subset is the **KERI Direct JSON Profile v1** — see [PROFILE.md](./PROFILE.md) for the exact conformance boundary and [SECURITY.md](./SECURITY.md) for the trust model and security invariants.
 
 ## Installation
 
@@ -20,62 +20,68 @@ npm install node-keri
 
 ## Basic usage
 
-### Create an identifier, rotate it, and store its keys
+### Create a new identifier
 
 ```ts
-import { createIdentifier, rotateIdentifier, generateKeyPair } from 'node-keri';
+import {
+	createIdentifier,
+	verifyDid,
+	generateKeyPair,
+	publicKeyFromCesr,
+} from 'node-keri';
 
-// You own key management: generate the current signing key and the
-// pre-rotation key yourself.
+// You can bring your own keys, or generate them like this.
 const currentKeyPair = generateKeyPair();
-const nextKeyPair = generateKeyPair();
+const nextKeyPair = generateKeyPair(); // Pre-committed keys
 
-// Mint a new did:keri identifier. createIdentifier takes only the material the
-// inception event actually consumes — the current key's *private* half (its
-// public half is derived and disclosed) and the next key's *public* half (only
-// its digest is committed) — and returns no key material of its own.
-const id = createIdentifier({
+// Mint a new did:keri identifier.
+const result = createIdentifier({
 	currentPrivateKey: currentKeyPair.privateKey,
 	nextPublicKey: nextKeyPair.publicKey,
 });
 
-// Rotate the signing key: reveal the pre-rotated key, commit to a fresh one.
-const rotationKeyPair = generateKeyPair();
-const rotation = rotateIdentifier({
-	state: id.state,
-	currentPrivateKey: nextKeyPair.privateKey, // the key inception pre-committed to
-	nextPublicKey: rotationKeyPair.publicKey, // the next pre-rotation commitment
+console.log(result.did); // => "did:keri:<...>"
+
+// The KEL now contains just one event (the inception event).
+const kel = result.event;
+
+// Other people can verify the identifier via the KEL.
+const verified = verifyDid({ did: result.did, kel });
+if (verified.ok) {
+	const publicKey = publicKeyFromCesr(verified.state.currentPublicKey);
+	console.log(publicKey.export({ format: ' jwk' }));
+} else {
+	console.error('Verification failed!');
+}
+```
+
+### Rotate an identifier's keys
+
+```ts
+import { rotateIdentifier, generateKeyPair } from 'node-keri';
+
+currentKeyPair = nextKeyPair;
+nextKeyPair = generateKeyPair(); // New pre-committed keys
+
+const result = rotateIdentifier({
+	state: verified.state,
+	newPrivateKey: currentKeyPair.privateKey,
+	nextPublicKey: nextKeyPair.publicKey,
 });
 
-// After the rotation, nextKeyPair is the authoritative signing key and
-// rotationKeyPair is the new pre-rotation key — keep both private halves.
-
-// Persist the key event log; keep the private keys in your own secure store —
-// the library never serializes private keys. Each event is a CESR stream
-// frame, so the KEL is just its events concatenated, in order.
-const kel = id.event + rotation.event;
+// The KEL now contains another event (the rotation event).
+kel += result.event;
 ```
 
 ### Sign a message
 
 ```ts
-import {
-	createIdentifier,
-	generateKeyPair,
-	sign,
-	encodeSignatureEd25519,
-} from 'node-keri';
+import { createSignature } from 'node-keri';
 
-const currentKeyPair = generateKeyPair();
-const id = createIdentifier({
-	currentPrivateKey: currentKeyPair.privateKey,
-	nextPublicKey: generateKeyPair().publicKey,
-});
-const payload = new TextEncoder().encode('a message from the DID controller');
+const payload = Buffer.from('a message from the DID controller');
+const signature = createSignature(currentKeyPair.privateKey, payload);
 
-// Sign with the identifier's current private key, then CESR-qualify the
-// signature so it is safe to transmit as text.
-const signature = encodeSignatureEd25519(sign(currentKeyPair.privateKey, payload));
+console.log(signature); // CESR-qualified url-safe ASCII string
 ```
 
 ### Verify a signed message
@@ -83,60 +89,29 @@ const signature = encodeSignatureEd25519(sign(currentKeyPair.privateKey, payload
 ```ts
 import { verifySignatureWithDid } from 'node-keri';
 
-// `did`, `kel`, `payload`, and `signature` are supplied by the signer.
 const ok = verifySignatureWithDid({
-	did: id.did,
-	kel: id.event, // the signer's full key event log (a CESR stream)
+	did,
+	kel,
 	payload,
 	signature,
 });
-// ok === true: the signature verifies under the DID's latest key.
+
+if (ok) {
+	console.log('Verification succeeded!');
+} else {
+	console.log('Verification failed!');
+}
 ```
 
-`verifySignatureWithDid` establishes the DID's authoritative key — by replaying
-the KEL for a transferable DID, or reading it straight from the AID for a
-self-certifying non-transferable one — and checks the signature in one step. It
-returns `false` for any data-level failure — a malformed DID, a non-verifying
-KEL, or a bad signature.
+### Key Events and the KEL
 
-## Wire format
+KEL stands for "Key Event Log". It is the cryptographically verifiable history of a KERI identifier. Anybody holding a KEL can independently verify it to determine the corresponding identifier's current public key. Each KEL is cryptographically bound to its corresponding identifier, so attempting to verify a KEL against the wrong identifier will always fail.
 
-Events and KELs are exchanged as **CESR streams** — the form the reference
-KERI implementation (keripy) uses on the wire. Each event is one frame: the
-event's canonical JSON, followed immediately by an attachment group — a `-A`
-counter naming how many controller signatures follow, then the indexed
-signatures themselves (a "Siger", CESR code `A`):
-
-```text
-{"v":"KERI10JSON0000fb_","t":"icp",...}-AABAA<86 base64 chars>
-└──────────── event JSON (size from `v`) ──────────┘└┬─┘└────┬────┘
-                                  counter (-A, count 1) ┘     │
-                                       one indexed signature ─┘
-```
-
-A KEL is simply the frames of its events **concatenated, in order** — there
-are no separators. So `createIdentifier`, `rotateIdentifier`, and
-`interactOnIdentifier` each return their event as a frame string, and a KEL is
-built with `+`:
-
-```ts
-const kel = id.event + rotation.event + interaction.event;
-```
-
-`verifyIdentifier`, `verifyDid`, and `verifySignatureWithDid` all take the KEL in
-this string form. To inspect an event's structured shape, parse a frame with
-`parseSignedEvent` (or a whole stream with `parseKel`) into a `SignedKeriEvent`;
-`encodeEventFrame` is the inverse. The indexed-signature primitives —
-`encodeIndexedSignatureEd25519`, `decodeIndexedSignatureEd25519`,
-`signatureIndex` — are exported for low-level use.
-
-Detached signatures over arbitrary payloads (as in `verifySignatureWithDid`)
-are _not_ indexed: they use the non-indexed `0B` "Cigar" form produced by
-`encodeSignatureEd25519`.
+Events and KELs are exchanged as **CESR streams**, which are ASCII-safe strings. A KEL is simply a concatenation of each each event it contains, in order.
 
 ## API reference
 
-The error policy is uniform across the whole surface: **throwing is reserved for programmer errors** — a wrong argument type, a malformed key object, an out-of-profile algorithm request. Anything that can legitimately arrive from an untrusted source — a tampered KEL, a malformed DID, a non-verifying signature — is reported as a typed `{ ok: false, error }` result or a `false` return, never thrown. Throwing functions throw a `KeriError` subclass; see [Errors](#errors).
+The error policy is uniform across the whole library: **throwing is reserved for programmer errors** — a wrong argument type, a malformed key object, an unsupported KERI feature, etc. Anything that can legitimately arrive from an untrusted source — a tampered KEL, a malformed DID, a non-verifying signature — is reported as a typed `{ ok: false, error }` result or a `false` return, never thrown. Throwing functions throw a `KeriError` subclass; see [Errors](#errors).
 
 ### Identifier lifecycle
 
@@ -144,8 +119,8 @@ The error policy is uniform across the whole surface: **throwing is reserved for
 
 ```ts
 function createIdentifier(input: {
-	currentPrivateKey: KeriPrivateKey;
-	nextPublicKey: KeriPublicKey;
+	currentPrivateKey: PrivateKey;
+	nextPublicKey: PublicKey;
 	establishmentOnly?: boolean;
 	digestCode?: string;
 }): {
@@ -156,21 +131,24 @@ function createIdentifier(input: {
 };
 ```
 
-Mint a new transferable `did:keri` identifier. You supply the key material, and only the minimum the inception event consumes: `currentPrivateKey` is the current signing key's private half — its public half is derived and disclosed as `k[0]` — and `nextPublicKey` is the pre-rotation key's public half, whose digest is committed as the next-key commitment. Both are **required**. It builds and signs the inception event and returns the DID, the signed event, and the replay-derived sequence-0 state — and **no key material**, since you already hold it. Throws `InvalidArgumentError` if the current and next keys are the same key. **Keep the current private key to sign with and the pre-rotation private key to rotate to later; the library never serializes private keys.**
+Mint a new transferable `did:keri` identifier. You supply the key material: `currentPrivateKey` is the current signing key's private half; `nextPublicKey` is the pre-rotation key's public half. It builds and signs the inception event and returns the DID, the signed event, and the replay-derived KEL state. Keep the current private key to sign with, and securely store the next private key to rotate to later.
 
-`event` is the signed inception event in its **CESR stream** wire form — see [Wire format](#wire-format). A KEL is built by concatenating these event strings in order. (Every `*Identifier()` result names its signed event the same way — `event` — so KELs compose uniformly with `+`.)
+The returned `event` is the signed inception event in its **CESR stream** ASCII wire form. A KEL is built by concatenating these event strings in order. When an identifier is first created, its KEL is simply equal to this first event.
 
-`digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to SHA-256 (`I`). See [Digest algorithms](#digest-algorithms).
+**Options:**
 
-Set `establishmentOnly: true` to mint an **establishment-only** identifier. It defaults to `false`.
+- `establishmentOnly`: set to `true` to mint an **establishment-only** identifier, which disables [interaction events](#interactonidentifier). It defaults to `false`.
+- `digestCode` selects the hash algorithm for the inception SAID, AID, and next-key commitment — it defaults to `DIGEST_CODES.SHA2_256` (`I`). See [Digest algorithms](#digest-algorithms).
+
+To mint a _non-transferable_ identifier instead — an identifier with no KEL, which can never be rotated — use [`createNonTransferableIdentifier`](#createnontransferableidentifier).
 
 #### `rotateIdentifier()`
 
 ```ts
 function rotateIdentifier(input: {
 	state: KeriState;
-	currentPrivateKey: KeriPrivateKey;
-	nextPublicKey: KeriPublicKey;
+	newPrivateKey: PrivateKey;
+	nextPublicKey: PublicKey;
 	digestCode?: string;
 }): {
 	event: string;
@@ -178,17 +156,19 @@ function rotateIdentifier(input: {
 };
 ```
 
-Roll the signing key forward. `currentPrivateKey` is the private half of the key being rotated _to_ — the pre-rotation key whose digest the prior event committed; its public half must reproduce that commitment or the rotation is rejected. `nextPublicKey` is the public half of the freshly chosen pre-rotation key for the _next_ rotation — only its digest is committed; keep the matching private half to rotate again later. Returns the signed rotation event and the new state.
+Rotate an identifier's keys. `newPrivateKey` is the private half of the key being rotated _to_ (it must match with the pre-commited `nextPublicKey` of the _previous event_, or rotation will fail). `nextPublicKey` is the public half of the freshly chosen pre-rotation key for the _next_ rotation; securely store the matching private half to rotate again later. Returns the signed rotation event and the new state.
 
-`digestCode` selects the hash for this event's SAID and new next-key commitment (default SHA-256). The prior commitment is always re-checked under its _own_ original algorithm, so rotations may switch algorithms freely.
+**Options:**
+
+- `digestCode`: selects the hash for this event's SAID and new next-key commitment — it defaults to `DIGEST_CODES.SHA2_256` (`I`). See [Digest algorithms](#digest-algorithms).
 
 #### `interactOnIdentifier()`
 
 ```ts
 function interactOnIdentifier(input: {
 	state: KeriState;
-	currentPrivateKey: KeriPrivateKey;
-	data?: readonly unknown[];
+	currentPrivateKey: PrivateKey;
+	data: readonly unknown[];
 	digestCode?: string;
 }): {
 	event: string;
@@ -196,14 +176,18 @@ function interactOnIdentifier(input: {
 };
 ```
 
-Anchor arbitrary data to the identifier without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be canonical-JSON-serializable. Returns the signed interaction event and the advanced state. `digestCode` selects the hash for the event's SAID (default SHA-256). Throws `InvalidArgumentError` for an establishment-only identifier, which by construction accepts no interaction events.
+Anchor arbitrary data to the identifier's KEL without rotating keys. `currentPrivateKey` must be the currently authoritative signing key. Each `data` entry must be plain JSON-serializable data. Returns the signed interaction event and the new state.
+
+**Options:**
+
+- `digestCode`: selects the hash for this event's SAID — it defaults to `DIGEST_CODES.SHA2_256` (`I`). See [Digest algorithms](#digest-algorithms).
 
 #### `deactivateIdentifier()`
 
 ```ts
 function deactivateIdentifier(input: {
 	state: KeriState;
-	currentPrivateKey: KeriPrivateKey;
+	newPrivateKey: PrivateKey;
 	digestCode?: string;
 }): {
 	event: string;
@@ -211,9 +195,27 @@ function deactivateIdentifier(input: {
 };
 ```
 
-Permanently abandon an identifier. Per the `did:keri` method, deactivation is a rotation to zero forward (next) controlling keys: the event is a `rot` with `nt: "0"` and an empty `n`. `currentPrivateKey` is the pre-rotation key being revealed — exactly as for `rotateIdentifier`, its public half must reproduce the prior next-key commitment. Because the event commits to no next key, it is the **final** event of the KEL: `verifyIdentifier` rejects anything appended after it with `DEACTIVATED_NOT_EXTENSIBLE`, and `verifySignatureWithDid` no longer trusts the DID. The returned `state` has `deactivated === true` and `transferable === false`. **This step is irreversible.**
+Permanently disables an identifier. After deactivation, the identifier cannot have any more events, it cannot be used for signing messages, and its identity is permanently considered invalid/untrustworthy. `newPrivateKey` must be the private half of the pre-commited `nextPublicKey` of the _previous event_. Returns the signed rotation event and the new state.
 
-### Signing and verifying
+**Options:**
+
+- `digestCode`: selects the hash for this event's SAID — it defaults to `DIGEST_CODES.SHA2_256` (`"I"`). See [Digest algorithms](#digest-algorithms).
+
+#### `createNonTransferableIdentifier()`
+
+```ts
+function createNonTransferableIdentifier(input: { publicKey: PublicKey }): {
+	did: DidKeri;
+	aid: Aid;
+	state: KeriState;
+};
+```
+
+Mint a **non-transferable** `did:keri` identifier. It is self-certifying: there is no inception event and **no KEL**, and it can never rotate. Keep the matching private key to sign with.
+
+Use the **empty string** `''` as the KEL wherever one is expected (e.g., `verifyDid({ did, kel: '' })`.
+
+Non-transferable identifiers are useful for ephemeral, temporary identifiers.
 
 #### `verifyIdentifier()`
 
@@ -224,13 +226,30 @@ function verifyIdentifier(input: {
 }): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
 ```
 
-Verify an identifier and reconstruct its latest authoritative state. With a non-empty `kel` (a CESR stream), the log is replayed from inception: the stream is first parsed into its events (a framing defect is reported as `MALFORMED_STREAM`); then every event's structure, canonical serialization, self-addressing digest, version string, sequence number, previous-event link, rotation commitment, and signature is recomputed and checked, and the inception event must derive exactly `aid`. An event whose wire JSON is not in KERI's canonical field order is rejected as `NON_CANONICAL_EVENT`. **The returned `state` is the only `KeriState` a caller may treat as verified.** Never throws for a malformed or hostile KEL — that is returned as `{ ok: false }`.
+Verify an identifier and reconstruct its latest authoritative state. **The returned `state` is the only `KeriState` a caller may treat as verified.**
 
-`verifyIdentifier` accepts both transferable and non-transferable AIDs. A non-transferable AID — a basic prefix that is the controller's `B`-coded Ed25519 key — is self-certifying, so it verifies with the **empty string** `''` for `kel` ("no KEL"): the state is read straight from the prefix, with no events to replay. (It may equally be verified from its trivial single-event KEL by passing that stream.) Either way it cannot rotate; an event appended after its inception is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`. A transferable AID, by contrast, must supply a real KEL — an empty one is `EMPTY_KEL`. `state.transferable` discriminates the two, and `state.nextKeyCommitment` is present only when it is `true`. node-keri verifies non-transferable AIDs but does not generate them.
+A KEL that ends in a deactivation event (see [`deactivateIdentifier`](#deactivateidentifier)) verifies normally, and its `state` has `deactivated === true` and `transferable === false`.
 
-`verifyIdentifier` is the AID-level counterpart of [`verifyDid`](#verifydid), which parses a `did:keri` DID down to its AID and delegates here.
+#### `verifyDid()`
 
-A KEL that ends in a deactivation event (see `deactivateIdentifier`) verifies normally, and its `state` has `deactivated === true` and `transferable === false`; any event appended after the deactivation is rejected with `DEACTIVATED_NOT_EXTENSIBLE`.
+```ts
+function verifyDid(input: {
+	did: DidKeri;
+	kel: string;
+}): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
+```
+
+This is the DID-level counterpart of [`verifyIdentifier`](#verifyidentifier). A DID document can be subsequently created by passing the returned `state` to [`createDidDocument()`](#creatediddocument).
+
+### Signing and verifying signatures
+
+#### `createSignature()`
+
+```ts
+function createSignature(privateKey: PrivateKey, payload: Uint8Array): CesrSignature;
+```
+
+Sign `payload` with `privateKey` and return the signature, which is CESR-qualified url-safe ASCII string.
 
 #### `verifySignature()`
 
@@ -243,12 +262,9 @@ function verifySignature(input: {
 }): boolean;
 ```
 
-The message verification primitive, keyed on an AID. Establishes the key `aid` makes authoritative and checks `signature` over `payload` against it — in one call. `kel` is always required, but the **empty string** `''` stands for "no KEL":
+Verifies that the provided signature is a valid signature over the provided payload, and that the signature was made by the controller of the given identifier, using the identifier's current authoritative signing key.
 
-- With a **non-empty `kel`** (a CESR stream), the key is whatever verifying that KEL yields — it must verify and belong to `aid`. A transferable identifier can be verified only this way.
-- With an **empty `kel`**, `aid` must be a **non-transferable** identifier: a `B`-coded basic prefix is self-certifying, so the key is read straight from the AID. (A non-transferable identifier may have no KEL at all.)
-
-Returns `false` for every data-level failure: an empty or non-verifying KEL for a transferable AID, a KEL for a different identifier, a KEL for a deactivated identifier, or a malformed or mismatched signature. `signature` is a non-indexed CESR signature (a "Cigar", code `0B`) — the form for detached signatures over arbitrary payloads. It shares the empty-string "no KEL" handling with [`verifyIdentifier`](#verifyidentifier).
+Returns `false` if verification fails (e.g., a non-verifying KEL, a KEL for a different identifier, a KEL for a deactivated identifier, or a malformed or mismatched signature).
 
 #### `verifySignatureWithDid()`
 
@@ -261,50 +277,43 @@ function verifySignatureWithDid(input: {
 }): boolean;
 ```
 
-The DID-level counterpart of `verifySignature`: it parses a `did:keri` DID down to its AID and delegates, so its behavior is identical save that it additionally returns `false` for a **malformed DID**. Use it when you hold a sender's DID; use `verifySignature` when you hold a bare AID.
+This is the DID-level counterpart of [`verifySignature`](#verifysignature).
 
-### DID surface
-
-#### `verifyDid()`
-
-```ts
-function verifyDid(input: {
-	did: DidKeri;
-	kel: string;
-}): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
-```
-
-Verify a `did:keri` DID entirely offline against a caller-supplied KEL. It is the DID-level counterpart of [`verifyIdentifier`](#verifyidentifier): it parses the DID down to its AID and delegates, additionally returning `{ ok: false, error: { code: 'INVALID_DID' } }` for a malformed DID. A DID document can be subsequently created by passing the returned `state` to `createDidDocument(state)`. `state` is the verified latest `KeriState` — the only one the caller may treat as trusted. Any data-level failure is returned as `{ ok: false }`. A deactivated DID still verifies with `ok: true` — `state.deactivated` is `true`, and a document projected from it would be authority-free (empty `verificationMethod` / `authentication` / `assertionMethod`).
-
-A non-transferable DID is verified with the **empty string** `''` for `kel`: it is self-certifying, so the state is read straight from the prefix. It may also be verified from its trivial single-event KEL by passing that stream.
+### DID support functions
 
 #### `createDidDocument()`
 
 ```ts
 function createDidDocument(input: {
 	state: KeriState;
-	did?: DidKeri;
 	services?: readonly DidService[];
 }): DidDocument;
 ```
 
-Project a _verified_ `KeriState` into a W3C DID document with a single Ed25519 verification method (`JsonWebKey2020` / `publicKeyJwk`) referenced from both `authentication` and `assertionMethod`. Pass `state` only from `verifyIdentifier` / `verifyDid`. The provided `did`, when given, must match `state.did`. Optional `services` are validated and bare-fragment ids are expanded against the document's DID.
+Project a _verified_ `KeriState` into a [W3C DID document](https://www.w3.org/TR/did-1.0/) with a single Ed25519 verification method (`JsonWebKey2020` / `publicKeyJwk`) referenced from both `authentication` and `assertionMethod`. You should only pass `state` returned by `verifyIdentifier` or `verifyDid`.
+
+**Options:**
+
+- `services`: populates the document's `services` field; bare-fragment ids are expanded against the document's DID.
 
 ### Key handling
 
-#### `KeriKeyPair`
+This library expects `PublicKey` and `PrivateKey` inputs, which are just Node's [`KeyObject`](https://nodejs.org/api/crypto.html#class-keyobject), branded for Ed25519 and refined to their respective halves:
 
-A wrapper type for an Ed25519 keypair.
+```ts
+type PublicKey = KeyObject & { asymmetricKeyType: 'ed25519'; type: 'public' };
+type PrivateKey = KeyObject & { asymmetricKeyType: 'ed25519'; type: 'private' };
 
-Access each underlying [`KeyObject`](https://nodejs.org/api/crypto.html#class-keyobject) at:
-
-- `pair.publicKey.keyObject`
-- `pair.privateKey.keyObject`
+interface KeyPair {
+	publicKey: PublicKey;
+	privateKey: PrivateKey;
+}
+```
 
 #### `generateKeyPair()`
 
 ```ts
-function generateKeyPair(): KeriKeyPair;
+function generateKeyPair(): KeyPair;
 ```
 
 Generate a fresh Ed25519 keypair from the platform [CSPRNG](https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator).
@@ -312,10 +321,41 @@ Generate a fresh Ed25519 keypair from the platform [CSPRNG](https://en.wikipedia
 #### `keyPairFromSeed()`
 
 ```ts
-function keyPairFromSeed(seed: Uint8Array): KeriKeyPair;
+function keyPairFromSeed(seed: Uint8Array): KeyPair;
 ```
 
 Reconstruct a keypair from a 32-byte Ed25519 seed.
+
+#### `asPublicKey()` / `asPrivateKey()`
+
+```ts
+function asPublicKey(value: unknown): PublicKey;
+function asPrivateKey(value: unknown): PrivateKey;
+```
+
+Narrow a Node `KeyObject` to a branded `PublicKey` or `PrivateKey`, throwing `InvalidArgumentError` if it is not an Ed25519 key of the correct half. Use after parsing a stored key:
+
+```ts
+import { createPrivateKey } from 'node:crypto';
+import { asPrivateKey } from 'node-keri';
+
+const privateKey = asPrivateKey(createPrivateKey(pemString)); // PEM/DER/JWK all work
+```
+
+#### `publicKeyToCesr()` / `publicKeyFromCesr()`
+
+```ts
+function publicKeyToCesr(key: PublicKey): CesrPublicKey;
+function publicKeyFromCesr(cesr: CesrPublicKey): PublicKey;
+```
+
+Convert between a `PublicKey` and its CESR-qualified string form. Use `publicKeyToCesr` to compare a key you hold against a verified `KeriState`:
+
+```ts
+console.log(publicKeyToCesr(myKeyPair.publicKey) === state.currentPublicKey);
+```
+
+Use `publicKeyFromCesr` for the inverse — recover a usable `PublicKey` from `state.currentPublicKey`.
 
 ### Digest algorithms
 
@@ -325,22 +365,22 @@ KERI digests are self-describing — every qualified digest carries a CESR deriv
 
 ```ts
 const digestAlgorithms: Record<string, DigestAlgorithm | undefined>;
+
 interface DigestAlgorithm {
 	name: string;
 	hash(input: Uint8Array): Uint8Array;
 }
 ```
 
-The registry of digest implementations, keyed by CESR derivation code. The value type includes `undefined` because the registry is sparse — indexing an unregistered code yields `undefined` — so every read must handle the absent case. It is a null-prototype object, populated at load with every native `node:crypto` hash the linked OpenSSL provides — SHA2-256 (`I`), SHA2-512 (`0G`), SHA3-256 (`H`), SHA3-512 (`0E`), BLAKE2s-256 (`G`), BLAKE2b-512 (`0F`). A code with no entry is rejected everywhere — decoding, verification, generation — so the library never trusts a hash it cannot recompute.
+The registry of available digest implementations, keyed by CESR derivation code. It is populated at load with every native `node:crypto` hash the linked OpenSSL provides — SHA2-256 (`I`), SHA2-512 (`0G`), SHA3-256 (`H`), SHA3-512 (`0E`), BLAKE2s-256 (`G`), BLAKE2b-512 (`0F`).
 
-It is **monkey-patchable**: register an algorithm node-keri does not ship by assigning an entry. The implementation must return 32 bytes for a one-character code or 64 for a `0`-prefixed code.
+It is **monkey-patchable**: register an algorithm `node-keri` does not ship with by assigning an entry. The implementation must return 32 bytes for a one-character code or 64 bytes for a `0`-prefixed code.
 
 ```ts
 import { digestAlgorithms } from 'node-keri';
 import { blake3 } from 'some-blake3-library';
 
-// Blake3-256 uses CESR code 'E'. Once registered, it is accepted for
-// decoding, KEL verification, and generation alike.
+// Blake3-256 uses CESR code 'E'. Once registered, node-keri can use it.
 digestAlgorithms['E'] = {
 	name: 'Blake3-256',
 	hash: (input) => blake3(input), // must return 32 bytes
@@ -349,7 +389,7 @@ digestAlgorithms['E'] = {
 
 #### Choosing an algorithm for generation
 
-`createIdentifier`, `rotateIdentifier`, and `interactOnIdentifier` each accept an optional `digestCode`. It defaults to SHA-256 (`DEFAULT_DIGEST_CODE`, `'I'`); requesting a code with no registered implementation throws `UnsupportedAlgorithmError`.
+`createIdentifier()`, `rotateIdentifier()`, `interactOnIdentifier()`, and `deactivateIdentifier()` each accept an optional `digestCode` option. It defaults to SHA-256 (`DIGEST_CODES.SHA2_256`, `'I'`). Attempting to use a code with no registered implementation throws `UnsupportedAlgorithmError`.
 
 ```ts
 import {
@@ -360,22 +400,29 @@ import {
 } from 'node-keri';
 
 const nextKeyPair = generateKeyPair();
-const id = createIdentifier({
+const inception = createIdentifier({
 	currentPrivateKey: generateKeyPair().privateKey,
 	nextPublicKey: nextKeyPair.publicKey,
 	digestCode: DIGEST_CODES.SHA3_256,
 });
-const rot = rotateIdentifier({
-	state: id.state,
-	currentPrivateKey: nextKeyPair.privateKey,
+const rotation = rotateIdentifier({
+	state: inception.state,
+	newPrivateKey: nextKeyPair.privateKey,
 	nextPublicKey: generateKeyPair().publicKey,
-	digestCode: DIGEST_CODES.SHA2_512, // a KEL may mix algorithms
+	digestCode: DIGEST_CODES.SHA2_512, // a KEL may mix digest algorithms
 });
 ```
 
-Verification (`verifyIdentifier`, `verifyDid`, `verifySignatureWithDid`) needs no configuration: each event's algorithm is detected from its own CESR code and recomputed under exactly that — verification is never pinned to one algorithm.
+`DIGEST_CODES` contains the well-known codes:
 
-`DIGEST_CODES` names the well-known codes (`SHA2_256`, `SHA2_512`, `SHA3_256`, `SHA3_512`, `BLAKE2B_512`, `BLAKE2S_256`, `BLAKE2B_256`, `BLAKE3_256`). `decodeDigest(qb64)` decodes any recognized digest and reports its code; `encodeDigest(code, raw)` qualifies a raw digest; `digestCodeOf(qb64)` reads a digest's code; `isRegisteredDigestCode(code)` tests availability; `runDigest(code, input)` hashes through the registry.
+- `SHA2_256`
+- `SHA2_512`
+- `SHA3_256`
+- `SHA3_512`
+- `BLAKE2B_512`
+- `BLAKE2S_256`
+- `BLAKE2B_256`
+- `BLAKE3_256`
 
 ### Errors
 
@@ -384,7 +431,7 @@ Programmer errors throw a subclass of `KeriError`:
 | Class                       | Meaning                                                                           |
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `InvalidArgumentError`      | An argument does not satisfy the function's contract.                             |
-| `UnsupportedAlgorithmError` | A requested algorithm or derivation code is outside the supported profile.        |
+| `UnsupportedAlgorithmError` | A requested algorithm or derivation code is not supported.                        |
 | `MalformedInputError`       | Input parsed structurally but failed integrity validation (e.g. a bad CESR code). |
 | `CanonicalJsonError`        | A value rejected by the canonical-JSON serialization rules.                       |
 
@@ -410,20 +457,6 @@ type KeriVerificationError =
 ```
 
 `verifySignature` and `verifySignatureWithDid` collapse every data-level failure to a plain `false`.
-
-### Exported types and constants
-
-Alongside the functions above, the package exports the full type surface:
-
-- **Keys** — `KeriKeyPair`, `KeriPublicKey`, `KeriPrivateKey`.
-- **CESR** — `CesrPublicKey`, `CesrSignature`, `CesrIndexedSignature`, `CesrDigest` (compile-time branded strings).
-- **Digests** — the `digestAlgorithms` registry, the `DigestAlgorithm` type, and `runDigest` / `isRegisteredDigestCode` / `decodeDigest` / `encodeDigest` / `digestCodeOf` / `digestSpecForCode`.
-- **Identifiers** — `Aid`, `DidKeri`, `ParsedDidKeri`.
-- **Events** — `KeriEventType`, `KeriEventBase`, `InceptionEvent`, `NonTransferableInceptionEvent`, `RotationEvent`, `DeactivationEvent`, `InteractionEvent`, `KeriEvent`, `SignedKeriEvent` (the in-memory event shape; the wire form is a CESR stream string). `encodeEventFrame`, `parseSignedEvent`, and `parseKel` convert between the two.
-- **State** — `KeriState`, the replay-derived, trusted summary of an identifier — a discriminated union of `TransferableKeriState`, `NonTransferableKeriState`, and `DeactivatedKeriState` on the `transferable` field (the two `transferable: false` members are told apart by `deactivated`).
-- **DID documents** — `DidDocument`, `DidVerificationMethod`, `DidService`, `DidServiceEndpoint`, `VerifyDidResult`.
-- **I/O shapes** — every `*Input` / `*Result` interface for the functions above (`CreateIdentifierInput`, `VerifyIdentifierResult`, and so on).
-- **Constants** — `KERI_PROFILE_NAME`, `SUPPORTED_KEY_ALGORITHM`, `SUPPORTED_DIGEST_ALGORITHM`, `DEFAULT_DIGEST_CODE`, `DIGEST_CODES`, `ED25519_PUBLIC_KEY_BYTES`, `ED25519_PRIVATE_SEED_BYTES`, `ED25519_SIGNATURE_BYTES`, `SHA256_DIGEST_BYTES`, `DID_KERI_PREFIX`, `KERI_VERSION_STRING_LENGTH`, `SAID_PLACEHOLDER`.
 
 ## What this library does not do
 

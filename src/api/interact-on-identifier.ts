@@ -9,7 +9,7 @@
  * string, never a full keypair.
  */
 
-import { KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
+import { PrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
 import { createInteractionEvent } from '../event/interaction';
 import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
@@ -21,9 +21,9 @@ export interface InteractOnIdentifierInput {
 	 * Private half of the currently authoritative signing key. Its public half
 	 * must equal `state.currentPublicKey`; otherwise the interaction is rejected.
 	 */
-	readonly currentPrivateKey: KeriPrivateKey;
-	/** Optional anchored data; each entry must be canonical-JSON-serializable. */
-	readonly data?: readonly unknown[];
+	readonly currentPrivateKey: PrivateKey;
+	/** Anchored data; each entry must be canonical-JSON-serializable. */
+	readonly data: readonly unknown[];
 	/**
 	 * CESR digest code for the interaction event's SAID. Defaults to
 	 * SHA-256 (`I`).
@@ -46,7 +46,7 @@ export function interactOnIdentifier(
 		throw new InvalidArgumentError('interactOnIdentifier requires an input object');
 	}
 
-	// `keyPairFromPrivateKey` asserts the argument is a KeriPrivateKey; the
+	// `keyPairFromPrivateKey` asserts the argument is a PrivateKey; the
 	// event constructor then re-checks the derived public half against
 	// `state.currentPublicKey`.
 	const currentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);

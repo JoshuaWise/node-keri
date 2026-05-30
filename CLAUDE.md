@@ -20,6 +20,7 @@ It should expose functions that operate on plain data:
 
 ```
 createIdentifier(...)
+createNonTransferableIdentifier(...)
 rotateIdentifier(...)
 interactOnIdentifier(...)
 deactivateIdentifier(...)
@@ -111,17 +112,17 @@ KERI Direct JSON Profile v1
 ### Core creation
 
 ```ts
-function generateKeyPair(): KeriKeyPair;
+function generateKeyPair(): KeyPair;
 
 function createIdentifier(input?: {
-    currentKeyPair?: KeriKeyPair;
-    nextKeyPair?: KeriKeyPair;
+    currentKeyPair?: KeyPair;
+    nextKeyPair?: KeyPair;
     metadata?: Record<string, unknown>;
 }): {
     did: DidKeri;
     aid: Aid;
-    currentKeyPair: KeriKeyPair;
-    nextKeyPair: KeriKeyPair;
+    currentKeyPair: KeyPair;
+    nextKeyPair: KeyPair;
     event: string; // CESR stream frame — see "Wire format" below
     state: KeriState;
 };
@@ -146,8 +147,8 @@ KERI’s rotation model depends on pre-rotation: the current event commits to th
 ```ts
 function rotateIdentifier(input: {
     state: KeriState;
-    currentPrivateKey: KeriPrivateKey;
-    nextKeyPair: KeriKeyPair;
+    newPrivateKey: PrivateKey;
+    nextKeyPair: KeyPair;
 }): {
     event: string; // CESR stream frame
     state: KeriState;
@@ -172,7 +173,7 @@ new next-key commitment is stored for future rotation
 ```ts
 function interactOnIdentifier(input: {
     state: KeriState;
-    currentPrivateKey: KeriPrivateKey;
+    currentPrivateKey: PrivateKey;
     data?: unknown;
 }): {
     event: string; // CESR stream frame
@@ -247,7 +248,6 @@ The library should not try to discover the KEL.
 
 ```ts
 function createDidDocument(input: {
-    did: DidKeri;
     state: KeriState;
     services?: DidService[];
 }): DidDocument;
@@ -464,9 +464,10 @@ interface TransferableKeriState extends KeriStateBase {
     nextKeyCommitment: CesrDigest;
 }
 
-// A non-transferable identifier's KEL is its single inception event: it
-// commits to no next key and can never rotate. node-keri verifies these
-// (e.g. from keripy) but does not generate them.
+// A non-transferable identifier commits to no next key and can never rotate.
+// node-keri mints these with `createNonTransferableIdentifier` (the no-KEL
+// form, where the AID *is* the controller key) and also verifies the
+// single-event-KEL form produced by other implementations (e.g. keripy).
 interface NonTransferableKeriState extends KeriStateBase {
     transferable: false;
 }
@@ -602,30 +603,32 @@ import {
 } from 'node:crypto';
 ```
 
-Expose opaque key wrappers:
+Keys are Node `KeyObject`s, branded for Ed25519 and their half rather than
+wrapped — so they interoperate with the Node ecosystem directly (import any
+standard format via `createPublicKey`/`createPrivateKey`, export via
+`key.export(...)`), while the literal `type`/`asymmetricKeyType` fields keep a
+public and a private key non-interchangeable at compile time:
 
 ```ts
-interface KeriPrivateKey {
-    readonly type: 'KeriPrivateKey';
-    readonly algorithm: 'Ed25519';
-    readonly keyObject: KeyObject;
-}
-
-interface KeriPublicKey {
-    readonly type: 'KeriPublicKey';
-    readonly algorithm: 'Ed25519';
-    readonly raw: Uint8Array;
-    readonly cesr: CesrPublicKey;
+type PublicKey = KeyObject & { asymmetricKeyType: 'ed25519'; type: 'public' };
+type PrivateKey = KeyObject & { asymmetricKeyType: 'ed25519'; type: 'private' };
+interface KeyPair {
+    publicKey: PublicKey;
+    privateKey: PrivateKey;
 }
 ```
+
+`asPublicKey` / `asPrivateKey` narrow a bare `KeyObject` to these (the
+validating import boundary); `assertPublicKey` / `assertPrivateKey` are the
+internal `asserts` form. `publicKeyToCesr` / `publicKeyFromCesr` bridge a
+`PublicKey` to its CESR-qualified string (the form `KeriState` carries).
 
 Security rules:
 
 ```txt
-never serialize private keys by default
-never include private keys in JSON output
-never accept raw private key strings casually
-zero-copy as little as possible
+never emit private keys in any event, state, or DID-document output
+serialization for storage is the caller's deliberate KeyObject.export(...) call
+validate an externally-supplied KeyObject (algorithm + half) before trusting it
 use timingSafeEqual for digest comparison
 throw typed errors, not generic Error
 ```
@@ -961,12 +964,14 @@ public API is stable
 ```ts
 export {
     createIdentifier,
+    createNonTransferableIdentifier,
     rotateIdentifier,
     interactOnIdentifier,
     deactivateIdentifier,
     verifyIdentifier,
     verifyDid,
     createDidDocument,
+    createSignature,
     verifySignature,
     verifySignatureWithDid,
     generateKeyPair,

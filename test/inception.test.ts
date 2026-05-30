@@ -3,9 +3,8 @@ import {
 	decodeIndexedSignatureEd25519,
 	decodePublicKeyEd25519,
 } from '../src/cesr/decode';
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { DID_KERI_PREFIX } from '../src/did/did-keri';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent, CreateInceptionInput } from '../src/event/inception';
@@ -52,7 +51,7 @@ describe('createInceptionEvent', () => {
 		// Inception-specific fields fixed by the profile.
 		if (event.t !== 'icp') throw new Error('discriminant');
 		expect(event.kt).toBe('1');
-		expect(event.k).toEqual([encodePublicKeyEd25519(current.publicKey.raw)]);
+		expect(event.k).toEqual([publicKeyToCesr(current.publicKey)]);
 		expect(event.nt).toBe('1');
 		expect(event.n).toEqual([deriveNextKeyCommitment(next.publicKey)]);
 		expect(event.bt).toBe('0');
@@ -115,7 +114,7 @@ describe('createInceptionEvent', () => {
 		expect(state.aid).toBe(signedEvent.event.i);
 		expect(state.did).toBe(DID_KERI_PREFIX + state.aid);
 		expect(state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(current.publicKey.raw)
+			publicKeyToCesr(current.publicKey)
 		);
 		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(next.publicKey));
 		expect(state.transferable).toBe(true);
@@ -134,7 +133,7 @@ describe('createInceptionEvent', () => {
 		expect(
 			verifyEventSignature(
 				signedEvent.event,
-				encodePublicKeyEd25519(current.publicKey.raw),
+				publicKeyToCesr(current.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(true);
@@ -153,7 +152,7 @@ describe('createInceptionEvent', () => {
 		expect(
 			verifyEventSignature(
 				signedEvent.event,
-				encodePublicKeyEd25519(stranger.publicKey.raw),
+				publicKeyToCesr(stranger.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(false);
@@ -175,7 +174,7 @@ describe('createInceptionEvent', () => {
 		expect(
 			verifyEventSignature(
 				tampered as typeof signedEvent.event,
-				encodePublicKeyEd25519(current.publicKey.raw),
+				publicKeyToCesr(current.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(false);
@@ -201,7 +200,7 @@ describe('createInceptionEvent', () => {
 		});
 		if (signedEvent.event.t !== 'icp') throw new Error('discriminant');
 		const raw = decodePublicKeyEd25519(signedEvent.event.k[0]);
-		expect(Array.from(raw)).toEqual(Array.from(current.publicKey.raw));
+		expect(Array.from(raw)).toEqual(Array.from(rawPublicKey(current.publicKey)));
 	});
 
 	test('rejects malformed key arguments', () => {

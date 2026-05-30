@@ -6,7 +6,7 @@
  * `did:keri` DID down to its AID and delegates to `verifyIdentifier`, so the
  * two are exact counterparts — `verifyDid` is "parse the DID, then verify the
  * identifier". Projecting the verified state into a DID document is a separate,
- * caller-driven step: `createDidDocument(state)`.
+ * caller-driven step: `createDidDocument()`.
  *
  * A non-transferable DID is self-certifying — the AID *is* the signing key —
  * so it verifies with no KEL at all: pass the empty string `''` for `kel`.
@@ -49,7 +49,7 @@ export type VerifyDidResult = VerifyIdentifierResult;
  * On success `state` is the only `KeriState` the caller may treat as trusted —
  * it carries the `deactivated` flag and (via `lastSequenceNumber`) the KEL
  * length directly. Project it into a W3C DID document with
- * `createDidDocument(state)` when one is needed. Any data-level failure — a
+ * `createDidDocument()` when one is needed. Any data-level failure — a
  * malformed DID, or a KEL that is empty, tampered, reordered, or for a
  * different identifier — is returned as `{ ok: false }`. Throwing is reserved
  * for a caller that violates the argument contract.

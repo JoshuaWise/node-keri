@@ -23,12 +23,12 @@
  * bridge pins keripy to SHA2-256 when generating events — see the bridge's
  * module docstring. With that pinning the two implementations are byte-exact.
  *
- * Non-transferable AIDs: node-keri generates only transferable AIDs but
- * *verifies* both. The final suite below checks that a non-transferable AID
- * minted by keripy — a basic prefix whose `i` is the controller's `B`-coded
- * key, with a single-event KEL and no rotation — is ingested and verified by
- * node-keri. That direction is one-way by design, so there is no byte-exact
- * test for it.
+ * Non-transferable AIDs: node-keri generates and verifies both forms. The
+ * suite below checks that a non-transferable AID minted by keripy — a basic
+ * prefix whose `i` is the controller's `B`-coded key, with a single-event KEL
+ * and no rotation — is ingested and verified by node-keri, and the mirror: that
+ * node-keri's `createNonTransferableIdentifier` mints the byte-exact same
+ * `B`-coded AID keripy derives for a given key.
  *
  * Deactivated AIDs: deactivation — a rotation to no next key — is generated
  * and verified by both implementations, so the last suite exercises it in
@@ -39,6 +39,7 @@
  */
 
 import { createIdentifier } from '../src/api/create-identifier';
+import { createNonTransferableIdentifier } from '../src/api/create-non-transferable-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { interactOnIdentifier } from '../src/api/interact-on-identifier';
 import { deactivateIdentifier } from '../src/api/deactivate-identifier';
@@ -46,14 +47,22 @@ import { verifyIdentifier } from '../src/api/verify-identifier';
 import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { verifyDid } from '../src/did/verify-did';
 import { createDidDocument } from '../src/did/document';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { sign } from '../src/crypto/ed25519';
-import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
+import {
+	encodeNonTransferablePublicKeyEd25519,
+	encodeSignatureEd25519,
+} from '../src/cesr/encode';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid, DidKeri } from '../src/did/did-keri';
 import { createInteractionEvent } from '../src/event/interaction';
-import { deriveNextKeyCommitment } from '../src/event/digest';
+import {
+	SAID_PLACEHOLDER,
+	computeEventSaid,
+	deriveNextKeyCommitment,
+} from '../src/event/digest';
 import { encodeEventFrame, parseKel } from '../src/event/stream';
+import type { KeriEvent, SignedKeriEvent } from '../src/event/types';
 import { utf8Encode } from '../src/bytes/utf8';
 import type { CesrSignature } from '../src/cesr/qualified';
 import type { TransferableKeriState } from '../src/kel/state';
@@ -119,7 +128,7 @@ function buildNodeKeriKel() {
 	});
 	const rot1 = rotateIdentifier({
 		state: icp.state,
-		currentPrivateKey: k1!.privateKey,
+		newPrivateKey: k1!.privateKey,
 		nextPublicKey: k2!.publicKey,
 	});
 	const ixn = interactOnIdentifier({
@@ -129,7 +138,7 @@ function buildNodeKeriKel() {
 	});
 	const rot2 = rotateIdentifier({
 		state: ixn.state,
-		currentPrivateKey: k2!.privateKey,
+		newPrivateKey: k2!.privateKey,
 		nextPublicKey: k3!.publicKey,
 	});
 
@@ -202,7 +211,7 @@ describeInterop('keripy interop: KELs', () => {
 			expect(result.state.deactivated).toBe(false);
 			if (!result.state.deactivated) {
 				expect(result.state.currentPublicKey).toBe(
-					encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
+					publicKeyToCesr(seedKeyPair(64).publicKey)
 				);
 			}
 		}
@@ -226,7 +235,7 @@ describeInterop('keripy interop: signed messages', () => {
 	test('a message signed by node-keri verifies under keripy', () => {
 		const signer = seedKeyPair(0);
 		const signature = encodeSignatureEd25519(sign(signer.privateKey, message));
-		const publicKey = encodePublicKeyEd25519(signer.publicKey.raw);
+		const publicKey = publicKeyToCesr(signer.publicKey);
 
 		expect(keripyVerifySig(publicKey, message, signature)).toBe(true);
 	});
@@ -236,7 +245,7 @@ describeInterop('keripy interop: signed messages', () => {
 		// signature must NOT verify against altered bytes.
 		const signer = seedKeyPair(0);
 		const signature = encodeSignatureEd25519(sign(signer.privateKey, message));
-		const publicKey = encodePublicKeyEd25519(signer.publicKey.raw);
+		const publicKey = publicKeyToCesr(signer.publicKey);
 
 		const tampered = utf8Encode('agent-to-agent payload — interop check!');
 		expect(keripyVerifySig(publicKey, tampered, signature)).toBe(false);
@@ -252,9 +261,7 @@ describeInterop('keripy interop: signed messages', () => {
 
 		const signed = keripySign(0, message);
 		// keripy signed with the key node-keri's KEL makes authoritative.
-		expect(signed.publicKey).toBe(
-			encodePublicKeyEd25519(seedKeyPair(0).publicKey.raw)
-		);
+		expect(signed.publicKey).toBe(publicKeyToCesr(seedKeyPair(0).publicKey));
 
 		const ok = verifySignatureWithDid({
 			did: id.did,
@@ -282,6 +289,51 @@ describeInterop('keripy interop: signed messages', () => {
 		expect(ok).toBe(false);
 	});
 });
+
+/**
+ * Re-frame a keripy non-transferable inception after mutating one field, so a
+ * test can assert node-keri rejects a *specific* malformation of an otherwise
+ * genuine keripy event. `mutate` edits a copy of the parsed inception in place;
+ * the SAID `d` and version `v` are then recomputed under SHA-256 (the digest
+ * the bridge pins, and node-keri's default), so the frame is well-formed and
+ * self-consistent and the injected defect is the only thing wrong with it.
+ *
+ * keripy's original indexed signature is reused verbatim: every fixture here is
+ * rejected at shape or AID-derivation, both of which run before the signature
+ * is ever checked, so a cryptographically-correct signature is unnecessary (a
+ * structurally valid Siger is all `encodeEventFrame` requires). The result is
+ * the single-frame CESR stream node-keri's verifier ingests.
+ */
+function reframeKeripyNonTransferableIcp(
+	base: SignedKeriEvent,
+	mutate: (event: Record<string, unknown>) => void
+): string {
+	const event: Record<string, unknown> = { ...base.event };
+	mutate(event);
+	// `i` is the controller's `B` key, kept verbatim — only `d` is
+	// self-addressing for a basic prefix — so it is a fixed input to the digest,
+	// exactly as node-keri's replay verifier recomputes it.
+	const { said, versionString } = computeEventSaid({
+		t: 'icp',
+		d: SAID_PLACEHOLDER,
+		i: event.i,
+		s: event.s,
+		kt: event.kt,
+		k: event.k,
+		nt: event.nt,
+		n: event.n,
+		bt: event.bt,
+		b: event.b,
+		c: event.c,
+		a: event.a,
+	});
+	event.v = versionString;
+	event.d = said;
+	return encodeEventFrame({
+		event: event as unknown as KeriEvent,
+		signatures: base.signatures,
+	});
+}
 
 /**
  * Non-transferable AIDs are the one case node-keri verifies but does not
@@ -316,6 +368,18 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 				expect(result.state.currentPublicKey).toBe(generated.aid);
 			}
 		}
+	});
+
+	test('node-keri mints the same non-transferable AID as keripy for a given key', () => {
+		// Generation parity, the mirror of the verification test above: minting
+		// from the same key must produce the byte-exact `B`-coded AID/DID keripy
+		// derives. `seedKeyPair(NT_SEED)` and the bridge's signer share the seed.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const minted = createNonTransferableIdentifier({
+			publicKey: seedKeyPair(NT_SEED).publicKey,
+		});
+		expect(minted.aid).toBe(generated.aid);
+		expect(minted.did).toBe(generated.did);
 	});
 
 	test('node-keri rejects a non-transferable KEL replayed under the wrong AID', () => {
@@ -441,6 +505,85 @@ describeInterop('keripy interop: non-transferable AIDs', () => {
 			expect(createDidDocument({ state: result.state }).id).toBe(generated.did);
 		}
 	});
+
+	// The three tests below take a genuine keripy non-transferable inception and
+	// mutate exactly one thing about it — re-deriving the SAID/version so the
+	// only defect is the injected one — to prove node-keri's shape and
+	// derivation guards fire on near-real events, not just on hand-rolled junk.
+
+	test('node-keri rejects a non-transferable inception carrying the EO trait', () => {
+		// `EO` ("establishment only") is meaningful only for an extensible
+		// (transferable) KEL; on a one-event basic prefix it is redundant, so the
+		// profile refuses it rather than silently accepting a no-op trait.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const icp = parseKel(generated.kel)[0]!;
+		const kel = reframeKeripyNonTransferableIcp(icp, (e) => {
+			e.c = ['EO'];
+		});
+
+		const result = verifyIdentifier({
+			aid: generated.aid as unknown as Aid,
+			kel,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
+			if (result.error.code === 'UNSUPPORTED_FEATURE') {
+				expect(result.error.feature).toMatch(/EO is not supported/);
+			}
+		}
+	});
+
+	test('node-keri rejects a non-transferable inception that commits to a next key', () => {
+		// A basic prefix commits to no next key (`nt:"0"`, `n:[]`) — that is what
+		// makes it non-transferable. Splice in a real pre-rotation commitment and
+		// the shape pass rejects it: a key the identifier could never rotate to.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const icp = parseKel(generated.kel)[0]!;
+		const kel = reframeKeripyNonTransferableIcp(icp, (e) => {
+			e.nt = '1';
+			e.n = [deriveNextKeyCommitment(seedKeyPair(64).publicKey)];
+		});
+
+		const result = verifyIdentifier({
+			aid: generated.aid as unknown as Aid,
+			kel,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('UNSUPPORTED_FEATURE');
+			if (result.error.code === 'UNSUPPORTED_FEATURE') {
+				expect(result.error.feature).toMatch(/next-key threshold/);
+			}
+		}
+	});
+
+	test('node-keri rejects a non-transferable inception whose `i` is not its signing key', () => {
+		// For a basic prefix the AID *is* the controlling key, so `i` must equal
+		// the single entry of `k`. Repoint `k[0]` at a different `B` key (with a
+		// valid recomputed SAID) and node-keri rejects the internal inconsistency
+		// — distinct from the wrong-AID case, which is asserted separately above.
+		const generated = keripyGenNonTransferableKel(NT_SEED);
+		const icp = parseKel(generated.kel)[0]!;
+		const otherKey = encodeNonTransferablePublicKeyEd25519(
+			rawPublicKey(seedKeyPair(32).publicKey)
+		);
+		const kel = reframeKeripyNonTransferableIcp(icp, (e) => {
+			e.k = [otherKey];
+		});
+
+		const result = verifyIdentifier({
+			aid: generated.aid as unknown as Aid,
+			kel,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('INVALID_DID');
+			if (result.error.code === 'INVALID_DID') {
+				expect(result.error.message).toMatch(/not the controller signing key/);
+			}
+		}
+	});
 });
 
 /**
@@ -464,7 +607,7 @@ function buildNodeKeriDeactivatedKel() {
 	});
 	const deact = deactivateIdentifier({
 		state: id.state,
-		currentPrivateKey: k1!.privateKey,
+		newPrivateKey: k1!.privateKey,
 	});
 	return {
 		did: id.did,
@@ -499,7 +642,7 @@ function forgePostDeactivationEvent(
 		lastSequenceNumber: Number.parseInt(last.s, 16),
 		lastEventType: 'rot',
 		lastEventDigest: last.d,
-		currentPublicKey: encodePublicKeyEd25519(signerKeyPair.publicKey.raw),
+		currentPublicKey: publicKeyToCesr(signerKeyPair.publicKey),
 		// Any commitment will do — the event never gets far enough to be
 		// checked against it; replay rejects it for extending a closed KEL.
 		nextKeyCommitment: deriveNextKeyCommitment(seedKeyPair(64).publicKey),

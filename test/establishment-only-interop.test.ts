@@ -23,8 +23,7 @@
 import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifyIdentifier } from '../src/api/verify-identifier';
-import { keyPairFromSeed } from '../src/crypto/keypair';
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid } from '../src/did/did-keri';
 import { parseKel } from '../src/event/stream';
@@ -72,12 +71,12 @@ function buildNodeKeriEoKel() {
 	});
 	const rot1 = rotateIdentifier({
 		state: icp.state,
-		currentPrivateKey: k1!.privateKey,
+		newPrivateKey: k1!.privateKey,
 		nextPublicKey: k2!.publicKey,
 	});
 	const rot2 = rotateIdentifier({
 		state: rot1.state,
-		currentPrivateKey: k2!.privateKey,
+		newPrivateKey: k2!.privateKey,
 		nextPublicKey: k3!.publicKey,
 	});
 
@@ -138,7 +137,7 @@ describeInterop('keripy interop: establishment-only KELs', () => {
 			if (!result.state.deactivated) {
 				// The final rotation revealed seed 64; that is the current key.
 				expect(result.state.currentPublicKey).toBe(
-					encodePublicKeyEd25519(seedKeyPair(64).publicKey.raw)
+					publicKeyToCesr(seedKeyPair(64).publicKey)
 				);
 			}
 		}

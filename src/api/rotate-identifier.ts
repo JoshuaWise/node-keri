@@ -3,18 +3,18 @@
  * identifier's signing key forward.
  *
  * It wraps `createRotationEvent`. The distinctive part of its contract is
- * `currentPrivateKey`: this is the private half of the key being rotated
- * *to* — i.e. the pre-rotation key whose digest the previous event committed
+ * `newPrivateKey`: this is the private half of the key being rotated *to*,
+ * i.e. the pre-rotation key whose digest the previous event committed
  * as `n[0]`. Its public half is derived here and must reproduce that
  * commitment, a check `createRotationEvent` performs and will reject.
  */
 
-import { bytesEqual } from '../bytes/compare';
 import {
-	KeriPrivateKey,
-	KeriPublicKey,
+	PrivateKey,
+	PublicKey,
 	assertPublicKey,
 	keyPairFromPrivateKey,
+	publicKeyToCesr,
 } from '../crypto/keypair';
 import { createRotationEvent } from '../event/rotation';
 import { KeriState, TransferableKeriState } from '../kel/state';
@@ -27,13 +27,13 @@ export interface RotateIdentifierInput {
 	 * Private half of the key being rotated to. Its public half must hash to
 	 * `state.nextKeyCommitment`; otherwise the rotation is rejected.
 	 */
-	readonly currentPrivateKey: KeriPrivateKey;
+	readonly newPrivateKey: PrivateKey;
 	/**
 	 * Public half of the freshly chosen pre-rotation key for the *next*
 	 * rotation. Only its digest is committed now; the caller keeps the matching
 	 * private half to rotate again later.
 	 */
-	readonly nextPublicKey: KeriPublicKey;
+	readonly nextPublicKey: PublicKey;
 	/**
 	 * CESR digest code for the rotation event's SAID and new next-key
 	 * commitment. Defaults to SHA-256 (`I`). The prior commitment is always
@@ -54,16 +54,18 @@ export function rotateIdentifier(input: RotateIdentifierInput): RotateIdentifier
 	if (input === null || typeof input !== 'object') {
 		throw new InvalidArgumentError('rotateIdentifier requires an input object');
 	}
-	// Assert before touching `.raw` below so a malformed key surfaces as
-	// InvalidArgumentError rather than a TypeError.
+	// Assert so a malformed key surfaces as InvalidArgumentError.
 	assertPublicKey(input.nextPublicKey);
 
-	// `keyPairFromPrivateKey` asserts the argument is a KeriPrivateKey.
-	const newCurrentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
+	// `keyPairFromPrivateKey` asserts the argument is a PrivateKey.
+	const newCurrentKeyPair = keyPairFromPrivateKey(input.newPrivateKey);
 
 	// Same independence requirement as inception: the new signing key and the
 	// freshly committed next key must differ, or pre-rotation buys nothing.
-	if (bytesEqual(newCurrentKeyPair.publicKey.raw, input.nextPublicKey.raw)) {
+	if (
+		publicKeyToCesr(newCurrentKeyPair.publicKey)
+		=== publicKeyToCesr(input.nextPublicKey)
+	) {
 		throw new InvalidArgumentError(
 			'the rotated-to key and nextPublicKey must be distinct keys'
 		);

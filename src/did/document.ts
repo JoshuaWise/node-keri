@@ -69,12 +69,6 @@ export interface DidDocument {
 export interface CreateDidDocumentInput {
 	/** Replay-verified state — the only kind of state safe to project. */
 	readonly state: KeriState;
-	/**
-	 * The DID the document is for. Optional and redundant with `state.did`;
-	 * when supplied it must match, which guards against pairing a state with
-	 * the wrong identifier.
-	 */
-	readonly did?: DidKeri;
 	/** Optional service endpoints to advertise. */
 	readonly services?: readonly DidService[];
 }
@@ -114,11 +108,6 @@ export function createDidDocument(input: CreateDidDocumentInput): DidDocument {
 		throw new InvalidArgumentError('createDidDocument requires a verified KeriState');
 	}
 	const did = state.did;
-	if (input.did !== undefined && input.did !== did) {
-		throw new InvalidArgumentError(
-			'createDidDocument: `did` does not match `state.did`'
-		);
-	}
 
 	// A deactivated identifier is abandoned: project an authority-free
 	// document. There is no key to advertise and nothing to point a

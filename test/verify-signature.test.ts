@@ -3,9 +3,9 @@ import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { deactivateIdentifier } from '../src/api/deactivate-identifier';
 import { verifySignature } from '../src/api/verify-signature';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
-import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
+import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import type { Aid } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
@@ -46,7 +46,7 @@ describe('verifySignature — accepts a valid signature', () => {
 		const id = newIdentifier();
 		const rotation = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		const kel = id.event + rotation.event;
@@ -139,12 +139,14 @@ describe('verifySignature — rejects invalid signatures', () => {
 		const id = newIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const kel = id.event + deact.event;
 		// The deactivation reveals (and is signed by) the pre-rotated key; even a
 		// signature it produced is no longer trusted once abandoned.
-		const signature = encodeSignatureEd25519(sign(id.nextKeyPair.privateKey, PAYLOAD));
+		const signature = encodeSignatureEd25519(
+			sign(id.nextKeyPair.privateKey, PAYLOAD)
+		);
 		expect(verifySignature({ aid: id.aid, kel, payload: PAYLOAD, signature })).toBe(
 			false
 		);
@@ -154,10 +156,10 @@ describe('verifySignature — rejects invalid signatures', () => {
 describe('verifySignature — non-transferable AID', () => {
 	// A non-transferable AID *is* the signing key — a `B`-coded basic prefix,
 	// self-certifying, so it verifies with the empty-string "no KEL" value.
-	// node-keri has no `B` encoder, so build one by swapping the code char of a
-	// `D` key: same raw bytes, the non-transferable derivation code.
+	// Build one by swapping the code char of a `D` key (equivalently
+	// `encodeNonTransferablePublicKeyEd25519`): same raw bytes, the `B` code.
 	const kp = keyPairFromSeed(fillSeed(0x44));
-	const ntAid = ('B' + encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as Aid;
+	const ntAid = ('B' + publicKeyToCesr(kp.publicKey).slice(1)) as Aid;
 
 	test('verifies a signature with the empty-string "no KEL" value', () => {
 		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
@@ -179,7 +181,12 @@ describe('verifySignature — non-transferable AID', () => {
 		// so a bogus one fails rather than being silently ignored.
 		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));
 		expect(
-			verifySignature({ aid: ntAid, kel: 'not-a-real-kel', payload: PAYLOAD, signature })
+			verifySignature({
+				aid: ntAid,
+				kel: 'not-a-real-kel',
+				payload: PAYLOAD,
+				signature,
+			})
 		).toBe(false);
 	});
 });

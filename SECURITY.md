@@ -32,9 +32,12 @@ Throwing is reserved for **programmer errors**: malformed arguments, a bad key o
 
 ## Key handling
 
-- Private keys are held as opaque `KeyObject` wrappers. The raw private seed is never exposed by the public API and never appears in any JSON output.
-- The only supported operation on a private key is `sign`.
+- Keys are Node `KeyObject`s, branded (`PublicKey` / `PrivateKey`) for Ed25519 and their half. The branding is purely a type-level guard; at runtime a key is an ordinary `KeyObject`.
+- **The library never emits a private key.** No event, no `KeriState`, no DID document, and no other return value carries private key material — the controller's secret never leaves the caller's process through this library's output.
+- Serializing a private key for storage is therefore a *deliberate* act, performed by the caller through the `KeyObject` itself — `key.export({ format: 'der', type: 'pkcs8' })`, or JWK/PEM — and reimported with `createPrivateKey(...)` then `asPrivateKey(...)`. The library neither does this for you nor prevents it; secure storage of the exported bytes is the caller's responsibility.
+- The operation the library performs with a private key is `sign`.
 - `createIdentifier` and `rotateIdentifier` reject reusing one key as both the current and the next key — doing so defeats pre-rotation.
+- `asPublicKey` / `asPrivateKey` (and the internal asserts behind them) validate that an externally-supplied `KeyObject` is an Ed25519 key of the expected half before it is trusted, so a wrong-algorithm or wrong-half key fails closed with `InvalidArgumentError`.
 - Digest equality during verification uses a constant-time comparison.
 - Key generation and any random bytes come from the platform CSPRNG (`node:crypto`); the library makes no randomness policy decisions of its own.
 

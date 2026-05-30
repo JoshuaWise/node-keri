@@ -14,12 +14,12 @@
  * pre-rotation private key to rotate to later. The library holds no state.
  */
 
-import { bytesEqual } from '../bytes/compare';
 import {
-	KeriPrivateKey,
-	KeriPublicKey,
+	PrivateKey,
+	PublicKey,
 	assertPublicKey,
 	keyPairFromPrivateKey,
+	publicKeyToCesr,
 } from '../crypto/keypair';
 import { Aid, DidKeri } from '../did/did-keri';
 import { createInceptionEvent } from '../event/inception';
@@ -31,13 +31,13 @@ export interface CreateIdentifierInput {
 	 * Private half of the current signing key. Required — its public half is
 	 * derived here and disclosed as `k[0]`, and it signs the inception event.
 	 */
-	readonly currentPrivateKey: KeriPrivateKey;
+	readonly currentPrivateKey: PrivateKey;
 	/**
 	 * Public half of the pre-rotation key. Required — only its digest is
 	 * committed now (`n[0]`); the caller keeps the matching private half to
 	 * rotate to later.
 	 */
-	readonly nextPublicKey: KeriPublicKey;
+	readonly nextPublicKey: PublicKey;
 	/**
 	 * Mint an *establishment-only* identifier — inception sets the `EO`
 	 * configuration trait and the resulting KEL will accept only `icp` and
@@ -79,18 +79,18 @@ export function createIdentifier(input: CreateIdentifierInput): CreateIdentifier
 	}
 
 	// Derive the current keypair from its private half. `keyPairFromPrivateKey`
-	// asserts the argument is a KeriPrivateKey, so a missing or malformed
-	// current key surfaces as InvalidArgumentError here.
+	// asserts the argument is a PrivateKey, so a missing or malformed current
+	// key surfaces as InvalidArgumentError here.
 	const currentKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
-	// Assert before touching `.raw` below so a malformed next key likewise
-	// surfaces as InvalidArgumentError rather than a TypeError.
+	// Assert so a malformed next key likewise surfaces as InvalidArgumentError.
 	assertPublicKey(input.nextPublicKey);
 
 	// Pre-rotation is only meaningful if the next key is independent of the
 	// current one: reusing the same key means the next-key digest reveals the
 	// active signing key and a rotation commits to nothing new. The event
-	// constructors do not enforce this, so the ergonomic API does.
-	if (bytesEqual(currentKeyPair.publicKey.raw, input.nextPublicKey.raw)) {
+	// constructors do not enforce this, so the ergonomic API does. Comparing the
+	// CESR-qualified forms is a stable, value-level equality check.
+	if (publicKeyToCesr(currentKeyPair.publicKey) === publicKeyToCesr(input.nextPublicKey)) {
 		throw new InvalidArgumentError(
 			'currentPrivateKey and nextPublicKey must be distinct keys'
 		);

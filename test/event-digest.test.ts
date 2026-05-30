@@ -10,8 +10,7 @@ import {
 import { toCanonicalEvent } from '../src/event/field-order';
 import { decodeDigestSha256 } from '../src/cesr/decode';
 import { sha256 } from '../src/crypto/hash';
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import {
 	CanonicalJsonError,
 	InvalidArgumentError,
@@ -161,7 +160,7 @@ describe('computeEventSaid', () => {
 describe('deriveNextKeyCommitment', () => {
 	test('hashes the qb64 form of the public key', () => {
 		const kp = keyPairFromSeed(fillSeed(0x07));
-		const qb64 = encodePublicKeyEd25519(kp.publicKey.raw);
+		const qb64 = publicKeyToCesr(kp.publicKey);
 		const expected = sha256(utf8Encode(qb64));
 
 		const commitment = deriveNextKeyCommitment(kp.publicKey);

@@ -9,7 +9,7 @@
 
 import { encodeIndexedSignatureEd25519 } from '../cesr/encode';
 import { sign } from '../crypto/ed25519';
-import { KeriPrivateKey } from '../crypto/keypair';
+import { PrivateKey } from '../crypto/keypair';
 import { canonicalizeJson } from './canonical-json';
 import { toCanonicalEvent } from './field-order';
 import { KeriEvent, SignedKeriEvent } from './types';
@@ -39,7 +39,7 @@ export function serializeEvent(event: KeriEvent): Uint8Array {
  * already prevent this at compile time; the freeze is belt-and-suspenders
  * for callers reaching in through `as any` or untyped JSON paths.
  */
-export function signEvent(event: KeriEvent, privateKey: KeriPrivateKey): SignedKeriEvent {
+export function signEvent(event: KeriEvent, privateKey: PrivateKey): SignedKeriEvent {
 	const sig = sign(privateKey, serializeEvent(event));
 	Object.freeze(event);
 	return Object.freeze({

@@ -1,5 +1,4 @@
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
@@ -40,7 +39,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			nextPublicKey: k1.publicKey,
 		});
 		events.push(parseSignedEvent(icp.event));
-		expectedSigner.push(encodePublicKeyEd25519(k0.publicKey.raw));
+		expectedSigner.push(publicKeyToCesr(k0.publicKey));
 
 		// 2. Interaction signed by k0 (no rotation yet).
 		const ixn1 = createInteractionEvent({
@@ -49,7 +48,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			data: [{ kind: 'announce', payload: 'agent online' }],
 		});
 		events.push(parseSignedEvent(ixn1.event));
-		expectedSigner.push(encodePublicKeyEd25519(k0.publicKey.raw));
+		expectedSigner.push(publicKeyToCesr(k0.publicKey));
 
 		// 3. Rotate to k1; commits to k2 next.
 		const rot1 = createRotationEvent({
@@ -58,7 +57,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			nextPublicKey: k2.publicKey,
 		});
 		events.push(parseSignedEvent(rot1.event));
-		expectedSigner.push(encodePublicKeyEd25519(k1.publicKey.raw));
+		expectedSigner.push(publicKeyToCesr(k1.publicKey));
 
 		// 4. Interaction signed by k1.
 		const ixn2 = createInteractionEvent({
@@ -67,7 +66,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			data: [{ kind: 'attest', hash: 'I' + 'A'.repeat(43) }],
 		});
 		events.push(parseSignedEvent(ixn2.event));
-		expectedSigner.push(encodePublicKeyEd25519(k1.publicKey.raw));
+		expectedSigner.push(publicKeyToCesr(k1.publicKey));
 
 		// 5. Rotate to k2; commits to k3 next.
 		const rot2 = createRotationEvent({
@@ -76,7 +75,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			nextPublicKey: k3.publicKey,
 		});
 		events.push(parseSignedEvent(rot2.event));
-		expectedSigner.push(encodePublicKeyEd25519(k2.publicKey.raw));
+		expectedSigner.push(publicKeyToCesr(k2.publicKey));
 
 		// Sequence numbers are dense and monotonic, AID is stable.
 		const aid = icp.state.aid;
@@ -108,7 +107,7 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 		// Final state reflects the latest rotation.
 		expect(rot2.state.lastSequenceNumber).toBe(4);
 		expect(rot2.state.currentPublicKey).toBe(
-			encodePublicKeyEd25519(k2.publicKey.raw)
+			publicKeyToCesr(k2.publicKey)
 		);
 		expect(rot2.state.lastEventType).toBe('rot');
 		expect(rot2.state.aid).toBe(aid);
@@ -132,13 +131,13 @@ describe('local KEL flow (inception + ixn + rot + ixn + rot)', () => {
 			});
 			expect(r.state.lastSequenceNumber).toBe(i);
 			expect(r.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(keys[i]!.publicKey.raw)
+				publicKeyToCesr(keys[i]!.publicKey)
 			);
 			const signed = parseSignedEvent(r.event);
 			expect(
 				verifyEventSignature(
 					signed.event,
-					encodePublicKeyEd25519(keys[i]!.publicKey.raw),
+					publicKeyToCesr(keys[i]!.publicKey),
 					signed.signatures[0]
 				)
 			).toBe(true);

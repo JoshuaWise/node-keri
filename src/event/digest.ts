@@ -21,10 +21,10 @@
 
 import { utf8Encode } from '../bytes/utf8';
 import { digestSpecForCode } from '../cesr/codes';
-import { encodeDigest, encodePublicKeyEd25519 } from '../cesr/encode';
+import { encodeDigest } from '../cesr/encode';
 import { CesrDigest } from '../cesr/qualified';
 import { DEFAULT_DIGEST_CODE, runDigest } from '../crypto/digests';
-import { KeriPublicKey, assertPublicKey } from '../crypto/keypair';
+import { PublicKey, publicKeyToCesr } from '../crypto/keypair';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
 import { toCanonicalEvent } from './field-order';
@@ -157,10 +157,9 @@ export function computeEventSaid(
  * carry commitments under different algorithms across rotations.
  */
 export function deriveNextKeyCommitment(
-	nextPublicKey: KeriPublicKey,
+	nextPublicKey: PublicKey,
 	digestCode: string = DEFAULT_DIGEST_CODE
 ): CesrDigest {
-	assertPublicKey(nextPublicKey);
-	const qb64 = encodePublicKeyEd25519(nextPublicKey.raw);
+	const qb64 = publicKeyToCesr(nextPublicKey);
 	return encodeDigest(digestCode, runDigest(digestCode, utf8Encode(qb64)));
 }

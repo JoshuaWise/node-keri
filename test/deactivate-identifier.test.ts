@@ -54,7 +54,7 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 
 		const event = parseSignedEvent(deact.event).event as unknown as Record<
@@ -75,7 +75,7 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 
 		expect(deact.state.deactivated).toBe(true);
@@ -93,7 +93,7 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 			deactivateIdentifier({
 				state: id.state,
 				// K2 was never pre-rotated to; K1 is the committed next key.
-				currentPrivateKey: K2().privateKey,
+				newPrivateKey: K2().privateKey,
 			})
 		).toThrow(InvalidArgumentError);
 	});
@@ -120,12 +120,12 @@ describe('deactivateIdentifier — constructs the deactivation event', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		expect(() =>
 			deactivateIdentifier({
 				state: deact.state,
-				currentPrivateKey: id.nextKeyPair.privateKey,
+				newPrivateKey: id.nextKeyPair.privateKey,
 			})
 		).toThrow(/already deactivated/);
 	});
@@ -136,12 +136,12 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 		const id = freshIdentifier();
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		const deact = deactivateIdentifier({
 			state: rot.state,
-			currentPrivateKey: K2().privateKey,
+			newPrivateKey: K2().privateKey,
 		});
 
 		const kel = id.event + rot.event + deact.event;
@@ -161,7 +161,7 @@ describe('deactivateIdentifier — extends a longer KEL', () => {
 		});
 		const deact = deactivateIdentifier({
 			state: ixn.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 
 		const kel = id.event + ixn.event + deact.event;
@@ -178,7 +178,7 @@ describe('verifyIdentifier — replays a deactivated KEL', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const kel = id.event + deact.event;
 
@@ -195,7 +195,7 @@ describe('verifyIdentifier — replays a deactivated KEL', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 
 		// Forge a syntactically valid interaction event that chains onto the
@@ -231,7 +231,7 @@ describe('verifyIdentifier — replays a deactivated KEL', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const signed = parseSignedEvent(deact.event);
 		// `nt: "0"` but a non-empty `n` is a contradiction the shape pass
@@ -252,7 +252,7 @@ describe('verifyIdentifier — replays a deactivated KEL', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const signed = parseSignedEvent(deact.event);
 		// Mutate the sequence number, leaving the SAID/signature stale.
@@ -272,12 +272,12 @@ describe('deactivation closes the lifecycle API', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		expect(() =>
 			rotateIdentifier({
 				state: deact.state,
-				currentPrivateKey: K2().privateKey,
+				newPrivateKey: K2().privateKey,
 				nextPublicKey: K3().publicKey,
 			})
 		).toThrow(/deactivated identifier cannot be rotated/);
@@ -287,7 +287,7 @@ describe('deactivation closes the lifecycle API', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		expect(() =>
 			interactOnIdentifier({
@@ -304,7 +304,7 @@ describe('DID surface — a deactivated DID', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const kel = id.event + deact.event;
 
@@ -326,7 +326,7 @@ describe('DID surface — a deactivated DID', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const doc = createDidDocument({ state: deact.state });
 		expect(doc.verificationMethod).toEqual([]);
@@ -339,7 +339,7 @@ describe('DID surface — a deactivated DID', () => {
 		const id = freshIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		const kel = id.event + deact.event;
 

@@ -16,11 +16,7 @@ import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { createDidDocument } from '../src/did/document';
 import { verifyDid } from '../src/did/verify-did';
 import { decodeDigest, decodeDigestSha256 } from '../src/cesr/decode';
-import {
-	encodeDigest,
-	encodePublicKeyEd25519,
-	encodeSignatureEd25519,
-} from '../src/cesr/encode';
+import { encodeDigest, encodeSignatureEd25519 } from '../src/cesr/encode';
 import {
 	DIGEST_CODES,
 	DigestAlgorithm,
@@ -29,7 +25,7 @@ import {
 } from '../src/crypto/digests';
 import { sha256 } from '../src/crypto/hash';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { parseDidKeri } from '../src/did/did-keri';
 import type { Aid } from '../src/did/did-keri';
 import { parseSignedEvent } from '../src/event/stream';
@@ -193,7 +189,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		});
 		const rot1 = rotateIdentifier({
 			state: ixn1.state,
-			currentPrivateKey: k1.privateKey,
+			newPrivateKey: k1.privateKey,
 			nextPublicKey: k2.publicKey,
 			digestCode: DIGEST_CODES.SHA2_512,
 		});
@@ -205,7 +201,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		});
 		const rot2 = rotateIdentifier({
 			state: ixn2.state,
-			currentPrivateKey: k2.privateKey,
+			newPrivateKey: k2.privateKey,
 			nextPublicKey: k3.publicKey,
 			digestCode: DIGEST_CODES.SHA3_512,
 		});
@@ -244,7 +240,7 @@ describe('a KEL that mixes digest algorithms across events', () => {
 		if (!result.state.deactivated) {
 			// The final rotation revealed k2, so it is the current key.
 			expect(result.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(keys.k2.publicKey.raw)
+				publicKeyToCesr(keys.k2.publicKey)
 			);
 		}
 	});
@@ -403,7 +399,7 @@ describe('a SAID re-encoded under a different algorithm', () => {
 		});
 		const rot = rotateIdentifier({
 			state: icp.state,
-			currentPrivateKey: k1.privateKey,
+			newPrivateKey: k1.privateKey,
 			nextPublicKey: k2.publicKey,
 		});
 

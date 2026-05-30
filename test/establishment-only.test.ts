@@ -128,6 +128,7 @@ describe('interactOnIdentifier — refuses an EO state', () => {
 			interactOnIdentifier({
 				state: id.state,
 				currentPrivateKey: id.currentKeyPair.privateKey,
+				data: [],
 			})
 		).toThrow(/establishment-only/);
 	});
@@ -147,7 +148,7 @@ describe('interactOnIdentifier — refuses an EO state', () => {
 		const id = freshEoIdentifier();
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		expect(rot.state.establishmentOnly).toBe(true);
@@ -166,7 +167,7 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		const id = freshEoIdentifier();
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		expect(rot.state.establishmentOnly).toBe(true);
@@ -178,12 +179,12 @@ describe('rotateIdentifier — propagates establishmentOnly through the KEL', ()
 		const k3 = K3();
 		const rot1 = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: k2.publicKey,
 		});
 		const rot2 = rotateIdentifier({
 			state: rot1.state,
-			currentPrivateKey: k2.privateKey,
+			newPrivateKey: k2.privateKey,
 			nextPublicKey: k3.publicKey,
 		});
 
@@ -206,7 +207,7 @@ describe('deactivateIdentifier — works on an EO identifier and preserves the t
 		const id = freshEoIdentifier();
 		const deact = deactivateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 		});
 		expect(deact.state.deactivated).toBe(true);
 		expect(deact.state.transferable).toBe(false);

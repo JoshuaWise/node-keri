@@ -1,10 +1,11 @@
 import { utf8Encode } from '../src/bytes/utf8';
 import { sign, verify } from '../src/crypto/ed25519';
 import {
-	KeriPublicKey,
+	PublicKey,
 	generateKeyPair,
 	keyPairFromSeed,
 	publicKeyFromRaw,
+	rawPublicKey,
 } from '../src/crypto/keypair';
 import {
 	ED25519_PUBLIC_KEY_BYTES,
@@ -29,9 +30,11 @@ function fromHex(s: string): Uint8Array {
 describe('ed25519', () => {
 	test('generateKeyPair produces a 32-byte public key and a usable private key', () => {
 		const kp = generateKeyPair();
-		expect(kp.publicKey.algorithm).toBe('Ed25519');
-		expect(kp.privateKey.algorithm).toBe('Ed25519');
-		expect(kp.publicKey.raw.length).toBe(ED25519_PUBLIC_KEY_BYTES);
+		expect(kp.publicKey.asymmetricKeyType).toBe('ed25519');
+		expect(kp.publicKey.type).toBe('public');
+		expect(kp.privateKey.asymmetricKeyType).toBe('ed25519');
+		expect(kp.privateKey.type).toBe('private');
+		expect(rawPublicKey(kp.publicKey).length).toBe(ED25519_PUBLIC_KEY_BYTES);
 
 		const msg = utf8Encode('hello');
 		const sig = sign(kp.privateKey, msg);
@@ -54,7 +57,7 @@ describe('ed25519', () => {
 			+ 'd25bf5f0595bbe24655141438e7a100b';
 
 		const kp = keyPairFromSeed(seed);
-		expect(hex(kp.publicKey.raw)).toBe(expectedPublic);
+		expect(hex(rawPublicKey(kp.publicKey))).toBe(expectedPublic);
 
 		const sig = sign(kp.privateKey, message);
 		expect(hex(sig)).toBe(expectedSignature);
@@ -98,7 +101,7 @@ describe('ed25519', () => {
 	});
 
 	test('publicKeyFromRaw round-trips through exported raw key', () => {
-		const exportPublicKeyRaw = (key: KeriPublicKey) => new Uint8Array(key.raw);
+		const exportPublicKeyRaw = (key: PublicKey) => new Uint8Array(rawPublicKey(key));
 		const kp = generateKeyPair();
 		const raw = exportPublicKeyRaw(kp.publicKey);
 		const restored = publicKeyFromRaw(raw);

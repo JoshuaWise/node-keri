@@ -15,7 +15,7 @@
  * This step is irreversible. There is no inverse operation.
  */
 
-import { KeriPrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
+import { PrivateKey, keyPairFromPrivateKey } from '../crypto/keypair';
 import { createDeactivationEvent } from '../event/deactivation';
 import { DeactivatedKeriState, KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
@@ -24,11 +24,10 @@ export interface DeactivateIdentifierInput {
 	/** Trusted state from the prior event — output of a create/rotate/interact. */
 	readonly state: KeriState;
 	/**
-	 * Private half of the key being revealed. Its public half must hash to
-	 * `state.nextKeyCommitment` — it is the pre-rotation key, exactly as for a
-	 * rotation; otherwise the deactivation is rejected.
+	 * Private half of the key being rotated to. Its public half must hash to
+	 * `state.nextKeyCommitment`; otherwise the deactivation is rejected.
 	 */
-	readonly currentPrivateKey: KeriPrivateKey;
+	readonly newPrivateKey: PrivateKey;
 	/**
 	 * CESR digest code for the deactivation event's SAID. Defaults to
 	 * SHA-256 (`I`). A deactivation commits to no next key, so this affects
@@ -59,10 +58,10 @@ export function deactivateIdentifier(
 		throw new InvalidArgumentError('deactivateIdentifier requires an input object');
 	}
 
-	// `keyPairFromPrivateKey` asserts the argument is a KeriPrivateKey; the
+	// `keyPairFromPrivateKey` asserts the argument is a PrivateKey; the
 	// event constructor then re-checks the derived public half against
 	// `state.nextKeyCommitment`.
-	const revealedKeyPair = keyPairFromPrivateKey(input.currentPrivateKey);
+	const revealedKeyPair = keyPairFromPrivateKey(input.newPrivateKey);
 
 	const { event, state } = createDeactivationEvent({
 		state: input.state,

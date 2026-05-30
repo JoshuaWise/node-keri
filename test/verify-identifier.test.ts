@@ -1,5 +1,4 @@
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import {
 	SAID_PLACEHOLDER,
 	computeEventSaid,
@@ -118,7 +117,7 @@ describe('verifyIdentifier — successful replay', () => {
 		expect(result.state.deactivated).toBe(false);
 		if (!result.state.deactivated) {
 			expect(result.state.currentPublicKey).toBe(
-				encodePublicKeyEd25519(keys.k2.publicKey.raw)
+				publicKeyToCesr(keys.k2.publicKey)
 			);
 		}
 		expect(result.state.lastEventDigest).toBe(rot2.signedEvent.event.d);
@@ -408,7 +407,7 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 			s: '1',
 			p: icp.state.lastEventDigest,
 			kt: '1' as const,
-			k: [encodePublicKeyEd25519(k9.publicKey.raw)] as const,
+			k: [publicKeyToCesr(k9.publicKey)] as const,
 			nt: '1' as const,
 			n: [deriveNextKeyCommitment(k3.publicKey)] as const,
 			bt: '0' as const,
@@ -451,7 +450,7 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 		// A well-formed but different signing key — passes shape validation,
 		// fails the recomputed SAID.
 		tampered[0] = patchEvent(icp.signedEvent, {
-			k: [encodePublicKeyEd25519(other.publicKey.raw)],
+			k: [publicKeyToCesr(other.publicKey)],
 		});
 		const result = verifyIdentifier({ aid, kel: kel(...tampered) });
 		expect(result.ok).toBe(false);
@@ -483,7 +482,7 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 			i: SAID_PLACEHOLDER,
 			s: '1',
 			kt: '1' as const,
-			k: [encodePublicKeyEd25519(k0.publicKey.raw)] as const,
+			k: [publicKeyToCesr(k0.publicKey)] as const,
 			nt: '1' as const,
 			n: [deriveNextKeyCommitment(k1.publicKey)] as const,
 			bt: '0' as const,
@@ -538,7 +537,7 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 			s: '1',
 			p: icp.state.lastEventDigest,
 			kt: '1' as const,
-			k: [encodePublicKeyEd25519(k1.publicKey.raw)] as const,
+			k: [publicKeyToCesr(k1.publicKey)] as const,
 			nt: '1' as const,
 			n: [deriveNextKeyCommitment(k2.publicKey)] as const,
 			bt: '0' as const,
@@ -628,7 +627,7 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 			s: '1',
 			p: icp.state.lastEventDigest,
 			kt: '1' as const,
-			k: [encodePublicKeyEd25519(k1.publicKey.raw)] as const,
+			k: [publicKeyToCesr(k1.publicKey)] as const,
 			nt: '1' as const,
 			n: [deriveNextKeyCommitment(k2.publicKey)] as const,
 			bt: '0' as const,
@@ -709,11 +708,11 @@ describe('verifyIdentifier — cryptographic and chain rejection', () => {
 describe('verifyIdentifier — non-transferable AID with no KEL', () => {
 	// A non-transferable AID *is* the signing key — a `B`-coded basic prefix,
 	// self-certifying, so it verifies with the empty-string "no KEL" value, with
-	// no events to replay. node-keri has no `B` encoder, so build one by swapping
-	// the code char of a `D` key: same raw bytes, the non-transferable code.
+	// no events to replay. Build one by swapping the code char of a `D` key
+	// (equivalently `encodeNonTransferablePublicKeyEd25519`): same raw bytes.
 	const kp = keyPairFromSeed(fillSeed(0x44));
 	const ntAid = aidFromSaid(
-		('B' + encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as never
+		('B' + publicKeyToCesr(kp.publicKey).slice(1)) as never
 	);
 
 	test('verifies straight from the prefix, with no events', () => {

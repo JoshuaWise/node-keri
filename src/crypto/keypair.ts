@@ -7,41 +7,49 @@ import {
 } from 'node:crypto';
 import { base64urlDecode, base64urlEncode } from '../bytes/base64url';
 import { concatBytes } from '../bytes/compare';
+import { encodePublicKeyEd25519 } from '../cesr/encode';
+import { decodeVerificationKeyEd25519 } from '../cesr/decode';
+import { CesrPublicKey } from '../cesr/qualified';
 import {
+	SupportedKeyAlgorithm,
+	SUPPORTED_KEY_ALGORITHM,
 	ED25519_PRIVATE_SEED_BYTES,
 	ED25519_PUBLIC_KEY_BYTES,
-	SUPPORTED_KEY_ALGORITHM,
-	SupportedKeyAlgorithm,
 } from '../profile/constants';
 import { InvalidArgumentError, UnsupportedAlgorithmError } from '../profile/errors';
 
 /**
- * Opaque wrapper around a Node KeyObject for an Ed25519 public key.
- * The raw 32-byte public key is exposed because it is required for AID
- * derivation, CESR encoding, and DID document generation.
+ * An Ed25519 *public* key, as a Node `KeyObject` refined to the one algorithm
+ * and half this profile supports. It is a plain `KeyObject` — interoperate with
+ * the rest of the Node ecosystem directly: import any standard format with
+ * `createPublicKey(...)` then `asPublicKey(...)`, and export with
+ * `key.export({ format, type })`.
+ *
+ * The branding is two `KeyObject` fields narrowed to literals, so a `PublicKey`
+ * and a `PrivateKey` are not interchangeable at compile time (passing the wrong
+ * half is a type error, not a runtime surprise), and a bare `KeyObject` must be
+ * narrowed through `asPublicKey` before it can be used here.
  */
-export interface KeriPublicKey {
-	readonly type: 'KeriPublicKey';
-	readonly algorithm: SupportedKeyAlgorithm;
-	readonly raw: Readonly<Uint8Array>;
-	readonly keyObject: KeyObject;
-}
+export type PublicKey = KeyObject & {
+	readonly asymmetricKeyType: SupportedKeyAlgorithm;
+	readonly type: 'public';
+};
 
 /**
- * Opaque wrapper around a Node KeyObject for an Ed25519 private key.
- * The raw seed is intentionally NOT exposed: callers should not be in the
- * habit of touching key material directly. Use `sign()` for the only
- * supported operation on private keys.
+ * An Ed25519 *private* key, as a Node `KeyObject` refined as above. The raw
+ * seed is never exposed by this library; `sign()` is the supported operation.
+ * Deliberate serialization for secure storage is still possible through the
+ * underlying `KeyObject` — `key.export({ format: 'der', type: 'pkcs8' })` and
+ * so on — see SECURITY.md.
  */
-export interface KeriPrivateKey {
-	readonly type: 'KeriPrivateKey';
-	readonly algorithm: SupportedKeyAlgorithm;
-	readonly keyObject: KeyObject;
-}
+export type PrivateKey = KeyObject & {
+	readonly asymmetricKeyType: SupportedKeyAlgorithm;
+	readonly type: 'private';
+};
 
-export interface KeriKeyPair {
-	readonly publicKey: KeriPublicKey;
-	readonly privateKey: KeriPrivateKey;
+export interface KeyPair {
+	readonly publicKey: PublicKey;
+	readonly privateKey: PrivateKey;
 }
 
 // PKCS#8 ASN.1 DER prefix for an Ed25519 private key (RFC 8410). The
@@ -52,17 +60,17 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
 ]);
 
 /** Generate a fresh Ed25519 keypair using the platform CSPRNG. */
-export function generateKeyPair(): KeriKeyPair {
-	const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-	return wrapKeyPair(publicKey, privateKey);
+export function generateKeyPair(): KeyPair {
+	const { publicKey, privateKey } = generateKeyPairSync(SUPPORTED_KEY_ALGORITHM);
+	return { publicKey: asPublicKey(publicKey), privateKey: asPrivateKey(privateKey) };
 }
 
 /**
- * Construct a KeriKeyPair from a 32-byte Ed25519 seed. Intended for test
- * vectors and any caller that already holds raw key material. The public
- * half is derived from the seed by Node.
+ * Construct a KeyPair from a 32-byte Ed25519 seed. Intended for test vectors
+ * and any caller that already holds raw key material. The public half is
+ * derived from the seed by Node.
  */
-export function keyPairFromSeed(seed: Readonly<Uint8Array>): KeriKeyPair {
+export function keyPairFromSeed(seed: Readonly<Uint8Array>): KeyPair {
 	if (seed.length !== ED25519_PRIVATE_SEED_BYTES) {
 		throw new InvalidArgumentError(
 			`Ed25519 seed must be ${ED25519_PRIVATE_SEED_BYTES} bytes`
@@ -74,61 +82,40 @@ export function keyPairFromSeed(seed: Readonly<Uint8Array>): KeriKeyPair {
 		format: 'der',
 		type: 'pkcs8',
 	});
-	const publicKey = createPublicKey(privateKey);
-	return wrapKeyPair(publicKey, privateKey);
+	return keyPairFromPrivateKey(asPrivateKey(privateKey));
 }
 
-/** Wrap a raw 32-byte Ed25519 public key as a KeriPublicKey. */
-export function publicKeyFromRaw(raw: Readonly<Uint8Array>): KeriPublicKey {
+/**
+ * Reconstruct a full KeyPair from just its private half.
+ *
+ * Ed25519 private keys carry their public point, so Node can derive the
+ * public KeyObject deterministically — no key material is generated. This is
+ * what lets `rotateIdentifier` accept the bare private key of the key being
+ * rotated *to* and still build the disclosed-public-key event.
+ */
+export function keyPairFromPrivateKey(privateKey: PrivateKey): KeyPair {
+	assertPrivateKey(privateKey);
+	return { publicKey: asPublicKey(createPublicKey(privateKey)), privateKey };
+}
+
+/** Wrap a raw 32-byte Ed25519 public key as a PublicKey. */
+export function publicKeyFromRaw(raw: Readonly<Uint8Array>): PublicKey {
 	if (raw.length !== ED25519_PUBLIC_KEY_BYTES) {
 		throw new InvalidArgumentError(
 			`Ed25519 public key must be ${ED25519_PUBLIC_KEY_BYTES} bytes`
 		);
 	}
-	const keyObject = createPublicKey({
-		key: { kty: 'OKP', crv: 'Ed25519', x: base64urlEncode(raw) },
-		format: 'jwk',
-	});
-	return Object.freeze({
-		type: 'KeriPublicKey' as const,
-		algorithm: SUPPORTED_KEY_ALGORITHM,
-		raw: new Uint8Array(raw),
-		keyObject,
-	});
+	return asPublicKey(
+		createPublicKey({
+			key: { kty: 'OKP', crv: 'Ed25519', x: base64urlEncode(raw) },
+			format: 'jwk',
+		})
+	);
 }
 
-/**
- * Reconstruct a full KeriKeyPair from just its private half.
- *
- * Ed25519 private keys carry their public point, so Node can derive the
- * public KeyObject deterministically — no key material is generated. This
- * is what lets `rotateIdentifier` accept the bare private key of the
- * key being rotated *to* and still build the disclosed-public-key event.
- */
-export function keyPairFromPrivateKey(privateKey: KeriPrivateKey): KeriKeyPair {
-	assertPrivateKey(privateKey);
-	const publicKey = createPublicKey(privateKey.keyObject);
-	return wrapKeyPair(publicKey, privateKey.keyObject);
-}
-
-function wrapKeyPair(publicKey: KeyObject, privateKey: KeyObject): KeriKeyPair {
-	const raw = rawPublicKeyBytes(publicKey);
-	const wrappedPublic: KeriPublicKey = Object.freeze({
-		type: 'KeriPublicKey',
-		algorithm: SUPPORTED_KEY_ALGORITHM,
-		raw,
-		keyObject: publicKey,
-	});
-	const wrappedPrivate: KeriPrivateKey = Object.freeze({
-		type: 'KeriPrivateKey',
-		algorithm: SUPPORTED_KEY_ALGORITHM,
-		keyObject: privateKey,
-	});
-	return Object.freeze({ publicKey: wrappedPublic, privateKey: wrappedPrivate });
-}
-
-function rawPublicKeyBytes(publicKey: KeyObject): Uint8Array {
-	const jwk = publicKey.export({ format: 'jwk' }) as {
+/** The raw 32 public-key bytes of `key` — its AID-derivation/CESR input. */
+export function rawPublicKey(key: PublicKey): Uint8Array {
+	const jwk = key.export({ format: 'jwk' }) as {
 		kty?: string;
 		crv?: string;
 		x?: string;
@@ -143,22 +130,54 @@ function rawPublicKeyBytes(publicKey: KeyObject): Uint8Array {
 	return raw;
 }
 
-export function assertPublicKey(value: unknown): asserts value is KeriPublicKey {
+/** CESR-qualify a public key (the transferable `D` form). */
+export function publicKeyToCesr(key: PublicKey): CesrPublicKey {
+	assertPublicKey(key);
+	return encodePublicKeyEd25519(rawPublicKey(key));
+}
+
+/**
+ * Reconstruct a `PublicKey` from its CESR-qualified form — the inverse of
+ * `publicKeyToCesr`, and the bridge from a `KeriState.currentPublicKey` back to
+ * a usable key. Accepts either the transferable (`D`) or non-transferable (`B`)
+ * encoding.
+ */
+export function publicKeyFromCesr(cesr: CesrPublicKey): PublicKey {
+	return publicKeyFromRaw(decodeVerificationKeyEd25519(cesr));
+}
+
+/**
+ * Narrow a `KeyObject` to a `PublicKey`, throwing if it is not an Ed25519
+ * public key. This is the validating import boundary: parse any standard
+ * format to a `KeyObject` with Node's `createPublicKey(...)`, then narrow here.
+ */
+export function asPublicKey(value: unknown): PublicKey {
+	assertPublicKey(value);
+	return value;
+}
+
+/** Narrow a `KeyObject` to a `PrivateKey`, throwing if it is not an Ed25519 private key. */
+export function asPrivateKey(value: unknown): PrivateKey {
+	assertPrivateKey(value);
+	return value;
+}
+
+export function assertPublicKey(value: unknown): asserts value is PublicKey {
 	if (
-		!value
-		|| (value as KeriPublicKey).type !== 'KeriPublicKey'
-		|| (value as KeriPublicKey).algorithm !== SUPPORTED_KEY_ALGORITHM
+		!(value instanceof KeyObject)
+		|| value.type !== 'public'
+		|| value.asymmetricKeyType !== SUPPORTED_KEY_ALGORITHM
 	) {
-		throw new InvalidArgumentError('expected an Ed25519 KeriPublicKey');
+		throw new InvalidArgumentError('expected an Ed25519 public KeyObject');
 	}
 }
 
-export function assertPrivateKey(value: unknown): asserts value is KeriPrivateKey {
+export function assertPrivateKey(value: unknown): asserts value is PrivateKey {
 	if (
-		!value
-		|| (value as KeriPrivateKey).type !== 'KeriPrivateKey'
-		|| (value as KeriPrivateKey).algorithm !== SUPPORTED_KEY_ALGORITHM
+		!(value instanceof KeyObject)
+		|| value.type !== 'private'
+		|| value.asymmetricKeyType !== SUPPORTED_KEY_ALGORITHM
 	) {
-		throw new InvalidArgumentError('expected an Ed25519 KeriPrivateKey');
+		throw new InvalidArgumentError('expected an Ed25519 private KeyObject');
 	}
 }

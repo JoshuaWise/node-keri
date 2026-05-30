@@ -8,9 +8,13 @@
  * Milestone 4 will perform on replay.
  */
 
-import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
-import { KeriKeyPair, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
+import {
+	KeyPair,
+	assertPrivateKey,
+	assertPublicKey,
+	publicKeyToCesr,
+} from '../crypto/keypair';
 import { KeriState, TransferableKeriState } from '../kel/state';
 import { CanonicalJsonError, InvalidArgumentError } from '../profile/errors';
 import { canonicalizeJson } from './canonical-json';
@@ -22,18 +26,18 @@ import { InteractionEvent } from './types';
 export interface CreateInteractionInput {
 	readonly state: KeriState;
 	/** Current keypair: must match `state.currentPublicKey`. */
-	readonly currentKeyPair: KeriKeyPair;
+	readonly currentKeyPair: KeyPair;
 	/**
-	 * Optional anchored data. Each entry is canonicalized as JSON, so it must
-	 * obey the canonical-JSON rules (no NaN, no functions, plain objects only,
-	 * etc.). Numbers must additionally be safe integers: a value outside the
+	 * Anchored data. Each entry is canonicalized as JSON, so it must obey the
+	 * canonical-JSON rules (no NaN, no functions, plain objects only, etc.).
+	 * Numbers must additionally be safe integers: a value outside the
 	 * safe-integer range does not round-trip to stable bytes, so it cannot be
 	 * digested reproducibly — carry larger or fractional values as strings.
-	 * See `canonicalizeJson` for the full number policy. An empty `a` is
+	 * See `canonicalizeJson` for the full number policy. An empty array is
 	 * permitted and is the right choice when the event is purely a "heartbeat"
 	 * advancing the sequence.
 	 */
-	readonly data?: readonly unknown[];
+	readonly data: readonly unknown[];
 	/**
 	 * CESR digest code for this event's SAID. Defaults to SHA-256 (`I`).
 	 * Interaction events carry no next-key commitment, so this affects only
@@ -73,14 +77,14 @@ export function createInteractionEvent(
 		);
 	}
 
-	const currentQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
+	const currentQb64 = publicKeyToCesr(input.currentKeyPair.publicKey);
 	if (currentQb64 !== input.state.currentPublicKey) {
 		throw new InvalidArgumentError(
 			'interaction signing key does not match the current public key'
 		);
 	}
 
-	const anchors: readonly unknown[] = input.data ?? [];
+	const anchors: readonly unknown[] = input.data;
 	if (!Array.isArray(anchors)) {
 		throw new InvalidArgumentError('data must be an array');
 	}

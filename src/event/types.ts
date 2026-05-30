@@ -76,8 +76,10 @@ export interface InceptionEvent extends KeriEventBase {
  * digest. The event commits to no next key — `nt` is `"0"` and `n` is empty —
  * so the identifier can never rotate, and its KEL is exactly this one event.
  *
- * node-keri *verifies* these (a keripy non-transferable AID is the motivating
- * case) but does not generate them: no constructor emits one.
+ * node-keri *verifies* this single-event form (a keripy non-transferable AID
+ * is the motivating case) but does not emit it — `createNonTransferableIdentifier`
+ * mints the equivalent no-KEL form instead, so no constructor produces a
+ * non-transferable inception event.
  */
 export interface NonTransferableInceptionEvent extends KeriEventBase {
 	t: 'icp';

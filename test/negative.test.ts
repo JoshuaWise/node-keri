@@ -96,7 +96,9 @@ describe('negative — verifyIdentifier argument contract', () => {
 	});
 
 	test('throws when aid is missing', () => {
-		expect(() => verifyIdentifier({ kel: '' } as never)).toThrow(InvalidArgumentError);
+		expect(() => verifyIdentifier({ kel: '' } as never)).toThrow(
+			InvalidArgumentError
+		);
 	});
 
 	test('throws when kel is not a string', () => {
@@ -141,16 +143,6 @@ describe('negative — createDidDocument', () => {
 		expect(() => createDidDocument({ state: {} as never })).toThrow(
 			InvalidArgumentError
 		);
-	});
-
-	test('throws when the supplied did contradicts state.did', () => {
-		const id = sample();
-		expect(() =>
-			createDidDocument({
-				state: id.state,
-				did: 'did:keri:mismatch' as never,
-			})
-		).toThrow(InvalidArgumentError);
 	});
 
 	test('throws when services is not an array', () => {

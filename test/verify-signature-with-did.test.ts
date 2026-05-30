@@ -2,9 +2,9 @@ import { createIdentifier } from '../src/api/create-identifier';
 import { rotateIdentifier } from '../src/api/rotate-identifier';
 import { verifySignatureWithDid } from '../src/did/verify-signature-with-did';
 import { decodeSignatureEd25519 } from '../src/cesr/decode';
-import { encodePublicKeyEd25519, encodeSignatureEd25519 } from '../src/cesr/encode';
+import { encodeSignatureEd25519 } from '../src/cesr/encode';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import type { DidKeri } from '../src/did/did-keri';
 import { utf8Encode } from '../src/bytes/utf8';
 import { InvalidArgumentError } from '../src/profile/errors';
@@ -50,7 +50,7 @@ describe('verifySignatureWithDid — accepts a valid signature', () => {
 		const id = newIdentifier();
 		const rotation = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: id.nextKeyPair.privateKey,
+			newPrivateKey: id.nextKeyPair.privateKey,
 			nextPublicKey: K2().publicKey,
 		});
 		const kel = id.event + rotation.event;
@@ -188,11 +188,10 @@ describe('verifySignatureWithDid — rejects invalid signatures', () => {
 describe('verifySignatureWithDid — non-transferable DID', () => {
 	// A non-transferable AID *is* the signing key — a `B`-coded basic prefix,
 	// self-certifying, so it verifies with the empty-string "no KEL" value.
-	// node-keri has no `B` encoder, so build one by swapping the code char of
-	// a `D` key: same raw bytes, the non-transferable derivation code.
+	// Build one by swapping the code char of a `D` key (equivalently
+	// `encodeNonTransferablePublicKeyEd25519`): same raw bytes, the `B` code.
 	const kp = keyPairFromSeed(fillSeed(0x44));
-	const ntDid = ('did:keri:B'
-		+ encodePublicKeyEd25519(kp.publicKey.raw).slice(1)) as DidKeri;
+	const ntDid = ('did:keri:B' + publicKeyToCesr(kp.publicKey).slice(1)) as DidKeri;
 
 	test('verifies a signature with the empty-string "no KEL" value', () => {
 		const signature = encodeSignatureEd25519(sign(kp.privateKey, PAYLOAD));

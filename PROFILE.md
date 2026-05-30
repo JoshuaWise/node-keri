@@ -6,7 +6,7 @@ This library implements a deliberately narrow subset of KERI. This document defi
 
 The profile covers a **single-controller `did:keri` identity lifecycle**: JSON events, Ed25519 keys, CESR text primitives, local KEL creation, replay verification, key rotation, interaction events, and DID document generation. Witnesses, transport, and discovery are out of scope by design — they are separable from KERI's core, which is the replay-verifiable key event log.
 
-node-keri **generates only transferable AIDs** — self-certifying identifiers that pre-rotate. It **verifies both** transferable and non-transferable AIDs: a non-transferable AID is a basic prefix whose identifier is the controller's `B`-coded Ed25519 key itself, with a single-event KEL and no rotation. There is no API to create one — that direction is verify-only, so a non-transferable AID minted by another implementation (keripy, say) can still be ingested.
+node-keri **generates and verifies both** transferable and non-transferable AIDs. A transferable AID is a self-certifying identifier that pre-rotates and carries a replayable KEL (`createIdentifier`). A non-transferable AID is a basic prefix whose identifier is the controller's `B`-coded Ed25519 key itself — self-certifying, with no KEL and no rotation; mint one with `createNonTransferableIdentifier` and use the empty string `''` wherever a KEL is expected. A non-transferable AID minted by another implementation (keripy, say) — which carries a trivial single-event KEL — is also ingested and verified.
 
 ## Supported
 
@@ -16,7 +16,7 @@ node-keri **generates only transferable AIDs** — self-certifying identifiers t
 | CESR text primitives                     | Yes    |
 | Ed25519 signing keys                     | Yes    |
 | Self-certifying transferable AIDs        | Yes    |
-| Non-transferable AIDs                    | Verify only — not generated |
+| Non-transferable AIDs (basic prefix)     | Yes    |
 | Single signing key (threshold 1)         | Yes    |
 | Single next-key commitment               | Yes    |
 | Inception (`icp`) events                 | Yes    |
@@ -34,20 +34,19 @@ node-keri **generates only transferable AIDs** — self-certifying identifiers t
 
 Every capability below is **outside the profile**. An event that uses one is rejected by `verifyIdentifier` with `UNSUPPORTED_FEATURE`; an out-of-profile CESR primitive is rejected with `INVALID_CESR_CODE`. The profile fails closed.
 
-| Capability                       | Status   |
-| -------------------------------- | -------- |
-| Multisig / weighted thresholds   | Excluded |
-| Witnesses, watchers, receipts    | Excluded |
-| OOBI / discovery                 | Excluded |
-| Delegation                       | Excluded |
-| TEL / credential registries      | Excluded |
-| Configuration traits             | `EO` only — all others excluded |
-| Binary CESR                      | Excluded |
+| Capability                       | Status                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| Multisig / weighted thresholds   | Excluded                                                                                |
+| Witnesses, watchers, receipts    | Excluded                                                                                |
+| OOBI / discovery                 | Excluded                                                                                |
+| Delegation                       | Excluded                                                                                |
+| TEL / credential registries      | Excluded                                                                                |
+| Configuration traits             | `EO` only — all others excluded                                                         |
+| Binary CESR                      | Excluded                                                                                |
 | CESR counters / groups           | Excluded except the `-A` controller-signature counter (see [Wire format](#wire-format)) |
-| CBOR / MessagePack serialization | Excluded |
-| Non-Ed25519 keys                 | Excluded |
-| Generating non-transferable AIDs | Excluded — they are verified, never minted |
-| HTTP transport, filesystem       | Excluded |
+| CBOR / MessagePack serialization | Excluded                                                                                |
+| Non-Ed25519 keys                 | Excluded                                                                                |
+| HTTP transport, filesystem       | Excluded                                                                                |
 
 ## Event shapes
 
@@ -63,19 +62,19 @@ Three event types are supported: `icp`, `rot`, `ixn`. Excluded-feature fields ar
 - Inception `a` (seals) — must be empty. To anchor data, use an interaction event, whose `a` is an unconstrained JSON array.
 - An event carrying **any field not named by its type** is rejected.
 
-**Non-transferable inception.** An `icp` whose `i` field is a `B`-coded Ed25519 key (rather than a self-addressing digest) is a non-transferable inception. Its `k` holds that same `B` key, `nt` is `"0"`, and `n` is empty — it commits to no next key. Its AID is the `B` key itself, so `d ≠ i` (unlike a transferable inception, where `d == i`). A non-transferable identifier's KEL is exactly this one event: any `rot` or `ixn` that follows it is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`, since the identifier can never rotate or extend. node-keri verifies these but never generates one.
+**Non-transferable inception.** An `icp` whose `i` field is a `B`-coded Ed25519 key (rather than a self-addressing digest) is a non-transferable inception. Its `k` holds that same `B` key, `nt` is `"0"`, and `n` is empty — it commits to no next key. Its AID is the `B` key itself, so `d ≠ i` (unlike a transferable inception, where `d == i`). A non-transferable identifier's KEL is exactly this one event: any `rot` or `ixn` that follows it is rejected with `NON_TRANSFERABLE_NOT_EXTENSIBLE`, since the identifier can never rotate or extend. node-keri verifies this single-event form (e.g. from keripy) but does not emit a non-transferable inception event itself — `createNonTransferableIdentifier` mints the equivalent **no-KEL** form, where the AID stands alone with no events to replay (verify or resolve it by passing `''` as the KEL).
 
-**Deactivation.** A `rot` whose `nt` is `"0"` and whose `n` is empty is a *deactivation* — the `did:keri` abandonment operation, a rotation to zero forward controlling keys. It is otherwise an ordinary rotation: `k` still holds the single revealed pre-rotated key, which reproduces the prior next-key commitment and signs the event. Committing to no next key makes it terminal — it is the last event of the KEL, and any `rot` or `ixn` that follows is rejected with `DEACTIVATED_NOT_EXTENSIBLE`. The replayed `KeriState` is then `deactivated` and no longer `transferable`. Unlike non-transferable AIDs, node-keri both generates (`deactivateIdentifier`) and verifies deactivations.
+**Deactivation.** A `rot` whose `nt` is `"0"` and whose `n` is empty is a _deactivation_ — the `did:keri` abandonment operation, a rotation to zero forward controlling keys. It is otherwise an ordinary rotation: `k` still holds the single revealed pre-rotated key, which reproduces the prior next-key commitment and signs the event. Committing to no next key makes it terminal — it is the last event of the KEL, and any `rot` or `ixn` that follows is rejected with `DEACTIVATED_NOT_EXTENSIBLE`. The replayed `KeriState` is then `deactivated` and no longer `transferable`. node-keri both generates (`deactivateIdentifier`) and verifies deactivations.
 
 ### Establishment-only identifiers
 
-An `icp` whose `c` field is `["EO"]` declares the *establishment-only* configuration trait: the identifier's KEL accepts **only establishment events** (`icp`, `rot`) — interaction events are rejected. This is useful for identifiers that should never anchor application data, only roll their keys.
+An `icp` whose `c` field is `["EO"]` declares the _establishment-only_ configuration trait: the identifier's KEL accepts **only establishment events** (`icp`, `rot`) — interaction events are rejected. This is useful for identifiers that should never anchor application data, only roll their keys.
 
-The trait is *inception only*: it appears in `icp` and only in `icp`, and is inherited unchanged by every later event of the KEL through the replay-derived state. Rotation, interaction, and deactivation events do not (and cannot) carry a `c` field, so the trait is set once and never changes.
+The trait is _inception only_: it appears in `icp` and only in `icp`, and is inherited unchanged by every later event of the KEL through the replay-derived state. Rotation, interaction, and deactivation events do not (and cannot) carry a `c` field, so the trait is set once and never changes.
 
 Enforcement is symmetric: `createInteractionEvent` and `interactOnIdentifier` refuse a state whose `establishmentOnly` flag is set with `InvalidArgumentError`, and `verifyIdentifier` rejects an `ixn` appended out of band to such a KEL with `ESTABLISHMENT_ONLY_NO_INTERACTION`. `EO` on a non-transferable inception is redundant (the KEL is already non-extensible) and is rejected with `UNSUPPORTED_FEATURE`. Pass `establishmentOnly: true` to `createIdentifier` to mint one. The trait does not block deactivation — a deactivation is a rotation, and an EO identifier may still be abandoned.
 
-Each signed event carries **exactly one** Ed25519 signature, attached as a CESR *indexed* signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
+Each signed event carries **exactly one** Ed25519 signature, attached as a CESR _indexed_ signature ("Siger") at key index 0. Zero or multiple signatures, or an index other than 0, are rejected. See [Wire format](#wire-format).
 
 ## Canonical JSON
 
@@ -150,7 +149,7 @@ KERI digests are self-describing: a qualified digest's CESR code names its hash 
 - The parser is strict and offline: DID-URL components (path, query, fragment) are rejected, and the identifier must be a well-formed AID of either kind.
 - Resolution is local only — the caller supplies the KEL. The library never discovers, fetches, or persists anything.
 - A DID document is a projection of one **verified** key state: it advertises the single currently-authoritative Ed25519 key as a `JsonWebKey2020` verification method, referenced from `authentication` and `assertionMethod`.
-- A non-transferable DID is self-certifying: its key *is* the AID. The verifiers therefore need no KEL for one — `kel` is a required parameter, but the **empty string** `''` is the "no KEL" value, and for a non-transferable identifier the key (and hence the state, or a DID document projected from it) is then derived straight from the prefix. This holds uniformly at both layers: the AID-level `verifyIdentifier` / `verifySignature` and their DID-level counterparts `verifyDid` / `verifySignatureWithDid` all accept the empty-string "no KEL" value for a non-transferable identifier. A non-transferable identifier may equally be verified from its trivial single-event KEL by passing that stream instead.
+- A non-transferable DID is self-certifying: its key _is_ the AID. The verifiers therefore need no KEL for one — `kel` is a required parameter, but the **empty string** `''` is the "no KEL" value, and for a non-transferable identifier the key (and hence the state, or a DID document projected from it) is then derived straight from the prefix. This holds uniformly at both layers: the AID-level `verifyIdentifier` / `verifySignature` and their DID-level counterparts `verifyDid` / `verifySignatureWithDid` all accept the empty-string "no KEL" value for a non-transferable identifier. A non-transferable identifier may equally be verified from its trivial single-event KEL by passing that stream instead.
 
 ## Conformance notes
 

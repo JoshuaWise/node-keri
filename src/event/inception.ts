@@ -8,13 +8,13 @@
  * `d` and `i` get the same self-addressing digest.
  */
 
-import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import {
-	KeriKeyPair,
-	KeriPublicKey,
+	KeyPair,
+	PublicKey,
 	assertPrivateKey,
 	assertPublicKey,
+	publicKeyToCesr,
 } from '../crypto/keypair';
 import { aidFromSaid, formatDidKeri } from '../did/did-keri';
 import { TransferableKeriState } from '../kel/state';
@@ -29,9 +29,9 @@ import {
 
 export interface CreateInceptionInput {
 	/** Current keypair: its public half is disclosed and its private half signs. */
-	readonly currentKeyPair: KeriKeyPair;
+	readonly currentKeyPair: KeyPair;
 	/** Public half of the next keypair — only the digest is committed now. */
-	readonly nextPublicKey: KeriPublicKey;
+	readonly nextPublicKey: PublicKey;
 	/**
 	 * Set the `EO` ("establishment only") configuration trait on the inception
 	 * event. The resulting identifier accepts only establishment events
@@ -52,7 +52,11 @@ export interface CreateInceptionInput {
 export interface CreateInceptionResult {
 	/** The signed inception event, as a CESR stream frame (the wire form). */
 	readonly event: string;
-	/** Replay-derived initial state. node-keri mints only transferable AIDs. */
+	/**
+	 * Replay-derived initial state — always transferable. `createInceptionEvent`
+	 * mints only transferable AIDs; the KEL-less non-transferable form is minted
+	 * by `createNonTransferableIdentifier`.
+	 */
 	readonly state: TransferableKeriState;
 }
 
@@ -62,7 +66,7 @@ export function createInceptionEvent(input: CreateInceptionInput): CreateIncepti
 	assertPublicKey(input.nextPublicKey);
 
 	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
-	const currentKeyQb64 = encodePublicKeyEd25519(input.currentKeyPair.publicKey.raw);
+	const currentKeyQb64 = publicKeyToCesr(input.currentKeyPair.publicKey);
 	const nextCommitment = deriveNextKeyCommitment(input.nextPublicKey, digestCode);
 
 	// `c` carries `['EO']` only when the caller asked for an establishment-only

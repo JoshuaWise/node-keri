@@ -7,12 +7,13 @@ import {
 } from '../src/cesr/decode';
 import {
 	encodeDigestSha256,
+	encodeNonTransferablePublicKeyEd25519,
 	encodePublicKeyEd25519,
 	encodeSignatureEd25519,
 } from '../src/cesr/encode';
 import { sha256 } from '../src/crypto/hash';
 import { sign } from '../src/crypto/ed25519';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr, rawPublicKey } from '../src/crypto/keypair';
 import { utf8Encode } from '../src/bytes/utf8';
 import {
 	InvalidArgumentError,
@@ -57,7 +58,7 @@ describe('cesr encode/decode', () => {
 
 		test('round-trips a generated keypair public key', () => {
 			const kp = keyPairFromSeed(RFC8032_SEED);
-			const qb64 = encodePublicKeyEd25519(kp.publicKey.raw);
+			const qb64 = publicKeyToCesr(kp.publicKey);
 			expect(toArray(decodePublicKeyEd25519(qb64))).toEqual(
 				toArray(RFC8032_PUBLIC_KEY)
 			);
@@ -253,12 +254,17 @@ describe('cesr encode/decode', () => {
 	});
 
 	describe('non-transferable public keys (code B)', () => {
-		// node-keri has no `B` encoder — it verifies non-transferable AIDs but
-		// does not generate them. A valid `B` qb64 is a `D` key qb64 with the
-		// code char swapped: same raw bytes, different derivation code.
-		const RAW = keyPairFromSeed(RFC8032_SEED).publicKey.raw;
+		// `encodeNonTransferablePublicKeyEd25519` mints the `B` basic-prefix form.
+		// Equivalently it is the `D` key qb64 with its code char swapped — same
+		// raw bytes, different derivation code — which lets us cross-check it.
+		const RAW = rawPublicKey(keyPairFromSeed(RFC8032_SEED).publicKey);
 		const dKey = encodePublicKeyEd25519(RAW);
-		const bKey = 'B' + dKey.slice(1);
+		const bKey = encodeNonTransferablePublicKeyEd25519(RAW);
+
+		test('encodeNonTransferablePublicKeyEd25519 produces a `B` key (the swapped `D` key)', () => {
+			expect(bKey.startsWith('B')).toBe(true);
+			expect(bKey).toBe('B' + dKey.slice(1));
+		});
 
 		test('decodeNonTransferablePublicKeyEd25519 decodes a `B` key', () => {
 			expect(toArray(decodeNonTransferablePublicKeyEd25519(bKey))).toEqual(

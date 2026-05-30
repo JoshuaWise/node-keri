@@ -2,10 +2,12 @@
 //
 // Three layers are exported: the foundation (bytes, crypto, CESR, canonical
 // JSON), the event lifecycle building blocks plus the KEL replay verifier,
-// and the high-level identifier API — `createIdentifier`, `rotateIdentifier`,
-// `interactOnIdentifier`, `verifyIdentifier`, the `did:keri` surface
-// (`verifyDid`, `createDidDocument`), and `verifySignature` /
-// `verifySignatureWithDid` for signed message verification.
+// and the high-level identifier API — `createIdentifier`,
+// `createNonTransferableIdentifier`, `rotateIdentifier`, `interactOnIdentifier`,
+// `verifyIdentifier`, the `did:keri` surface
+// (`verifyDid`, `createDidDocument`), and `createSignature` /
+// `verifySignature` / `verifySignatureWithDid` for signed-message creation and
+// verification.
 //
 // See PROFILE.md for the conformance boundary and SECURITY.md for the trust
 // model and security invariants this surface enforces.
@@ -22,16 +24,12 @@ export type { KeriVerificationError } from './profile/errors';
 export {
 	KERI_PROFILE_NAME,
 	SUPPORTED_KEY_ALGORITHM,
-	SUPPORTED_DIGEST_ALGORITHM,
 	ED25519_PUBLIC_KEY_BYTES,
 	ED25519_PRIVATE_SEED_BYTES,
 	ED25519_SIGNATURE_BYTES,
 	SHA256_DIGEST_BYTES,
 } from './profile/constants';
-export type {
-	SupportedKeyAlgorithm,
-	SupportedDigestAlgorithm,
-} from './profile/constants';
+export type { SupportedKeyAlgorithm } from './profile/constants';
 
 export { base64urlEncode, base64urlDecode } from './bytes/base64url';
 export { utf8Encode, utf8Decode } from './bytes/utf8';
@@ -47,14 +45,21 @@ export {
 	DEFAULT_DIGEST_CODE,
 } from './crypto/digests';
 export type { DigestAlgorithm } from './crypto/digests';
-export { generateKeyPair, keyPairFromSeed } from './crypto/keypair';
-export type { KeriPublicKey, KeriPrivateKey, KeriKeyPair } from './crypto/keypair';
-export { sign, verify } from './crypto/ed25519';
+export {
+	generateKeyPair,
+	keyPairFromSeed,
+	asPublicKey,
+	asPrivateKey,
+	publicKeyToCesr,
+	publicKeyFromCesr,
+} from './crypto/keypair';
+export type { PublicKey, PrivateKey, KeyPair } from './crypto/keypair';
 
 export { canonicalizeJson } from './event/canonical-json';
 
 export {
 	encodePublicKeyEd25519,
+	encodeNonTransferablePublicKeyEd25519,
 	encodeSignatureEd25519,
 	encodeIndexedSignatureEd25519,
 	encodeDigestSha256,
@@ -81,6 +86,7 @@ export type {
 export {
 	DID_KERI_PREFIX,
 	aidFromSaid,
+	aidFromNonTransferableKey,
 	formatDidKeri,
 	parseDidKeri,
 } from './did/did-keri';
@@ -143,6 +149,12 @@ export type {
 	CreateIdentifierResult,
 } from './api/create-identifier';
 
+export { createNonTransferableIdentifier } from './api/create-non-transferable-identifier';
+export type {
+	CreateNonTransferableIdentifierInput,
+	CreateNonTransferableIdentifierResult,
+} from './api/create-non-transferable-identifier';
+
 export { rotateIdentifier } from './api/rotate-identifier';
 export type {
 	RotateIdentifierInput,
@@ -166,6 +178,8 @@ export type {
 	VerifyIdentifierInput,
 	VerifyIdentifierResult,
 } from './api/verify-identifier';
+
+export { createSignature } from './api/create-signature';
 
 export { verifySignature } from './api/verify-signature';
 export type { VerifySignatureInput } from './api/verify-signature';

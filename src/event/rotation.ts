@@ -10,13 +10,13 @@
  */
 
 import { digestCodeOf } from '../cesr/codes';
-import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
 import {
-	KeriKeyPair,
-	KeriPublicKey,
+	KeyPair,
+	PublicKey,
 	assertPrivateKey,
 	assertPublicKey,
+	publicKeyToCesr,
 } from '../crypto/keypair';
 import { KeriState, TransferableKeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
@@ -29,9 +29,9 @@ export interface CreateRotationInput {
 	/** Trusted state from the prior event (output of inception/rotation/ixn). */
 	readonly state: KeriState;
 	/** The new current keypair: its public key must match `state.nextKeyCommitment`. */
-	readonly newCurrentKeyPair: KeriKeyPair;
+	readonly newCurrentKeyPair: KeyPair;
 	/** Public half of the freshly chosen next keypair. */
-	readonly nextPublicKey: KeriPublicKey;
+	readonly nextPublicKey: PublicKey;
 	/**
 	 * CESR digest code for this event's SAID and *new* next-key commitment.
 	 * Defaults to SHA-256 (`I`). The prior commitment being revealed is always
@@ -65,7 +65,7 @@ export function createRotationEvent(input: CreateRotationInput): CreateRotationR
 	}
 
 	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
-	const newCurrentQb64 = encodePublicKeyEd25519(input.newCurrentKeyPair.publicKey.raw);
+	const newCurrentQb64 = publicKeyToCesr(input.newCurrentKeyPair.publicKey);
 	// The prior commitment must be reproduced under the algorithm it was
 	// *originally* made with — read from the commitment's own CESR code — not
 	// under the code chosen for this event.

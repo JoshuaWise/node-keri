@@ -77,8 +77,8 @@ export const CESR_PUBLIC_KEY_ED25519 = spec('D', 32, 'Ed25519 public key');
 /**
  * Ed25519 verification key, non-transferable variant. This is the basic prefix
  * of a non-transferable AID — the controller commits to one unrotatable key.
- * node-keri *verifies* identifiers built on these (a keripy non-transferable
- * AID is the motivating case) but never generates one.
+ * node-keri encodes these (`encodeNonTransferablePublicKeyEd25519`, used by
+ * `createNonTransferableIdentifier`) and verifies identifiers built on them.
  */
 export const CESR_PUBLIC_KEY_ED25519N = spec(
 	'B',

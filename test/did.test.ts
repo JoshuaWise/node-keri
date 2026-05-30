@@ -1,5 +1,5 @@
 import { base64urlEncode } from '../src/bytes/base64url';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, rawPublicKey } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent } from '../src/event/interaction';
 import { createRotationEvent } from '../src/event/rotation';
@@ -133,7 +133,7 @@ describe('createDidDocument', () => {
 						crv: 'Ed25519',
 						// After icp, ixn, rot the authoritative key is k1; the JWK
 						// `x` is its raw public key, base64url-encoded.
-						x: base64urlEncode(keys.k1.publicKey.raw),
+						x: base64urlEncode(rawPublicKey(keys.k1.publicKey)),
 					},
 				},
 			],
@@ -151,10 +151,10 @@ describe('createDidDocument', () => {
 		const doc = createDidDocument({ state: result.state });
 		// After the rotation the authoritative key is k1, not the inception k0.
 		expect(doc.verificationMethod[0]!.publicKeyJwk.x).toBe(
-			base64urlEncode(keys.k1.publicKey.raw)
+			base64urlEncode(rawPublicKey(keys.k1.publicKey))
 		);
 		expect(doc.verificationMethod[0]!.publicKeyJwk.x).not.toBe(
-			base64urlEncode(keys.k0.publicKey.raw)
+			base64urlEncode(rawPublicKey(keys.k0.publicKey))
 		);
 	});
 
@@ -180,20 +180,6 @@ describe('createDidDocument', () => {
 				serviceEndpoint: 'https://agent.example/keri',
 			},
 		]);
-	});
-
-	test('accepts a matching `did` and rejects a mismatched one', () => {
-		const { aid, did, kel } = buildKel();
-		const result = verifyIdentifier({ aid, kel });
-		if (!result.ok) throw new Error('expected a valid KEL');
-
-		expect(() => createDidDocument({ state: result.state, did })).not.toThrow();
-		expect(() =>
-			createDidDocument({
-				state: result.state,
-				did: 'did:keri:other' as never,
-			})
-		).toThrow(InvalidArgumentError);
 	});
 
 	test('rejects a malformed service entry', () => {
@@ -305,8 +291,6 @@ describe('verifyDid', () => {
 
 	test('throws on an argument-contract violation', () => {
 		const { did } = buildKel();
-		expect(() => verifyDid({ did, kel: 123 as never })).toThrow(
-			InvalidArgumentError
-		);
+		expect(() => verifyDid({ did, kel: 123 as never })).toThrow(InvalidArgumentError);
 	});
 });

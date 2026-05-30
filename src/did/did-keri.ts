@@ -8,7 +8,7 @@
  */
 
 import { decodeDigest, decodeNonTransferablePublicKeyEd25519 } from '../cesr/decode';
-import { CesrDigest } from '../cesr/qualified';
+import { CesrDigest, CesrPublicKey } from '../cesr/qualified';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 
 declare const aidBrand: unique symbol;
@@ -22,7 +22,7 @@ declare const didBrand: unique symbol;
  *   - a *non-transferable* identifier — a basic prefix that is itself the
  *     controller's `B`-coded Ed25519 key (44 characters).
  *
- * node-keri generates only the transferable form; it verifies both.
+ * node-keri generates and verifies both forms.
  */
 export type Aid = string & { readonly [aidBrand]: 'Aid' };
 
@@ -39,6 +39,16 @@ export const DID_KERI_PREFIX = 'did:keri:';
  */
 export function aidFromSaid(said: CesrDigest): Aid {
 	return said as unknown as Aid;
+}
+
+/**
+ * Wrap a non-transferable basic prefix — a CESR-qualified `B`-coded Ed25519
+ * key — as an AID. A non-transferable AID *is* the controller's key, so this
+ * is a brand cast guarded against accidentally typing some other CesrPublicKey
+ * as an AID.
+ */
+export function aidFromNonTransferableKey(key: CesrPublicKey): Aid {
+	return key as unknown as Aid;
 }
 
 /** Build the `did:keri:<aid>` DID for a given AID. */

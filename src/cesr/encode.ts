@@ -4,6 +4,7 @@ import {
 	CESR_DIGEST_SHA256,
 	CESR_INDEXED_SIGNATURE_ED25519,
 	CESR_PUBLIC_KEY_ED25519,
+	CESR_PUBLIC_KEY_ED25519N,
 	CESR_SIGNATURE_ED25519,
 	CesrCodeSpec,
 	digestSpecForCode,
@@ -45,6 +46,18 @@ function encodeMatter(
 /** CESR-qualify a 32-byte Ed25519 public key (transferable, code `D`). */
 export function encodePublicKeyEd25519(raw: Readonly<Uint8Array>): CesrPublicKey {
 	return encodeMatter(CESR_PUBLIC_KEY_ED25519, raw) as CesrPublicKey;
+}
+
+/**
+ * CESR-qualify a 32-byte Ed25519 public key as a *non-transferable* basic
+ * prefix (code `B`). This is the qualified form whose qb64 *is* the AID of a
+ * non-transferable identifier — it commits to a single, unrotatable key.
+ * `createNonTransferableIdentifier` uses it to mint such an AID.
+ */
+export function encodeNonTransferablePublicKeyEd25519(
+	raw: Readonly<Uint8Array>
+): CesrPublicKey {
+	return encodeMatter(CESR_PUBLIC_KEY_ED25519N, raw) as CesrPublicKey;
 }
 
 /** CESR-qualify a 64-byte Ed25519 signature, non-indexed (code `0B`). */

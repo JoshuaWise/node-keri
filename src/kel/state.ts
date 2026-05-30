@@ -58,8 +58,8 @@ export interface TransferableKeriState extends KeriStateBase {
  * never rotate, so there is no `nextKeyCommitment`. A non-transferable AID may
  * be backed by a trivial single-event KEL or by nothing at all — it is
  * self-certifying either way — so the event-derived fields are present only
- * when it was verified from a KEL. node-keri verifies these but never
- * generates them.
+ * when it was verified from a KEL. `createNonTransferableIdentifier` mints the
+ * no-KEL form; node-keri also verifies the single-event form (e.g. from keripy).
  */
 export interface NonTransferableKeriState extends KeriStateBase {
 	/** `'icp'` when verified from a KEL; absent for a bare AID with no KEL. */

@@ -114,9 +114,9 @@ export function decodePublicKeyEd25519(qb64: string): Uint8Array {
  * Decode a CESR-qualified *non-transferable* Ed25519 public key (code `B`).
  *
  * A non-transferable key is the basic prefix of a non-transferable AID: the
- * controller commits to a single, unrotatable key. node-keri verifies
- * identifiers built on these but never generates one — there is no matching
- * encoder.
+ * controller commits to a single, unrotatable key. The matching encoder is
+ * `encodeNonTransferablePublicKeyEd25519`, which
+ * `createNonTransferableIdentifier` uses to mint such an AID.
  */
 export function decodeNonTransferablePublicKeyEd25519(qb64: string): Uint8Array {
 	return decodeMatter(CESR_PUBLIC_KEY_ED25519N, qb64);

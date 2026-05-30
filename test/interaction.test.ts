@@ -1,5 +1,4 @@
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { createInceptionEvent } from '../src/event/inception';
 import { createInteractionEvent, CreateInteractionInput } from '../src/event/interaction';
 import { serializeEvent, signEvent } from '../src/event/sign';
@@ -40,6 +39,7 @@ describe('createInteractionEvent', () => {
 		const { signedEvent, state } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
+			data: [],
 		});
 
 		const event = signedEvent.event;
@@ -90,7 +90,7 @@ describe('createInteractionEvent', () => {
 		expect(
 			verifyEventSignature(
 				signedEvent.event,
-				encodePublicKeyEd25519(k0.publicKey.raw),
+				publicKeyToCesr(k0.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(true);
@@ -104,6 +104,7 @@ describe('createInteractionEvent', () => {
 			interactSigned({
 				state: inception.state,
 				currentKeyPair: stranger,
+				data: [],
 			})
 		).toThrow(/current public key/);
 	});
@@ -143,6 +144,7 @@ describe('createInteractionEvent', () => {
 		const { signedEvent } = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
+			data: [],
 		});
 		const reSigned = signEvent(signedEvent.event, k0.privateKey);
 		expect(Object.isFrozen(reSigned)).toBe(true);
@@ -158,6 +160,7 @@ describe('createInteractionEvent', () => {
 		const i1 = interactSigned({
 			state: inception.state,
 			currentKeyPair: k0,
+			data: [],
 		});
 		const i2 = interactSigned({
 			state: i1.state,

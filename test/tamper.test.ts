@@ -66,7 +66,7 @@ function buildKel() {
 	});
 	const rot1 = rotateIdentifier({
 		state: ixn1.state,
-		currentPrivateKey: k1.privateKey,
+		newPrivateKey: k1.privateKey,
 		nextPublicKey: k2.publicKey,
 	});
 	// After rot1 the authoritative key is k1 (the key it revealed), so the
@@ -78,7 +78,7 @@ function buildKel() {
 	});
 	const rot2 = rotateIdentifier({
 		state: ixn2.state,
-		currentPrivateKey: k2.privateKey,
+		newPrivateKey: k2.privateKey,
 		nextPublicKey: k3.publicKey,
 	});
 
@@ -348,11 +348,7 @@ describe('tamper — structural mutation of the log', () => {
 			nextPublicKey: keyPairFromSeed(fillSeed(0x71)).publicKey,
 		});
 		// A second `icp` past sequence 0 is not a valid continuation event.
-		expectRejected(
-			aid,
-			frameKel(events) + intruder.event,
-			'INVALID_EVENT_TYPE'
-		);
+		expectRejected(aid, frameKel(events) + intruder.event, 'INVALID_EVENT_TYPE');
 	});
 
 	test('verifying the KEL against the wrong AID fails', () => {

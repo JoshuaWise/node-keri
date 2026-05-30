@@ -14,9 +14,13 @@
  */
 
 import { digestCodeOf } from '../cesr/codes';
-import { encodePublicKeyEd25519 } from '../cesr/encode';
 import { DEFAULT_DIGEST_CODE } from '../crypto/digests';
-import { KeriKeyPair, assertPrivateKey, assertPublicKey } from '../crypto/keypair';
+import {
+	KeyPair,
+	assertPrivateKey,
+	assertPublicKey,
+	publicKeyToCesr,
+} from '../crypto/keypair';
 import { DeactivatedKeriState, KeriState } from '../kel/state';
 import { InvalidArgumentError } from '../profile/errors';
 import { computeEventSaid, deriveNextKeyCommitment, saidPlaceholder } from './digest';
@@ -32,7 +36,7 @@ export interface CreateDeactivationInput {
 	 * `state.nextKeyCommitment`, and its private half signs the event — the
 	 * same key an ordinary rotation would reveal.
 	 */
-	readonly revealedKeyPair: KeriKeyPair;
+	readonly revealedKeyPair: KeyPair;
 	/**
 	 * CESR digest code for this event's SAID. Defaults to SHA-256 (`I`). A
 	 * deactivation commits to no next key, so this affects only the event's
@@ -68,7 +72,7 @@ export function createDeactivationEvent(
 	}
 
 	const digestCode = input.digestCode ?? DEFAULT_DIGEST_CODE;
-	const revealedQb64 = encodePublicKeyEd25519(input.revealedKeyPair.publicKey.raw);
+	const revealedQb64 = publicKeyToCesr(input.revealedKeyPair.publicKey);
 	// The revealed key must reproduce the prior next-key commitment, recomputed
 	// under the algorithm that commitment names in its own CESR code.
 	const priorCommitmentCode = digestCodeOf(input.state.nextKeyCommitment);

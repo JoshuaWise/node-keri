@@ -1,5 +1,4 @@
-import { encodePublicKeyEd25519 } from '../src/cesr/encode';
-import { keyPairFromSeed } from '../src/crypto/keypair';
+import { keyPairFromSeed, publicKeyToCesr } from '../src/crypto/keypair';
 import { deriveNextKeyCommitment } from '../src/event/digest';
 import { createInceptionEvent } from '../src/event/inception';
 import { createRotationEvent, CreateRotationInput } from '../src/event/rotation';
@@ -55,7 +54,7 @@ describe('createRotationEvent', () => {
 		if (event.t !== 'rot') throw new Error('discriminant');
 		expect(event.p).toBe(inception.state.lastEventDigest);
 		expect(event.kt).toBe('1');
-		expect(event.k).toEqual([encodePublicKeyEd25519(k1.publicKey.raw)]);
+		expect(event.k).toEqual([publicKeyToCesr(k1.publicKey)]);
 		expect(event.nt).toBe('1');
 		expect(event.n).toEqual([deriveNextKeyCommitment(k2.publicKey)]);
 		expect(event.bt).toBe('0');
@@ -68,7 +67,7 @@ describe('createRotationEvent', () => {
 		expect(state.lastEventDigest).toBe(event.d);
 		expect(state.aid).toBe(inception.state.aid);
 		expect(state.did).toBe(inception.state.did);
-		expect(state.currentPublicKey).toBe(encodePublicKeyEd25519(k1.publicKey.raw));
+		expect(state.currentPublicKey).toBe(publicKeyToCesr(k1.publicKey));
 		expect(state.nextKeyCommitment).toBe(deriveNextKeyCommitment(k2.publicKey));
 		expect(state.lastEventType).toBe('rot');
 	});
@@ -86,7 +85,7 @@ describe('createRotationEvent', () => {
 		expect(
 			verifyEventSignature(
 				signedEvent.event,
-				encodePublicKeyEd25519(k1.publicKey.raw),
+				publicKeyToCesr(k1.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(true);
@@ -96,7 +95,7 @@ describe('createRotationEvent', () => {
 		expect(
 			verifyEventSignature(
 				signedEvent.event,
-				encodePublicKeyEd25519(k0.publicKey.raw),
+				publicKeyToCesr(k0.publicKey),
 				signedEvent.signatures[0]
 			)
 		).toBe(false);
@@ -159,13 +158,13 @@ describe('createRotationEvent', () => {
 		expect(r2.signedEvent.event.s).toBe('2');
 		if (r2.signedEvent.event.t !== 'rot') throw new Error('discriminant');
 		expect(r2.signedEvent.event.p).toBe(r1.signedEvent.event.d);
-		expect(r2.state.currentPublicKey).toBe(encodePublicKeyEd25519(k2.publicKey.raw));
+		expect(r2.state.currentPublicKey).toBe(publicKeyToCesr(k2.publicKey));
 		expect(r2.state.nextKeyCommitment).toBe(deriveNextKeyCommitment(k3.publicKey));
 
 		expect(
 			verifyEventSignature(
 				r2.signedEvent.event,
-				encodePublicKeyEd25519(k2.publicKey.raw),
+				publicKeyToCesr(k2.publicKey),
 				r2.signedEvent.signatures[0]
 			)
 		).toBe(true);

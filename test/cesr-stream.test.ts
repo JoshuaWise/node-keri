@@ -153,7 +153,7 @@ describe('event-frame codec', () => {
 	test('parseKel splits a concatenated multi-event stream', () => {
 		const rot = rotateIdentifier({
 			state: id.state,
-			currentPrivateKey: k1.privateKey,
+			newPrivateKey: k1.privateKey,
 			nextPublicKey: keyPairFromSeed(fillSeed(0x13)).publicKey,
 		});
 		const stream = id.event + rot.event;
@@ -164,9 +164,7 @@ describe('event-frame codec', () => {
 	});
 
 	test('parseSignedEvent rejects trailing bytes after one frame', () => {
-		expect(() => parseSignedEvent(id.event + 'xx')).toThrow(
-			MalformedInputError
-		);
+		expect(() => parseSignedEvent(id.event + 'xx')).toThrow(MalformedInputError);
 	});
 
 	test('parseKel rejects a stream whose version size is wrong', () => {
@@ -176,9 +174,7 @@ describe('event-frame codec', () => {
 	});
 
 	test('parseKel rejects an empty trailing/garbage frame', () => {
-		expect(() => parseKel(id.event + 'not-a-frame')).toThrow(
-			MalformedInputError
-		);
+		expect(() => parseKel(id.event + 'not-a-frame')).toThrow(MalformedInputError);
 	});
 
 	test('parseKel of an empty string yields no events', () => {
