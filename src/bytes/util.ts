@@ -1,19 +1,3 @@
-import { timingSafeEqual as nodeTimingSafeEqual } from 'node:crypto';
-
-/**
- * Constant-time equality for byte sequences of equal length.
- *
- * Length comparison is not constant-time and intentionally short-circuits:
- * digest and signature lengths in this profile are public.
- */
-export function timingSafeEqual(
-	a: Readonly<Uint8Array>,
-	b: Readonly<Uint8Array>
-): boolean {
-	if (a.length !== b.length) return false;
-	return nodeTimingSafeEqual(a, b);
-}
-
 /** Variable-time byte equality. Use for non-secret comparisons only. */
 export function bytesEqual(a: Readonly<Uint8Array>, b: Readonly<Uint8Array>): boolean {
 	if (a.length !== b.length) return false;

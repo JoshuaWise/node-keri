@@ -1,29 +1,20 @@
-import { bytesEqual, concatBytes, timingSafeEqual } from '../src/bytes/util';
+import { bytesEqual, concatBytes } from '../src/bytes/util';
 
 describe('bytes/util', () => {
-	test('timingSafeEqual returns true for equal arrays', () => {
+	test('bytesEqual returns true for equal arrays', () => {
 		const a = new Uint8Array([1, 2, 3, 4]);
 		const b = new Uint8Array([1, 2, 3, 4]);
-		expect(timingSafeEqual(a, b)).toBe(true);
+		expect(bytesEqual(a, b)).toBe(true);
 	});
 
-	test('timingSafeEqual returns false for differing arrays of equal length', () => {
-		expect(
-			timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))
-		).toBe(false);
-	});
-
-	test('timingSafeEqual returns false for differing lengths', () => {
-		expect(timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2]))).toBe(
+	test('bytesEqual returns false for differing arrays of equal length', () => {
+		expect(bytesEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))).toBe(
 			false
 		);
 	});
 
-	test('bytesEqual matches timingSafeEqual on positive cases', () => {
-		expect(bytesEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true);
-		expect(bytesEqual(new Uint8Array([7, 8, 9]), new Uint8Array([7, 8, 9]))).toBe(
-			true
-		);
+	test('bytesEqual returns false for differing lengths', () => {
+		expect(bytesEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2]))).toBe(false);
 	});
 
 	test('bytesEqual rejects mismatches and length differences', () => {

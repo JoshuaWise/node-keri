@@ -614,7 +614,6 @@ Security rules:
 never emit private keys in any event, state, or DID-document output
 serialization for storage is the caller's deliberate KeyObject.export(...) call
 validate an externally-supplied KeyObject (algorithm + half) before trusting it
-use timingSafeEqual for digest comparison
 throw typed errors, not generic Error
 ```
 
