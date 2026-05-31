@@ -124,8 +124,8 @@ function createIdentifier(input: {
 	establishmentOnly?: boolean;
 	digestCode?: string;
 }): {
-	did: DidKeri;
-	aid: Aid;
+	did: string;
+	aid: string;
 	event: string;
 	state: KeriState;
 };
@@ -205,8 +205,8 @@ Permanently disables an identifier. After deactivation, the identifier cannot ha
 
 ```ts
 function createNonTransferableIdentifier(input: { publicKey: PublicKey }): {
-	did: DidKeri;
-	aid: Aid;
+	did: string;
+	aid: string;
 	state: KeriState;
 };
 ```
@@ -221,7 +221,7 @@ Non-transferable identifiers are useful for ephemeral, temporary identifiers.
 
 ```ts
 function verifyIdentifier(input: {
-	aid: Aid;
+	aid: string;
 	kel: string;
 }): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
 ```
@@ -234,7 +234,7 @@ A KEL that ends in a deactivation event (see [`deactivateIdentifier`](#deactivat
 
 ```ts
 function verifyDid(input: {
-	did: DidKeri;
+	did: string;
 	kel: string;
 }): { ok: true; state: KeriState } | { ok: false; error: KeriVerificationError };
 ```
@@ -246,7 +246,7 @@ This is the DID-level counterpart of [`verifyIdentifier`](#verifyidentifier). A 
 #### `createSignature()`
 
 ```ts
-function createSignature(privateKey: PrivateKey, payload: Uint8Array): CesrSignature;
+function createSignature(privateKey: PrivateKey, payload: Uint8Array): string;
 ```
 
 Sign `payload` with `privateKey` and return the signature, which is CESR-qualified url-safe ASCII string.
@@ -255,10 +255,10 @@ Sign `payload` with `privateKey` and return the signature, which is CESR-qualifi
 
 ```ts
 function verifySignature(input: {
-	aid: Aid;
+	aid: string;
 	kel: string;
 	payload: Uint8Array;
-	signature: CesrSignature;
+	signature: string;
 }): boolean;
 ```
 
@@ -270,10 +270,10 @@ Returns `false` if verification fails (e.g., a non-verifying KEL, a KEL for a di
 
 ```ts
 function verifySignatureWithDid(input: {
-	did: DidKeri;
+	did: string;
 	kel: string;
 	payload: Uint8Array;
-	signature: CesrSignature;
+	signature: string;
 }): boolean;
 ```
 

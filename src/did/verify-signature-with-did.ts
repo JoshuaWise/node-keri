@@ -21,14 +21,13 @@
  * is reserved for a caller that violates the argument contract outright.
  */
 
-import { CesrSignature } from '../cesr/qualified';
 import { InvalidArgumentError } from '../profile/errors';
 import { verifySignature } from '../api/verify-signature';
-import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
+import { ParsedDidKeri, parseDidKeri } from './did-keri';
 
 export interface VerifySignatureWithDidInput {
 	/** The signer's `did:keri` DID. */
-	readonly did: DidKeri;
+	readonly did: string;
 	/**
 	 * The signer's full key event log, as a CESR stream (inception first).
 	 *
@@ -45,7 +44,7 @@ export interface VerifySignatureWithDidInput {
 	 * over arbitrary payloads, as opposed to the indexed signatures attached
 	 * to KEL events.
 	 */
-	readonly signature: CesrSignature;
+	readonly signature: string;
 }
 
 /**

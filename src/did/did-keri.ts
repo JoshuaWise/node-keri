@@ -139,7 +139,7 @@ export function parseDidKeri(did: string): ParsedDidKeri {
 	return {
 		did: did as DidKeri,
 		method: 'keri',
-		aid: aid as unknown as Aid,
+		aid: aid as Aid,
 		transferable,
 	};
 }

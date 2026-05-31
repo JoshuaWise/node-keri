@@ -26,16 +26,14 @@
  */
 
 import { decodeSignatureEd25519, decodeVerificationKeyEd25519 } from '../cesr/decode';
-import { CesrSignature } from '../cesr/qualified';
 import { verify } from '../crypto/ed25519';
 import { publicKeyFromRaw } from '../crypto/keypair';
-import { Aid } from '../did/did-keri';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 import { verifyIdentifier } from './verify-identifier';
 
 export interface VerifySignatureInput {
 	/** The signer's identifier (AID). */
-	readonly aid: Aid;
+	readonly aid: string;
 	/**
 	 * The signer's full key event log, as a CESR stream (inception first).
 	 *
@@ -52,7 +50,7 @@ export interface VerifySignatureInput {
 	 * over arbitrary payloads, as opposed to the indexed signatures attached
 	 * to KEL events.
 	 */
-	readonly signature: CesrSignature;
+	readonly signature: string;
 }
 
 /**

@@ -22,7 +22,7 @@
 
 import { decodeNonTransferablePublicKeyEd25519 } from '../cesr/decode';
 import { CesrPublicKey } from '../cesr/qualified';
-import { Aid, formatDidKeri } from '../did/did-keri';
+import { formatDidKeri, aidFromNonTransferableKey } from '../did/did-keri';
 import { NonTransferableKeriState } from '../kel/state';
 import { InvalidArgumentError, MalformedInputError } from '../profile/errors';
 import { VerifyIdentifierResult, replayKel } from '../kel/replay';
@@ -31,7 +31,7 @@ export type { VerifyIdentifierResult } from '../kel/replay';
 
 export interface VerifyIdentifierInput {
 	/** The identifier whose latest key state to reconstruct and verify. */
-	readonly aid: Aid;
+	readonly aid: string;
 	/**
 	 * The full key event log as a CESR stream — the event frames, inception
 	 * first, concatenated in order. Build one by joining the wire-form events
@@ -78,7 +78,7 @@ export function verifyIdentifier(input: VerifyIdentifierInput): VerifyIdentifier
 }
 
 /** Whether `aid` is a non-transferable basic prefix (a `B`-coded Ed25519 key). */
-function isNonTransferableAid(aid: string): boolean {
+function isNonTransferableAid(aid: string): aid is CesrPublicKey {
 	try {
 		decodeNonTransferablePublicKeyEd25519(aid);
 		return true;
@@ -96,12 +96,13 @@ function isNonTransferableAid(aid: string): boolean {
  * is what distinguishes a bare AID from one verified from a single-event KEL
  * (both report `lastSequenceNumber: 0`).
  */
-function bareNonTransferableState(aid: Aid): NonTransferableKeriState {
+function bareNonTransferableState(key: CesrPublicKey): NonTransferableKeriState {
+	const aid = aidFromNonTransferableKey(key);
 	return {
 		aid,
 		did: formatDidKeri(aid),
 		lastSequenceNumber: 0,
-		currentPublicKey: aid as unknown as CesrPublicKey,
+		currentPublicKey: key,
 		transferable: false,
 		deactivated: false,
 	};

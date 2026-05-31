@@ -22,11 +22,11 @@
 
 import { VerifyIdentifierResult, verifyIdentifier } from '../api/verify-identifier';
 import { InvalidArgumentError } from '../profile/errors';
-import { DidKeri, ParsedDidKeri, parseDidKeri } from './did-keri';
+import { ParsedDidKeri, parseDidKeri } from './did-keri';
 
 export interface VerifyDidInput {
 	/** The `did:keri` DID to verify. */
-	readonly did: DidKeri;
+	readonly did: string;
 	/**
 	 * The full key event log for the DID's identifier, as a CESR stream.
 	 *

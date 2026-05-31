@@ -114,7 +114,7 @@ function checkCanonicalBytes(
  * belong to; the inception event must derive exactly that AID, otherwise the
  * KEL — however internally consistent — is for a different identifier.
  */
-export function replayKel(aid: Aid, kel: string): VerifyIdentifierResult {
+export function replayKel(aid: string, kel: string): VerifyIdentifierResult {
 	const parsed = parseStreamResult(kel);
 	if (!parsed.ok) {
 		return fail({ code: 'MALFORMED_STREAM', message: parsed.message });
@@ -237,7 +237,7 @@ function readWrapper(signed: unknown):
  * is then derived and checked.
  */
 function applyInception(
-	aid: Aid,
+	aid: string,
 	event: Record<string, unknown>,
 	eventBytes: Readonly<Uint8Array>,
 	signature: CesrIndexedSignature
@@ -307,7 +307,7 @@ function applyInception(
 				message: 'inception `i` is not its own self-addressing digest',
 			});
 		}
-		if ((said as string) !== (aid as string)) {
+		if (said !== aid) {
 			return fail({
 				code: 'INVALID_DID',
 				message: 'inception event does not derive the requested AID',
@@ -322,7 +322,7 @@ function applyInception(
 				message: 'non-transferable `i` is not the controller signing key',
 			});
 		}
-		if ((ie.i as string) !== (aid as string)) {
+		if (ie.i !== aid) {
 			return fail({
 				code: 'INVALID_DID',
 				message: 'inception event does not derive the requested AID',
@@ -342,8 +342,8 @@ function applyInception(
 	}
 
 	const base = {
-		aid,
-		did: formatDidKeri(aid),
+		aid: aid as Aid,
+		did: formatDidKeri(aid as Aid),
 		lastSequenceNumber: 0,
 		lastEventType: 'icp' as const,
 		lastEventDigest: said,
@@ -421,7 +421,7 @@ function applyRotation(
 
 	if (re.d !== said) return fail({ code: 'INVALID_EVENT_DIGEST' });
 	if (re.v !== versionString) return fail({ code: 'NON_CANONICAL_EVENT' });
-	if ((re.i as string) !== (state.aid as string)) {
+	if (re.i !== state.aid) {
 		return fail({
 			code: 'INVALID_DID',
 			message: 'rotation event `i` does not match the KEL AID',
@@ -433,7 +433,7 @@ function applyRotation(
 	if (!Number.isSafeInteger(seq) || seq !== expectedSeq) {
 		return fail({ code: 'INVALID_SEQUENCE', expected: expectedSeq, actual: seq });
 	}
-	if ((re.p as string) !== (state.lastEventDigest as string)) {
+	if (re.p !== state.lastEventDigest) {
 		return fail({ code: 'INVALID_PREVIOUS_DIGEST' });
 	}
 
@@ -457,7 +457,7 @@ function applyRotation(
 		}
 		throw err;
 	}
-	if ((revealedCommitment as string) !== (state.nextKeyCommitment as string)) {
+	if (revealedCommitment !== state.nextKeyCommitment) {
 		return fail({ code: 'INVALID_NEXT_KEY_COMMITMENT' });
 	}
 
@@ -552,7 +552,7 @@ function applyInteraction(
 
 	if (xe.d !== said) return fail({ code: 'INVALID_EVENT_DIGEST' });
 	if (xe.v !== versionString) return fail({ code: 'NON_CANONICAL_EVENT' });
-	if ((xe.i as string) !== (state.aid as string)) {
+	if (xe.i !== state.aid) {
 		return fail({
 			code: 'INVALID_DID',
 			message: 'interaction event `i` does not match the KEL AID',
@@ -564,7 +564,7 @@ function applyInteraction(
 	if (!Number.isSafeInteger(seq) || seq !== expectedSeq) {
 		return fail({ code: 'INVALID_SEQUENCE', expected: expectedSeq, actual: seq });
 	}
-	if ((xe.p as string) !== (state.lastEventDigest as string)) {
+	if (xe.p !== state.lastEventDigest) {
 		return fail({ code: 'INVALID_PREVIOUS_DIGEST' });
 	}
 
